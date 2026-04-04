@@ -13,6 +13,9 @@ import {
 } from 'recharts';
 import LZString from 'lz-string';
 
+// --- IA IMPORTS ---
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
@@ -140,12 +143,85 @@ export default function App() {
     const [newCustomCategory, setNewCustomCategory] = useState('');
     const [newBankData, setNewBankData] = useState({ name: '', initialCapital: 1000, currency: 'EUR' }); 
     const fileInputRef = useRef(null);
+    
+    const [isScanning, setIsScanning] = useState(false); // Estado para la IA
 
     const [newBet, setNewBet] = useState({
         date: new Date().toISOString().split('T')[0], time: '00:00', bookmaker: 'Bet365', betMode: 'simple', title: '', 
         selections: [{ id: Date.now(), title: '', selection: '', sport: 'Fútbol', status: 'pending', category: '', odds: 1.50, isOpen: true }],
         amount: 0, stake: 0, analysis: '', commission: '', bonus: '', isLive: false, isFreebet: false, cashout: '', isEachWay: false, tipster: 'Money Tips'
     });
+
+    // --- INTEGRACIÓN DE IA GEMINI ---
+    const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+
+    const escanearBoleto = async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        setIsScanning(true);
+        try {
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+                const base64Data = reader.result.split(',')[1];
+                
+                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+                const prompt = `Analiza esta captura de pantalla de un boleto de apuestas deportivas. Extrae la siguiente información y devuélvela ÚNICAMENTE en formato JSON válido, sin texto adicional y sin formato markdown (no uses \`\`\`json):
+                {
+                  "equipo": "Nombre del equipo o selección principal",
+                  "cuota": "Número decimal de la cuota (ejemplo: 1.85)",
+                  "mercado": "Tipo de apuesta (ejemplo: Ganador del partido, Más de 2.5 goles)",
+                  "importe": "Cantidad apostada en números (ejemplo: 10.50)"
+                }`;
+
+                const imagePart = {
+                    inlineData: { data: base64Data, mimeType: file.type }
+                };
+
+                const result = await model.generateContent([prompt, imagePart]);
+                const responseText = result.response.text();
+                
+                const datosExtraidos = JSON.parse(responseText);
+                console.log("Datos extraídos:", datosExtraidos);
+
+                // Auto-calcular el stake basado en el importe extraído y el capital inicial
+                const parsedAmount = parseFloat(datosExtraidos.importe);
+                let calculatedStake = newBet.stake;
+                let finalAmount = newBet.amount;
+                
+                if (!isNaN(parsedAmount) && parsedAmount > 0) {
+                    finalAmount = parsedAmount;
+                    const cap = parseFloat(activeBankData?.initialCapital || 1000);
+                    calculatedStake = ((parsedAmount / cap) * 100).toFixed(2);
+                }
+
+                setNewBet(prev => ({
+                    ...prev,
+                    amount: finalAmount,
+                    stake: calculatedStake,
+                    selections: [
+                        {
+                            ...prev.selections[0],
+                            title: datosExtraidos.equipo || prev.selections[0].title,
+                            selection: datosExtraidos.mercado || prev.selections[0].selection,
+                            odds: parseFloat(datosExtraidos.cuota) || prev.selections[0].odds
+                        },
+                        ...prev.selections.slice(1)
+                    ]
+                }));
+                
+                setIsScanning(false);
+                alert("✅ ¡Boleto analizado! Revisa los datos auto-rellenados.");
+            };
+            
+            reader.readAsDataURL(file);
+
+        } catch (error) {
+            console.error("Error al leer el boleto:", error);
+            setIsScanning(false);
+            alert("Hubo un error analizando la imagen. Comprueba que sea legible.");
+        }
+    };
 
     // 1. Escuchar el estado de autenticación
     useEffect(() => {
@@ -382,7 +458,6 @@ export default function App() {
             });
             if (currentBet) newBets.push(currentBet);
             
-            // Subir a Firebase (uno por uno para MVP)
             try {
                 for(let b of newBets) { await addDoc(collection(db, 'users', currentUser.uid, 'bets'), b); }
                 alert(`¡Importado con éxito! Añadidas ${newBets.length} apuestas.`);
@@ -661,6 +736,26 @@ export default function App() {
                 <div className="bg-[#0B1120] w-full max-w-lg rounded-2xl shadow-2xl border border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
                     <div className="px-5 py-4 border-b border-slate-800 flex justify-between items-center bg-[#0F1629]"><h3 className="font-bold text-white text-lg">{editingBetId ? 'Editar Apuesta' : 'Añadir Apuesta'}</h3><button onClick={() => setShowBetForm(false)} className="text-slate-400 hover:text-white"><X size={20}/></button></div>
                     <div className="p-5 overflow-y-auto space-y-4 custom-scrollbar">
+                        
+                        {/* --- BOTÓN DE IA AQUÍ --- */}
+                        <div className="mb-2 bg-emerald-900/20 border border-emerald-500/30 p-4 rounded-xl text-center relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-2 opacity-10 pointer-events-none"><Crown size={40}/></div>
+                            <p className="text-xs text-emerald-300 mb-3 font-medium flex items-center justify-center gap-2">
+                                <TrendingUp size={14}/> Auto-rellenar con Inteligencia Artificial
+                            </p>
+                            <label className={`cursor-pointer ${isScanning ? 'bg-slate-600 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500'} text-white px-4 py-2 rounded-lg font-bold shadow-lg flex items-center justify-center gap-2 mx-auto w-fit transition-all`}>
+                                <Upload size={16}/> {isScanning ? 'Analizando captura...' : 'Escanear Boleto'}
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={escanearBoleto}
+                                    className="hidden"
+                                    disabled={isScanning}
+                                />
+                            </label>
+                        </div>
+                        {/* ------------------------ */}
+
                         <div className="grid grid-cols-2 gap-3"><div className="bg-[#151b2e] border border-slate-700/50 rounded-lg p-2 flex items-center justify-between"><input type="date" className="bg-transparent text-white text-sm outline-none w-full" value={newBet.date} onChange={e => setNewBet({...newBet, date: e.target.value})} /> <Calendar size={14} className="text-slate-500" /></div><div className="bg-[#151b2e] border border-slate-700/50 rounded-lg p-2 flex items-center justify-between"><input type="time" className="bg-transparent text-white text-sm outline-none w-full" value={newBet.time} onChange={e => setNewBet({...newBet, time: e.target.value})} /> <Clock size={14} className="text-slate-500" /></div></div>
                         <div className="space-y-1"><label className="text-xs text-slate-500 ml-1">Casa de apuestas</label>{isCustomBookmaker ? (<div className="flex gap-2"><input type="text" placeholder="Escribe el nombre..." className="w-full bg-[#151b2e] border border-slate-700/50 rounded-lg px-3 py-2.5 text-white text-sm outline-none focus:border-emerald-500" autoFocus value={newBet.bookmaker} onChange={(e) => setNewBet(prev => ({ ...prev, bookmaker: e.target.value }))} /><button onClick={() => { setIsCustomBookmaker(false); setNewBet(prev => ({ ...prev, bookmaker: 'Bet365' })); }} className="text-xs text-red-400 hover:text-white underline">Cancelar</button></div>) : (<select className="w-full bg-[#151b2e] border border-slate-700/50 rounded-lg px-3 py-2.5 text-white text-sm outline-none focus:border-emerald-500" value={newBet.bookmaker} onChange={handleBookieChange}>{COMMON_BOOKMAKERS.map(b => <option key={b}>{b}</option>)}<option value="Otra">Otra...</option></select>)}</div>
                         
