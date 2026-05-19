@@ -5,23 +5,19 @@ import {
     Clock, Calendar, Download, Upload, FileText, 
     ArrowUpRight, ArrowDownRight, AlertTriangle, 
     BarChart2, LineChart, Tags, LogOut, Database, Eye, Link as LinkIcon, CalendarDays,
-    HelpCircle, Lock, ShieldCheck, XCircle, AlertCircle
+    HelpCircle, Lock, ShieldCheck, XCircle, AlertCircle, Sun, Moon
 } from 'lucide-react';
 import { 
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
     BarChart, Bar, Cell, Line, LineChart as ReLineChart 
 } from 'recharts';
-import LZString from 'lz-string';
-
-// --- IA IMPORTS ---
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
-import { getFirestore, collection, onSnapshot, addDoc, doc, deleteDoc, updateDoc } from "firebase/firestore";
+import { getFirestore, collection, onSnapshot, addDoc, doc, deleteDoc, updateDoc, setDoc } from "firebase/firestore";
 
-// --- CONFIGURACIÓN DE FIREBASE (Tus llaves) ---
+// --- CONFIGURACIÓN DE FIREBASE ---
 const firebaseConfig = {
     apiKey: "AIzaSyDdhFhK2leqXczuBU-inLBLi9PfMt7NbkY",
     authDomain: "money-tracking-d908b.firebaseapp.com",
@@ -35,22 +31,77 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// --- ESTILOS GLOBALES ---
-const globalStyles = `
-    body { background-color: #0B1120; color: white; margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
-    .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+// --- ESTILOS GLOBALES & THEME ---
+const getGlobalStyles = (theme) => {
+    const isDark = theme === 'dark';
+    return `
+    :root {
+        --bg-base: ${isDark ? '#081225' : '#F4F7FB'};
+        --bg-base-95: ${isDark ? 'rgba(8,18,37,0.95)' : 'rgba(244,247,251,0.95)'};
+        --bg-card: ${isDark ? '#111D36' : '#FFFFFF'};
+        --bg-input: ${isDark ? '#050A14' : '#F8FAFC'};
+        --bg-hover: ${isDark ? '#1A2A4D' : '#F1F5F9'};
+        
+        --bg-overlay: ${isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'};
+        --bg-overlay-hover: ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'};
+        --bg-modal: ${isDark ? 'rgba(0,0,0,0.7)' : 'rgba(15,23,42,0.4)'};
+        
+        --text-main: ${isDark ? '#F1F5F9' : '#0F172A'};
+        --text-muted: ${isDark ? '#94A3B8' : '#64748B'};
+        
+        --border: ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'};
+        --border-strong: ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.15)'};
+        
+        --accent: ${isDark ? '#5EE6B1' : '#2563EB'};
+        --accent-hover: ${isDark ? '#48D19F' : '#1D4ED8'};
+        --accent-fg: ${isDark ? '#050A14' : '#FFFFFF'};
+        
+        --accent-5: ${isDark ? 'rgba(94,230,177,0.05)' : 'rgba(37,99,235,0.05)'};
+        --accent-10: ${isDark ? 'rgba(94,230,177,0.1)' : 'rgba(37,99,235,0.1)'};
+        --accent-20: ${isDark ? 'rgba(94,230,177,0.2)' : 'rgba(37,99,235,0.2)'};
+        --accent-30: ${isDark ? 'rgba(94,230,177,0.3)' : 'rgba(37,99,235,0.3)'};
+        --accent-40: ${isDark ? 'rgba(94,230,177,0.4)' : 'rgba(37,99,235,0.4)'};
+        --accent-50: ${isDark ? 'rgba(94,230,177,0.5)' : 'rgba(37,99,235,0.5)'};
+        --accent-80: ${isDark ? 'rgba(94,230,177,0.8)' : 'rgba(37,99,235,0.8)'};
+        
+        --red: ${isDark ? '#FF5A5F' : '#EF4444'};
+        --red-10: ${isDark ? 'rgba(255,90,95,0.1)' : 'rgba(239,68,68,0.1)'};
+        --red-20: ${isDark ? 'rgba(255,90,95,0.2)' : 'rgba(239,68,68,0.2)'};
+        --red-30: ${isDark ? 'rgba(255,90,95,0.3)' : 'rgba(239,68,68,0.3)'};
+        
+        --yellow: ${isDark ? '#FACC15' : '#D97706'};
+        
+        --shadow-glow-sm: ${isDark ? '0 0 10px rgba(94,230,177,0.2)' : '0 0 10px rgba(37,99,235,0.15)'};
+        --shadow-glow-md: ${isDark ? '0 0 15px rgba(94,230,177,0.3)' : '0 0 15px rgba(37,99,235,0.2)'};
+        --shadow-glow-lg: ${isDark ? '0 0 25px rgba(94,230,177,0.5)' : '0 0 25px rgba(37,99,235,0.3)'};
+        --shadow-red: ${isDark ? '0 0 10px rgba(255,90,95,0.1)' : '0 0 10px rgba(239,68,68,0.1)'};
+        --shadow-yellow: ${isDark ? '0 0 10px rgba(234,179,8,0.1)' : '0 0 10px rgba(217,119,6,0.1)'};
+    }
+    body { background-color: var(--bg-base); color: var(--text-main); margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; transition: background-color 0.3s ease, color 0.3s ease; }
+    
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #334155; border-radius: 10px; }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: #475569; }
-    .animate-in { animation: fadeIn 0.3s ease-out; }
-    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    .slide-in { animation: slideIn 0.3s ease-out; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background-color: var(--bg-overlay-hover); border-radius: 10px; transition: all 0.3s; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: var(--text-muted); }
+    
+    .animate-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .slide-in { animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
     @keyframes slideIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
-`;
+    `;
+};
+
+const LiquidBackground = ({ theme }) => (
+    <div className="fixed inset-0 z-[-1] overflow-hidden pointer-events-none bg-[var(--bg-base)] transition-colors duration-500">
+        <div className={`absolute top-[-20%] left-[-10%] w-[50vw] h-[50vw] rounded-full blur-[120px] mix-blend-screen transition-colors duration-1000 ${theme === 'dark' ? 'bg-[#5EE6B1]/5' : 'bg-blue-500/10'}`}></div>
+        <div className={`absolute bottom-[-20%] right-[-10%] w-[60vw] h-[60vw] rounded-full blur-[150px] mix-blend-screen transition-colors duration-1000 ${theme === 'dark' ? 'bg-indigo-500/5' : 'bg-indigo-500/10'}`}></div>
+        <div className={`absolute top-[40%] left-[60%] w-[30vw] h-[30vw] rounded-full blur-[100px] mix-blend-screen transition-colors duration-1000 ${theme === 'dark' ? 'bg-[#5EE6B1]/5' : 'bg-blue-400/10'}`}></div>
+        <div className={`absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] transition-opacity duration-1000 ${theme === 'dark' ? 'opacity-10 mix-blend-overlay' : 'opacity-[0.03] mix-blend-multiply'}`}></div>
+    </div>
+);
 
 const LIMITS = { MAX_BANKS: 5, MAX_BETS_PER_BANK: 5000 };
 
-// --- UTILIDADES ---
 const formatCurrency = (value, currency = 'EUR') => {
     const val = typeof value === 'number' ? value : parseFloat(value) || 0;
     if (isNaN(val)) return '0,00 ' + (currency === 'EUR' ? '€' : currency);
@@ -84,34 +135,68 @@ const parseComplexCSV = (text) => {
     return rows;
 };
 
-// --- COMPONENTES UI ---
-const StatCard = ({ title, value, subValue, isCurrency = false, currency = 'EUR', colorClass = "text-white" }) => (
-    <div className="p-3 md:p-4 bg-slate-800/50 border border-slate-700/50 rounded-xl hover:bg-slate-800 transition-colors flex flex-col justify-between min-h-[90px]">
-        <p className="text-slate-400 text-[10px] uppercase tracking-wider font-semibold mb-1 truncate" title={title}>{title}</p>
+const fetchWithRetry = async (url, options, retries = 5) => {
+    const delays = [1000, 2000, 4000, 8000, 16000];
+    for (let i = 0; i < retries; i++) {
+        try {
+            const response = await fetch(url, options);
+            if (response.ok) return response;
+        } catch (e) {
+            if (i === retries - 1) throw e;
+        }
+        if (i < retries - 1) {
+            await new Promise(r => setTimeout(r, delays[i]));
+        }
+    }
+    throw new Error("Failed after retries");
+};
+
+const StatCard = ({ title, value, subValue, isCurrency = false, currency = 'EUR', colorClass = "text-[var(--text-main)]" }) => (
+    <div className="p-3 md:p-4 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl hover:bg-[var(--bg-hover)] transition-all flex flex-col justify-between min-h-[90px] shadow-sm">
+        <p className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider font-semibold mb-1 truncate" title={title}>{title}</p>
         <div className="flex-1 flex flex-col justify-end">
-            <h3 className={`text-lg md:text-xl font-bold ${colorClass} truncate`}>{isCurrency ? formatCurrency(value, currency) : value}</h3>
-            {subValue && <p className="text-[10px] text-slate-500 mt-0.5 truncate">{String(subValue)}</p>}
+            <h3 className={`text-lg md:text-xl font-bold ${colorClass} truncate drop-shadow-sm`}>{isCurrency ? formatCurrency(value, currency) : value}</h3>
+            {subValue && <p className="text-[10px] text-[var(--text-muted)] opacity-80 mt-0.5 truncate">{String(subValue)}</p>}
         </div>
     </div>
 );
 
 const StatusBadge = ({ status }) => {
     const styles = {
-        won: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', lost: 'bg-red-500/10 text-red-400 border-red-500/20',
-        pending: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20', void: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
-        'half-won': 'bg-teal-500/10 text-teal-400 border-teal-500/20', 'half-lost': 'bg-orange-500/10 text-orange-400 border-orange-500/20',
+        won: 'bg-[var(--accent-10)] text-[var(--accent)] border-[var(--accent-30)] shadow-[var(--shadow-glow-sm)]', 
+        lost: 'bg-[var(--red-10)] text-[var(--red)] border-[var(--red-30)] shadow-[var(--shadow-red)]',
+        pending: 'bg-yellow-500/10 text-[var(--yellow)] border-yellow-500/30 shadow-[var(--shadow-yellow)]', 
+        void: 'bg-[var(--bg-overlay)] text-[var(--text-muted)] border-[var(--border-strong)]',
+        'half-won': 'bg-[var(--accent-10)] text-[var(--accent)] border-[var(--accent-30)]', 
+        'half-lost': 'bg-orange-500/10 text-orange-500 border-orange-500/30',
     };
     const labels = { won: 'Ganada', lost: 'Perdida', pending: 'Pendiente', void: 'Nula', 'half-won': 'Mitad Ganada', 'half-lost': 'Mitad Perdida' };
-    return <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border ${styles[status] || styles.pending}`}>{labels[status] || status}</span>;
+    return <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border backdrop-blur-md ${styles[status] || styles.pending}`}>{labels[status] || status}</span>;
 };
 
 // --- APP PRINCIPAL ---
 export default function App() {
+    const [initialShare] = useState(() => {
+        if (typeof window === 'undefined') return { mode: 'personal', uid: null, bid: null };
+        const params = new URLSearchParams(window.location.search);
+        const sData = params.get('s');
+        if (sData) {
+            try {
+                const decoded = atob(sData);
+                const [uid, bid] = decoded.split('|');
+                if (uid && bid) return { mode: 'visiting', uid, bid };
+            } catch (e) { console.error("Error decodificando enlace público.", e); }
+        }
+        return { mode: 'personal', uid: null, bid: null };
+    });
+
+    const [theme, setTheme] = useState(() => localStorage.getItem('moneytracking_theme') || 'dark');
     const [currentUser, setCurrentUser] = useState(null);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isRegistering, setIsRegistering] = useState(false);
     const [authError, setAuthError] = useState('');
+    const [dbError, setDbError] = useState('');
     
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('dashboard');
@@ -124,27 +209,34 @@ export default function App() {
     
     const [showBetForm, setShowBetForm] = useState(false);
     const [isAddingBank, setIsAddingBank] = useState(false); 
-    const [userRole, setUserRole] = useState('user');
     const [editingBetId, setEditingBetId] = useState(null); 
     const [expandedBetId, setExpandedBetId] = useState(null); 
     const [showMoreOptions, setShowMoreOptions] = useState(false);
     const [statusModalData, setStatusModalData] = useState(null); 
+    const [feedbackModal, setFeedbackModal] = useState({ isOpen: false, type: 'alert', message: '', onConfirm: null });
     const [expandedMonths, setExpandedMonths] = useState({});
     const [formErrors, setFormErrors] = useState({}); 
     const [isCustomBookmaker, setIsCustomBookmaker] = useState(false);
     const [chartViewMode, setChartViewMode] = useState('detailed');
     const [barChartViewMode, setBarChartViewMode] = useState('weekly'); 
 
-    const [viewMode, setViewMode] = useState('personal'); 
+    // Estados para el modo visitante y contraseñas
+    const [viewMode, setViewMode] = useState(initialShare.mode); 
+    const [visitingUserId, setVisitingUserId] = useState(initialShare.uid);
+    const [visitingBankId, setVisitingBankId] = useState(initialShare.bid);
     const [visitingBank, setVisitingBank] = useState(null);
     const [visitingBets, setVisitingBets] = useState([]);
+    
+    const [unlockedBank, setUnlockedBank] = useState(false);
+    const [visitorPasswordInput, setVisitorPasswordInput] = useState('');
 
     const [newCustomSport, setNewCustomSport] = useState('');
     const [newCustomCategory, setNewCustomCategory] = useState('');
-    const [newBankData, setNewBankData] = useState({ name: '', initialCapital: 1000, currency: 'EUR' }); 
+    const [newBankData, setNewBankData] = useState({ name: '', initialCapital: 1000, currency: 'EUR', premiumPassword: '' }); 
     const fileInputRef = useRef(null);
     
-    const [isScanning, setIsScanning] = useState(false); // Estado para la IA
+    const [isScanning, setIsScanning] = useState(false);
+    const [aiMessage, setAiMessage] = useState(''); // Nuevo estado para la burbuja de voz de la IA
 
     const [newBet, setNewBet] = useState({
         date: new Date().toISOString().split('T')[0], time: '00:00', bookmaker: 'Bet365', betMode: 'simple', title: '', 
@@ -152,39 +244,58 @@ export default function App() {
         amount: 0, stake: 0, analysis: '', commission: '', bonus: '', isLive: false, isFreebet: false, cashout: '', isEachWay: false, tipster: 'Money Tips'
     });
 
-    // --- INTEGRACIÓN DE IA GEMINI ---
-    const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+    useEffect(() => { localStorage.setItem('moneytracking_theme', theme); }, [theme]);
 
     const escanearBoleto = async (event) => {
         const file = event.target.files[0];
         if (!file) return;
 
         setIsScanning(true);
+        setAiMessage(''); // Limpiamos mensaje previo
         try {
             const reader = new FileReader();
             reader.onloadend = async () => {
                 const base64Data = reader.result.split(',')[1];
                 
-                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-                const prompt = `Analiza esta captura de pantalla de un boleto de apuestas deportivas. Extrae la siguiente información y devuélvela ÚNICAMENTE en formato JSON válido, sin texto adicional y sin formato markdown (no uses \`\`\`json):
+                const prompt = `Analiza esta captura de pantalla de un boleto de apuestas deportivas. Extrae la siguiente información y devuélvela ÚNICAMENTE en formato JSON válido, sin texto adicional y sin formato markdown (no uses \`\`\`json).
+                Además, genera un campo "mensaje_ia" con un mensaje conversacional, directo y amable (como un asistente). Si lograste extraer todo bien (cuota, importe, mercado), dile al usuario que todo está listo. Si notas que falta algo (por ejemplo, si la imagen corta el importe o la cuota), menciónalo educadamente y pídele que lo rellene a mano.
+                
+                Estructura del JSON:
                 {
-                  "equipo": "Nombre del equipo o selección principal",
-                  "cuota": "Número decimal de la cuota (ejemplo: 1.85)",
-                  "mercado": "Tipo de apuesta (ejemplo: Ganador del partido, Más de 2.5 goles)",
-                  "importe": "Cantidad apostada en números (ejemplo: 10.50)"
+                  "equipo": "Nombre del equipo o selección",
+                  "cuota": "Número decimal (ejemplo: 1.85)",
+                  "mercado": "Tipo de apuesta (ejemplo: Ganador, Más de 2.5 goles)",
+                  "importe": "Cantidad apostada (ejemplo: 10.50)",
+                  "mensaje_ia": "Mensaje personalizado explicando qué has encontrado y si falta algo."
                 }`;
 
-                const imagePart = {
-                    inlineData: { data: base64Data, mimeType: file.type }
+                const apiKey = ""; 
+                const payload = {
+                    contents: [{
+                        role: "user",
+                        parts: [
+                            { text: prompt },
+                            { inlineData: { mimeType: file.type, data: base64Data } }
+                        ]
+                    }]
                 };
 
-                const result = await model.generateContent([prompt, imagePart]);
-                const responseText = result.response.text();
+                const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                let responseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
                 
+                if (!responseText) throw new Error("No text returned from API.");
+
+                responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+
                 const datosExtraidos = JSON.parse(responseText);
                 console.log("Datos extraídos:", datosExtraidos);
 
-                // Auto-calcular el stake basado en el importe extraído y el capital inicial
                 const parsedAmount = parseFloat(datosExtraidos.importe);
                 let calculatedStake = newBet.stake;
                 let finalAmount = newBet.amount;
@@ -211,7 +322,11 @@ export default function App() {
                 }));
                 
                 setIsScanning(false);
-                alert("✅ ¡Boleto analizado! Revisa los datos auto-rellenados.");
+                if (datosExtraidos.mensaje_ia) {
+                    setAiMessage(datosExtraidos.mensaje_ia);
+                } else {
+                    setAiMessage("✅ ¡Boleto analizado! Revisa los datos auto-rellenados.");
+                }
             };
             
             reader.readAsDataURL(file);
@@ -219,70 +334,99 @@ export default function App() {
         } catch (error) {
             console.error("Error al leer el boleto:", error);
             setIsScanning(false);
-            alert("Hubo un error analizando la imagen. Comprueba que sea legible.");
+            setAiMessage("Hubo un error analizando la imagen. Comprueba que sea legible.");
         }
     };
 
-    // 1. Escuchar el estado de autenticación
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             setCurrentUser(user);
-            if (!user) { setLoading(false); setBanks([]); setBets([]); }
+            if (!user && viewMode === 'personal') { setLoading(false); setBanks([]); setBets([]); }
         });
-        
-        // Comprobar si hay un link compartido
-        const params = new URLSearchParams(window.location.search);
-        const shareData = params.get('share');
-        if (shareData) {
-            try {
-                const decompressed = LZString.decompressFromEncodedURIComponent(shareData);
-                if (decompressed) {
-                    const parsed = JSON.parse(decompressed);
-                    setVisitingBank(parsed.bank);
-                    setVisitingBets(parsed.bets);
-                    setViewMode('visiting');
-                }
-            } catch (e) { console.error("Error compartidos", e); }
-        }
-        
         return () => unsubscribe();
-    }, []);
+    }, [viewMode]);
 
-    // 2. Cargar datos de Firestore cuando hay usuario
     useEffect(() => {
-        if (!currentUser || viewMode === 'visiting') return;
+        const targetUid = viewMode === 'visiting' ? visitingUserId : currentUser?.uid;
+        if (!targetUid) {
+            if (viewMode === 'personal') setLoading(false);
+            return;
+        }
 
         setLoading(true);
-        const banksRef = collection(db, 'users', currentUser.uid, 'banks');
+        setDbError('');
+        
+        const banksRef = collection(db, 'users', targetUid, 'banks');
         const unsubBanks = onSnapshot(banksRef, (snapshot) => {
             const banksData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setBanks(banksData);
-            if (banksData.length > 0 && !currentBankId) setCurrentBankId(banksData[0].id);
-        }, (error) => console.error(error));
+            if (viewMode === 'visiting') {
+                const vBank = banksData.find(b => b.id === visitingBankId);
+                setVisitingBank(vBank || null);
+            } else {
+                setBanks(banksData);
+                if (banksData.length > 0 && !currentBankId) setCurrentBankId(banksData[0].id);
+            }
+        }, (error) => {
+            console.error("Error en Firebase (Bancos):", error);
+            setDbError('Firebase ha bloqueado el acceso. Asegúrate de haber actualizado las Reglas de Firestore.');
+            setLoading(false);
+        });
 
-        const betsRef = collection(db, 'users', currentUser.uid, 'bets');
+        const betsRef = collection(db, 'users', targetUid, 'bets');
         const unsubBets = onSnapshot(betsRef, (snapshot) => {
             const betsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setBets(betsData);
+            if (viewMode === 'visiting') {
+                setVisitingBets(betsData.filter(b => b.bankId === visitingBankId));
+            } else {
+                setBets(betsData);
+            }
             setLoading(false);
-        }, (error) => { console.error(error); setLoading(false); });
+        }, (error) => { 
+            console.error("Error en Firebase (Apuestas):", error); 
+            setDbError('Firebase ha bloqueado el acceso a las apuestas.');
+            setLoading(false); 
+        });
 
-        // TODO: Migrar customOptions a Firebase si se desea en el futuro
-        setCustomOptions({ sports: [], categories: [] });
+        const prefsRef = doc(db, 'users', targetUid, 'preferences', 'customOptions');
+        const unsubPrefs = onSnapshot(prefsRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                if (!data.sports || data.sports.length === 0) setCustomOptions({ ...data, sports: ['Fútbol', 'Baloncesto', 'Tenis', 'Esports'] });
+                else setCustomOptions(data);
+            } else {
+                setCustomOptions({ sports: ['Fútbol', 'Baloncesto', 'Tenis', 'Esports'], categories: [] });
+            }
+        }, (error) => console.error("Error preferencias:", error));
 
-        return () => { unsubBanks(); unsubBets(); };
-    }, [currentUser, viewMode]);
+        return () => { unsubBanks(); unsubBets(); unsubPrefs(); };
+    }, [currentUser, viewMode, visitingUserId, visitingBankId, currentBankId]);
 
     const activeBankData = useMemo(() => {
-        if (viewMode === 'visiting' && visitingBank) return visitingBank;
+        if (viewMode === 'visiting') return visitingBank;
         return banks.find(b => b.id === currentBankId) || null; 
     }, [banks, currentBankId, viewMode, visitingBank]);
 
     const activeBetsData = useMemo(() => {
-        if (viewMode === 'visiting') return visitingBets;
-        if (!currentBankId) return [];
-        return bets.filter(b => b.bankId === currentBankId).sort((a, b) => new Date(`${b.date}T${b.time || '00:00'}`) - new Date(`${a.date}T${a.time || '00:00'}`));
-    }, [bets, currentBankId, viewMode, visitingBets]);
+        let rawBets = [];
+        if (viewMode === 'visiting') rawBets = visitingBets;
+        else if (currentBankId) rawBets = bets.filter(b => b.bankId === currentBankId);
+
+        rawBets = rawBets.sort((a, b) => new Date(`${b.date}T${b.time || '00:00'}`) - new Date(`${a.date}T${a.time || '00:00'}`));
+
+        if (viewMode === 'visiting') {
+            if (activeBankData?.premiumPassword && unlockedBank) {
+                return rawBets;
+            }
+            return rawBets.filter(b => b.status !== 'pending');
+        }
+        
+        return rawBets; 
+    }, [bets, currentBankId, viewMode, visitingBets, activeBankData, unlockedBank]);
+
+    const pendingHiddenCount = useMemo(() => {
+        if (viewMode !== 'visiting') return 0;
+        return visitingBets.filter(b => b.status === 'pending').length;
+    }, [visitingBets, viewMode]);
 
     const currentBets = activeBetsData;
 
@@ -386,27 +530,36 @@ export default function App() {
 
     const handleLogout = async () => {
         await signOut(auth);
-        if(viewMode === 'visiting') {
-            try { window.history.pushState({}, document.title, window.location.pathname); } catch(e) {}
-            setViewMode('personal'); setVisitingBank(null); setVisitingBets([]);
-        }
     };
 
     const generateShareLink = () => {
         if(!activeBankData || !activeBankData.id) return alert("Selecciona una banca válida.");
-        const publicBets = activeBetsData.filter(bet => bet.status !== 'pending');
-        const shareObj = { bank: activeBankData, bets: publicBets };
         try {
-            const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(shareObj));
-            const url = `${window.location.origin}${window.location.pathname}?share=${compressed}`;
+            const shareStr = btoa(`${currentUser.uid}|${activeBankData.id}`);
+            let currentDomain = window.location.origin + window.location.pathname;
+            const isSandbox = currentDomain.includes('usercontent') || currentDomain.includes('null');
+            const url = `${currentDomain}?s=${shareStr}`;
+            
             const el = document.createElement('textarea'); el.value = url; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
-            alert("✅ ¡Enlace copiado al portapapeles!\n\nNota: Se han excluido tus apuestas 'Pendientes' por privacidad. Los visitantes solo verán tu historial resuelto.");
-        } catch (e) { alert("Error generando el enlace (Demasiados datos)."); }
+            
+            let msg = "✅ ¡Enlace copiado al portapapeles!\n\n";
+            if(isSandbox) {
+                msg += "⚠️ AVISO DEL MENTOR: Estás en el entorno de pruebas. Esta URL interna NO funcionará si la pegas en otra pestaña.\n\nPara que el enlace sea real y se lo puedas pasar a tus clientes o amigos, debes desplegar la app en Vercel.";
+            } else {
+                msg += "Cualquiera con este enlace leerá tu banca en tiempo real.\nPor privacidad, los visitantes nunca verán las apuestas en curso a menos que configures una Privacidad.";
+            }
+            alert(msg);
+        } catch (e) { alert("Error generando el enlace."); }
     };
 
     const handleExitVisiting = () => {
-        setViewMode('personal'); setVisitingBank(null); setVisitingBets([]);
-        try { window.history.pushState({}, document.title, window.location.pathname); } catch(e) {}
+        try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e) {}
+        setViewMode('personal'); 
+        setVisitingUserId(null); 
+        setVisitingBankId(null);
+        setVisitingBank(null); 
+        setVisitingBets([]);
+        setUnlockedBank(false);
     };
 
     const handleAmountChange = (val, type) => {
@@ -429,8 +582,8 @@ export default function App() {
             } else {
                 await addDoc(collection(db, 'users', currentUser.uid, 'bets'), betData);
             }
-            setShowBetForm(false); setEditingBetId(null); setIsCustomBookmaker(false);
-            setNewBet({ date: new Date().toISOString().split('T')[0], time: '00:00', bookmaker: 'Bet365', betMode: 'simple', title: '', selections: [{ id: Date.now(), title: '', selection: '', sport: 'Fútbol', status: 'pending', category: '', odds: 1.50, isOpen: true }], amount: 0, stake: 0, analysis: '' });
+            setShowBetForm(false); setEditingBetId(null); setIsCustomBookmaker(false); setAiMessage('');
+            setNewBet({ date: new Date().toISOString().split('T')[0], time: '00:00', bookmaker: 'Bet365', betMode: 'simple', title: '', selections: [{ id: Date.now(), title: '', selection: '', sport: customOptions.sports?.[0] || 'Fútbol', status: 'pending', category: '', odds: 1.50, isOpen: true }], amount: 0, stake: 0, analysis: '' });
         } catch (error) {
             console.error("Error guardando apuesta:", error);
             alert("Error guardando apuesta.");
@@ -478,12 +631,16 @@ export default function App() {
         const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([[header, ...rows].join("\n")], { type: 'text/csv;charset=utf-8;' })); link.setAttribute("download", `MoneyTracKING_Export_${new Date().toISOString().slice(0,10)}.csv`); document.body.appendChild(link); link.click(); document.body.removeChild(link);
     };
 
-    const handleDeleteBet = async (id) => { 
+    const showAlert = (message) => setFeedbackModal({ isOpen: true, type: 'alert', message, onConfirm: null });
+    const showConfirm = (message, onConfirm) => setFeedbackModal({ isOpen: true, type: 'confirm', message, onConfirm });
+    const closeFeedbackModal = () => setFeedbackModal(prev => ({ ...prev, isOpen: false }));
+
+    const handleDeleteBet = (id) => { 
         if (viewMode === 'visiting') return;
-        if(confirm('¿Eliminar esta apuesta?')) {
+        showConfirm('¿Estás seguro de que deseas eliminar esta operación de forma permanente?', async () => {
             try { await deleteDoc(doc(db, 'users', currentUser.uid, 'bets', id)); }
-            catch(e) { console.error(e); }
-        }
+            catch(e) { console.error(e); showAlert("Error borrando apuesta. Revisa tu conexión."); }
+        });
     };
 
     const handleQuickStatusChange = async (status) => { 
@@ -499,23 +656,52 @@ export default function App() {
     };
 
     const handleBookieChange = (e) => { const val=e.target.value; if(val==='Otra'){setIsCustomBookmaker(true);setNewBet(p=>({...p,bookmaker:''}))}else{setIsCustomBookmaker(false);setNewBet(p=>({...p,bookmaker:val}))}};
-    const handleEditClick = (bet) => { if (viewMode === 'visiting') return; setIsCustomBookmaker(!COMMON_BOOKMAKERS.includes(bet.bookmaker)); setEditingBetId(bet.id); setFormErrors({}); setNewBet(bet); setShowBetForm(true); };
-    const handleAddSelection = () => setNewBet(p => ({...p, selections: [...p.selections, { id: Date.now(), title: '', selection: '', sport: 'Fútbol', status: 'pending', category: '', odds: 1.50, isOpen: true }]}));
+    const handleEditClick = (bet) => { if (viewMode === 'visiting') return; setIsCustomBookmaker(!COMMON_BOOKMAKERS.includes(bet.bookmaker)); setEditingBetId(bet.id); setFormErrors({}); setNewBet(bet); setShowBetForm(true); setAiMessage(''); };
+    const handleAddSelection = () => setNewBet(p => ({...p, selections: [...p.selections, { id: Date.now(), title: '', selection: '', sport: customOptions.sports?.[0] || 'Fútbol', status: 'pending', category: '', odds: 1.50, isOpen: true }]}));
     const handleRemoveSelection = (id) => { if(newBet.selections.length > 1) setNewBet(p => ({ ...p, selections: p.selections.filter(s => s.id !== id) })); };
     const handleUpdateSelection = (id, f, v) => setNewBet(p => ({ ...p, selections: p.selections.map(s => s.id === id ? { ...s, [f]: v } : s) }));
     const toggleSelection = (id) => setNewBet(p => ({ ...p, selections: p.selections.map(s => s.id === id ? { ...s, isOpen: !s.isOpen } : s) }));
 
-    const handleAddOption = (type, value) => { /* TODO: Mover custom Options a DB */ };
-    const handleDeleteOption = (type, value) => { /* TODO: Mover custom Options a DB */ };
+    const handleAddOption = async (type, value) => { 
+        if (!value.trim() || viewMode === 'visiting') return;
+        const currentList = customOptions[type] || [];
+        if (currentList.includes(value.trim())) return alert("Esta etiqueta ya existe.");
+
+        const newOptions = { ...customOptions, [type]: [...currentList, value.trim()] };
+        setCustomOptions(newOptions); 
+
+        if (type === 'sports') setNewCustomSport('');
+        if (type === 'categories') setNewCustomCategory('');
+
+        try {
+            await setDoc(doc(db, 'users', currentUser.uid, 'preferences', 'customOptions'), newOptions, { merge: true });
+        } catch (error) {
+            console.error("Error guardando etiqueta:", error);
+            alert("Hubo un pequeño error guardando en la nube, pero se ha añadido temporalmente.");
+        }
+    };
+
+    const handleDeleteOption = async (type, value) => { 
+        if (viewMode === 'visiting') return;
+        const currentList = customOptions[type] || [];
+        const newOptions = { ...customOptions, [type]: currentList.filter(item => item !== value) };
+        setCustomOptions(newOptions); 
+
+        try {
+            await setDoc(doc(db, 'users', currentUser.uid, 'preferences', 'customOptions'), newOptions, { merge: true });
+        } catch (error) {
+            console.error("Error eliminando etiqueta:", error);
+        }
+    };
     
     const openAddBankModal = () => {
         if(banks.length >= LIMITS.MAX_BANKS) return alert(`Límite de ${LIMITS.MAX_BANKS} bancas alcanzado.`);
-        setNewBankData({ name: `Nueva Banca ${banks.length+1}`, initialCapital: 1000, currency: 'EUR' }); setIsAddingBank(true);
+        setNewBankData({ name: `Nueva Banca ${banks.length+1}`, initialCapital: 1000, currency: 'EUR', premiumPassword: '' }); setIsAddingBank(true);
     };
 
     const confirmAddBank = async (e) => {
         e.preventDefault();
-        const newBank = { name: newBankData.name || `Nueva Banca ${banks.length+1}`, initialCapital: parseFloat(newBankData.initialCapital) || 1000, currency: newBankData.currency, createdAt: new Date().toISOString(), isEditable: false };
+        const newBank = { name: newBankData.name || `Nueva Banca ${banks.length+1}`, initialCapital: parseFloat(newBankData.initialCapital) || 1000, currency: newBankData.currency, premiumPassword: newBankData.premiumPassword || '', createdAt: new Date().toISOString(), isEditable: false };
         try { await addDoc(collection(db, 'users', currentUser.uid, 'banks'), newBank); setIsAddingBank(false); }
         catch(error) { console.error(error); alert("Error creando banca."); }
     };
@@ -526,76 +712,95 @@ export default function App() {
         catch(e) { console.error(e); }
     }
 
-    const handleDeleteBank = async (id) => {
-        if(confirm('¿Borrar banca? Se borrarán sus datos asociados.')) {
+    const handleDeleteBank = (id) => {
+        showConfirm('¿Borrar banca? Se eliminarán todos sus datos y apuestas asociadas de forma irreversible.', async () => {
             try { await deleteDoc(doc(db, 'users', currentUser.uid, 'banks', id)); }
-            catch(e) { console.error(e); }
-        }
+            catch(e) { console.error(e); showAlert("Error borrando banca."); }
+        });
     };
 
     const MobileMenuItem = ({ icon: Icon, label, tabId }) => (
-        <button onClick={() => { setActiveTab(tabId); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${activeTab === tabId ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}><Icon size={18}/> {label}</button>
+        <button onClick={() => { setActiveTab(tabId); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === tabId ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><Icon size={18}/> {label}</button>
     );
 
-    if (!currentUser) {
+    if (!currentUser && viewMode === 'personal') {
         return (
-            <><style>{globalStyles}</style>
-            <div className="min-h-screen bg-[#0B1120] flex items-center justify-center p-4 text-white">
-                <div className="bg-[#0F1629] p-8 rounded-2xl border border-slate-700/50 shadow-2xl w-full max-w-md animate-in fade-in">
-                    <div className="flex justify-center mb-6"><div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-2xl flex items-center justify-center shadow-lg"><TrendingUp size={32} className="text-white"/></div></div>
-                    <h1 className="text-2xl font-bold text-center text-white mb-2">MoneyTrac<span className="text-yellow-400">KING</span></h1>
-                    <p className="text-slate-400 text-center text-sm mb-6">Tu gestor de bankroll en la nube</p>
+            <><style>{getGlobalStyles(theme)}</style>
+            <LiquidBackground theme={theme} />
+            <div className="min-h-screen relative flex items-center justify-center p-4">
+                <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl p-8 rounded-[2rem] border border-[var(--border)] shadow-[var(--shadow-glow-lg)] w-full max-w-[400px] animate-in fade-in transition-colors">
+                    <div className="flex justify-center mb-6"><div className="w-16 h-16 bg-[var(--bg-card)] rounded-full flex items-center justify-center shadow-inner border border-[var(--border)]"><Lock size={28} className="text-[var(--yellow)] drop-shadow-md"/></div></div>
+                    <h1 className="text-3xl font-extrabold text-center text-[var(--text-main)] mb-2 tracking-tight">MoneyTrac<span className="text-[var(--yellow)]">KING</span></h1>
+                    <p className="text-[var(--text-muted)] text-center text-sm mb-8 font-medium">Tu gestor de bankroll nivel Dios</p>
+                    <div className="flex bg-[var(--bg-input)] p-1.5 rounded-2xl mb-8 border border-[var(--border)] transition-colors"><button type="button" onClick={() => setIsRegistering(false)} className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all uppercase tracking-wider ${!isRegistering ? 'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-md)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>Entrar</button><button type="button" onClick={() => setIsRegistering(true)} className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all uppercase tracking-wider ${isRegistering ? 'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-md)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>Registrarse</button></div>
                     <form onSubmit={handleAuth} className="space-y-4">
-                        <div>
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Email</label>
-                            <input type="email" placeholder="tu@email.com" className="w-full bg-[#1A2035] border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-emerald-500 outline-none transition-colors" value={email} onChange={e => setEmail(e.target.value)} autoFocus required />
-                        </div>
-                        <div>
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Contraseña</label>
-                            <input type="password" placeholder="••••••••" className="w-full bg-[#1A2035] border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-emerald-500 outline-none transition-colors" value={password} onChange={e => setPassword(e.target.value)} required />
-                        </div>
-                        {authError && <p className="text-red-400 text-xs text-center">{authError}</p>}
-                        <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-emerald-500/20">
-                            {isRegistering ? 'Crear Cuenta' : 'Entrar'}
-                        </button>
+                        <div><input type="email" placeholder="Email" className="w-full bg-[var(--bg-input)] border border-transparent rounded-xl px-5 py-4 text-[var(--text-main)] focus:border-[var(--accent-50)] outline-none transition-all placeholder-[var(--text-muted)] font-medium text-sm shadow-inner" value={email} onChange={e => setEmail(e.target.value)} autoFocus required /></div>
+                        <div><input type="password" placeholder="Contraseña" className="w-full bg-[var(--bg-input)] border border-transparent rounded-xl px-5 py-4 text-[var(--text-main)] focus:border-[var(--accent-50)] outline-none transition-all placeholder-[var(--text-muted)] font-medium text-sm shadow-inner" value={password} onChange={e => setPassword(e.target.value)} required /></div>
+                        {authError && <p className="text-[var(--red)] text-xs text-center bg-[var(--red-10)] py-2 rounded-lg border border-[var(--red-20)]">{authError}</p>}
+                        <button type="submit" className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-extrabold py-4 rounded-xl transition-all shadow-[var(--shadow-glow-md)] hover:shadow-[var(--shadow-glow-lg)] mt-2 uppercase tracking-widest text-sm">{isRegistering ? 'Crear Cuenta' : 'Iniciar Sesión'}</button>
                     </form>
-                    <p className="mt-6 text-center text-sm text-slate-400">
-                        {isRegistering ? '¿Ya tienes cuenta?' : '¿No tienes cuenta?'} 
-                        <button onClick={() => setIsRegistering(!isRegistering)} className="text-emerald-400 ml-2 hover:underline">{isRegistering ? 'Entra aquí' : 'Regístrate gratis'}</button>
-                    </p>
                 </div>
             </div></>
         );
     }
 
-    if (loading && viewMode === 'personal') return <><style>{globalStyles}</style><div className="min-h-screen bg-[#0B1120] flex items-center justify-center text-emerald-500 animate-pulse font-bold text-xl">Conectando con la nube...</div></>;
+    if (loading) return <><style>{getGlobalStyles(theme)}</style><LiquidBackground theme={theme}/><div className="min-h-screen flex items-center justify-center text-[var(--accent)] animate-pulse font-bold text-xl drop-shadow-md">Conectando con la nube...</div></>;
+
+    if (viewMode === 'visiting' && !loading && !visitingBank) {
+        return (
+            <><style>{getGlobalStyles(theme)}</style>
+            <LiquidBackground theme={theme}/>
+            <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
+                <div className="bg-[var(--bg-card)] p-8 rounded-3xl border border-[var(--border)] shadow-[var(--shadow-glow-md)] max-w-md w-full animate-in fade-in">
+                    <AlertTriangle size={48} className="text-[var(--text-muted)] mx-auto mb-4 drop-shadow-sm" />
+                    <h2 className="text-2xl font-bold text-[var(--text-main)] mb-2 tracking-tight">Banca no encontrada</h2>
+                    <p className="text-[var(--text-muted)] mb-6 text-sm leading-relaxed">El enlace es inválido o el usuario ha eliminado el acceso a esta banca.</p>
+                    <button onClick={handleExitVisiting} className="w-full bg-[var(--accent)] text-[var(--accent-fg)] px-6 py-3 rounded-xl font-bold hover:opacity-90 transition-opacity shadow-[var(--shadow-glow-sm)]">Ir al Inicio</button>
+                </div>
+            </div></>
+        )
+    }
+
+    if (dbError && viewMode === 'personal') return (
+        <><style>{getGlobalStyles(theme)}</style>
+        <LiquidBackground theme={theme}/>
+        <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
+            <div className="bg-[var(--bg-card)] p-8 rounded-3xl border border-[var(--red-30)] shadow-[var(--shadow-red)] max-w-md w-full animate-in fade-in">
+                <AlertTriangle size={48} className="text-[var(--red)] mx-auto mb-4 drop-shadow-sm" />
+                <h2 className="text-2xl font-bold text-[var(--text-main)] mb-2 tracking-tight">Conexión Bloqueada</h2>
+                <p className="text-[var(--text-muted)] mb-6 text-sm leading-relaxed">{dbError}</p>
+                <button onClick={handleLogout} className="w-full bg-[var(--bg-input)] border border-[var(--border)] px-6 py-3 rounded-xl font-bold text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors">Cerrar Sesión</button>
+            </div>
+        </div></>
+    );
 
     if (banks.length === 0 && viewMode === 'personal') {
         return (
-            <><style>{globalStyles}</style>
-            <div className="flex flex-col md:flex-row h-screen bg-[#0B1120] text-slate-100 font-sans overflow-hidden">
-                <aside className="hidden md:flex flex-col w-64 bg-[#0F1629] border-r border-slate-800/50">
-                    <div className="p-6 border-b border-slate-800/50 flex items-center gap-3"><div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-lg flex items-center justify-center shadow-lg"><TrendingUp size={18} className="text-white"/></div><h1 className="font-bold text-lg tracking-tight">MoneyTrac<span className="text-yellow-400">KING</span></h1></div>
-                    <div className="flex-1 p-4 flex flex-col justify-end"><div className="p-4 border-t border-slate-800/50"><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-xs font-bold text-white">{currentUser.email?.charAt(0).toUpperCase()}</div><div className="text-sm font-medium text-white max-w-[100px] truncate">{currentUser.email?.split('@')[0]}</div></div><button onClick={handleLogout} className="text-slate-500 hover:text-red-400"><LogOut size={16}/></button></div></div></div>
+            <><style>{getGlobalStyles(theme)}</style>
+            <LiquidBackground theme={theme} />
+            <div className="flex flex-col md:flex-row h-screen text-[var(--text-main)] font-sans overflow-hidden">
+                <aside className="hidden md:flex flex-col w-64 bg-[var(--bg-card)]/80 backdrop-blur-2xl border-r border-[var(--border)] transition-colors">
+                    <div className="p-6 border-b border-[var(--border)] flex items-center gap-3"><div className="w-8 h-8 bg-[var(--accent)] rounded-lg flex items-center justify-center shadow-lg"><TrendingUp size={18} className="text-[var(--accent-fg)]"/></div><h1 className="font-bold text-lg tracking-tight">MoneyTrac<span className="text-[var(--yellow)]">KING</span></h1></div>
+                    <div className="flex-1 p-4 flex flex-col justify-end"><div className="p-4 border-t border-[var(--border)]"><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center text-xs font-bold text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]">{currentUser.email?.charAt(0).toUpperCase()}</div><div className="text-sm font-medium text-[var(--text-main)] max-w-[100px] truncate">{currentUser.email?.split('@')[0]}</div></div><button onClick={handleLogout} className="text-[var(--text-muted)] hover:text-[var(--red)]"><LogOut size={16}/></button></div></div></div>
                 </aside>
                 <main className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-                    <div className="bg-[#0F1629] p-8 rounded-2xl border border-slate-700/50 shadow-xl max-w-lg w-full">
-                        <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-6"><Plus size={32} className="text-emerald-500" /></div>
-                        <h2 className="text-2xl font-bold text-white mb-2">¡Bienvenido a la nube!</h2>
-                        <p className="text-slate-400 mb-8">Tus datos ahora están seguros. Crea tu primera banca para empezar.</p>
-                        <button onClick={openAddBankModal} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-xl transition-all shadow-lg shadow-emerald-500/20 w-full flex items-center justify-center gap-2"><Plus size={20}/> Crear mi Primera Banca</button>
+                    <div className="bg-[var(--bg-card)] backdrop-blur-2xl p-8 rounded-3xl border border-[var(--border)] shadow-[var(--shadow-glow-md)] max-w-lg w-full transition-colors">
+                        <div className="w-16 h-16 bg-[var(--bg-overlay)] border border-[var(--border)] rounded-full flex items-center justify-center mx-auto mb-6"><Plus size={32} className="text-[var(--accent)] drop-shadow-md" /></div>
+                        <h2 className="text-3xl font-bold text-[var(--text-main)] mb-3">¡Bienvenido a la cima!</h2>
+                        <p className="text-[var(--text-muted)] mb-8 leading-relaxed">Tus datos ahora están seguros en la nube. Configura tu primera banca para empezar a trackear como un profesional.</p>
+                        <button onClick={openAddBankModal} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-bold py-3.5 px-8 rounded-xl transition-all shadow-[var(--shadow-glow-md)] hover:shadow-[var(--shadow-glow-lg)] w-full flex items-center justify-center gap-2"><Plus size={20}/> Crear mi Primera Banca</button>
                     </div>
                 </main>
                 
                 {isAddingBank && (
-                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-                        <div className="bg-[#0B1120] w-full max-w-sm rounded-2xl shadow-2xl border border-slate-800 overflow-hidden flex flex-col">
-                            <div className="px-5 py-4 border-b border-slate-800 flex justify-between items-center bg-[#0F1629]"><h3 className="font-bold text-white text-lg">Nueva Banca</h3><button onClick={() => setIsAddingBank(false)} className="text-slate-400 hover:text-white"><X size={20}/></button></div>
-                            <div className="p-6 space-y-4">
-                                <div className="space-y-1"><label className="text-xs text-slate-500 uppercase font-bold tracking-wider">Nombre</label><input type="text" placeholder="Ej: Bet365 Principal" className="w-full bg-[#151b2e] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-emerald-500 outline-none transition-colors" value={newBankData.name} onChange={e => setNewBankData({...newBankData, name: e.target.value})} autoFocus /></div>
-                                <div className="space-y-1"><label className="text-xs text-slate-500 uppercase font-bold tracking-wider flex items-center gap-2">Capital Inicial</label><input type="number" placeholder="1000" className="w-full bg-[#151b2e] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-emerald-500 outline-none transition-colors" value={newBankData.initialCapital} onChange={e => setNewBankData({...newBankData, initialCapital: e.target.value})} /></div>
-                                <div className="space-y-1"><label className="text-xs text-slate-500 uppercase font-bold tracking-wider">Divisa</label><select className="w-full bg-[#151b2e] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-emerald-500 outline-none transition-colors" value={newBankData.currency} onChange={e => setNewBankData({...newBankData, currency: e.target.value})}><option value="EUR">EUR (€)</option><option value="USD">USD ($)</option><option value="GBP">GBP (£)</option><option value="MXN">MXN ($)</option></select></div>
-                                <button onClick={confirmAddBank} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition-all shadow-lg shadow-emerald-500/20 mt-2">Crear Banca</button>
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+                        <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl w-full max-w-sm rounded-3xl shadow-[var(--shadow-glow-lg)] border border-[var(--accent-20)] overflow-hidden flex flex-col transition-colors">
+                            <div className="px-5 py-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-card)]"><h3 className="font-bold text-[var(--text-main)] text-lg">Nueva Banca</h3><button onClick={() => setIsAddingBank(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-overlay)] p-1.5 rounded-full"><X size={18}/></button></div>
+                            <div className="p-6 space-y-5">
+                                <div className="space-y-1.5"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Nombre</label><input type="text" placeholder="Ej: Bet365 Principal" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors" value={newBankData.name} onChange={e => setNewBankData({...newBankData, name: e.target.value})} autoFocus /></div>
+                                <div className="space-y-1.5"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1 flex items-center gap-2">Capital Inicial</label><input type="number" placeholder="1000" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors" value={newBankData.initialCapital} onChange={e => setNewBankData({...newBankData, initialCapital: e.target.value})} /></div>
+                                <div className="space-y-1.5"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Divisa</label><select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors appearance-none" value={newBankData.currency} onChange={e => setNewBankData({...newBankData, currency: e.target.value})}><option value="EUR">EUR (€)</option><option value="USD">USD ($)</option><option value="GBP">GBP (£)</option><option value="MXN">MXN ($)</option></select></div>
+                                <button onClick={confirmAddBank} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-bold py-3.5 rounded-xl transition-all shadow-[var(--shadow-glow-md)] mt-4">Crear Banca</button>
                             </div>
                         </div>
                     </div>
@@ -605,84 +810,114 @@ export default function App() {
     }
 
     return (
-        <><style>{globalStyles}</style>
-        <div className="flex flex-col md:flex-row h-screen bg-[#0B1120] text-slate-100 font-sans overflow-hidden">
+        <><style>{getGlobalStyles(theme)}</style>
+        <LiquidBackground theme={theme} />
+        <div className="flex flex-col md:flex-row h-screen text-[var(--text-main)] font-sans overflow-hidden">
             {isMobileMenuOpen && (
-                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm md:hidden animate-in fade-in" onClick={() => setIsMobileMenuOpen(false)}>
-                    <div className="absolute top-0 left-0 bottom-0 w-64 bg-[#0F1629] p-4 shadow-2xl border-r border-slate-800 slide-in" onClick={e => e.stopPropagation()}>
-                        <div className="flex justify-between items-center mb-6"><h2 className="font-bold text-lg text-white">Menú</h2><button onClick={() => setIsMobileMenuOpen(false)} className="p-1 rounded-full hover:bg-slate-800 text-slate-400"><X size={20}/></button></div>
-                        <nav className="space-y-1"><MobileMenuItem icon={LayoutDashboard} label="Dashboard" tabId="dashboard" /><MobileMenuItem icon={List} label="Mis Apuestas" tabId="bets" /><div className="pt-6 pb-2 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Configuración</div><MobileMenuItem icon={Settings} label="Configuración" tabId="settings" /><MobileMenuItem icon={Tags} label="Personalización" tabId="customization" /></nav>
+                <div className="fixed inset-0 z-50 bg-[var(--bg-modal)] backdrop-blur-md md:hidden animate-in fade-in" onClick={() => setIsMobileMenuOpen(false)}>
+                    <div className="absolute top-0 left-0 bottom-0 w-64 bg-[var(--bg-base-95)] backdrop-blur-2xl p-4 shadow-2xl border-r border-[var(--accent-20)] slide-in transition-colors" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-6"><h2 className="font-bold text-lg text-[var(--text-main)]">Menú</h2><button onClick={() => setIsMobileMenuOpen(false)} className="p-1.5 rounded-full bg-[var(--bg-overlay)] hover:bg-[var(--bg-overlay-hover)] text-[var(--text-muted)]"><X size={18}/></button></div>
+                        <nav className="space-y-2"><MobileMenuItem icon={LayoutDashboard} label="Dashboard" tabId="dashboard" /><MobileMenuItem icon={List} label="Mis Apuestas" tabId="bets" /><div className="pt-6 pb-2 px-4 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Configuración</div><MobileMenuItem icon={Settings} label="Configuración" tabId="settings" /><MobileMenuItem icon={Tags} label="Personalización" tabId="customization" /></nav>
                     </div>
                 </div>
             )}
 
-            <aside className={`hidden md:flex flex-col w-64 bg-[#0F1629] border-r border-slate-800/50 transition-all`}>
-                <div className="p-6 border-b border-slate-800/50 flex items-center gap-3"><div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-lg flex items-center justify-center shadow-lg"><TrendingUp size={18} className="text-white"/></div><h1 className="font-bold text-lg tracking-tight">MoneyTrac<span className="text-yellow-400">KING</span></h1></div>
+            <aside className={`hidden md:flex flex-col w-64 bg-[var(--bg-card)]/50 backdrop-blur-2xl border-r border-[var(--border)] transition-colors`}>
+                <div className="p-6 border-b border-[var(--border)] flex items-center gap-3"><div className="w-8 h-8 bg-[var(--accent)] rounded-lg flex items-center justify-center shadow-[var(--shadow-glow-sm)]"><TrendingUp size={18} className="text-[var(--accent-fg)]"/></div><h1 className="font-bold text-lg tracking-tight text-[var(--text-main)]">MoneyTrac<span className="text-[var(--yellow)] drop-shadow-sm">KING</span></h1></div>
                 {viewMode === 'visiting' ? (
-                    <div className="flex-1 flex flex-col p-4 bg-indigo-900/10">
-                        <div className="mb-4 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl"><p className="text-[10px] text-indigo-300 uppercase font-bold mb-1 flex items-center gap-2"><Eye size={12}/> Modo Visitante</p><p className="text-white text-sm font-bold truncate">{visitingBank?.name}</p></div>
-                        <nav className="space-y-1"><button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${activeTab === 'dashboard' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}><LayoutDashboard size={18}/> Dashboard</button><button onClick={() => setActiveTab('bets')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${activeTab === 'bets' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}><List size={18}/> Historial</button></nav>
-                        <div className="mt-auto"><button onClick={handleExitVisiting} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-bold text-white bg-slate-700 hover:bg-slate-600 transition-colors"><LogOut size={16}/> Volver a mi Banca</button></div>
+                    <div className="flex-1 flex flex-col p-4 bg-indigo-500/5">
+                        <div className="mb-4 p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl backdrop-blur-md"><p className="text-[10px] text-indigo-500 dark:text-indigo-300 uppercase font-bold mb-1 flex items-center gap-2"><Eye size={12}/> Modo Visitante</p><p className="text-[var(--text-main)] text-sm font-bold truncate drop-shadow-sm">{visitingBank?.name}</p></div>
+                        <nav className="space-y-2"><button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'dashboard' ? 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30 shadow-lg' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay)] hover:text-[var(--text-main)]'}`}><LayoutDashboard size={18}/> Dashboard</button><button onClick={() => setActiveTab('bets')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'bets' ? 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30 shadow-lg' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay)] hover:text-[var(--text-main)]'}`}><List size={18}/> Historial</button></nav>
+                        <div className="mt-auto"><button onClick={handleExitVisiting} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-[var(--text-main)] bg-[var(--bg-overlay)] border border-[var(--border)] hover:bg-[var(--bg-overlay-hover)] transition-all backdrop-blur-md"><LogOut size={16}/> {currentUser ? 'Volver a mi Banca' : 'Ir al Inicio de Sesión'}</button></div>
                     </div>
                 ) : (
-                    <><nav className="p-4 space-y-1 flex-1"><button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${activeTab === 'dashboard' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}><LayoutDashboard size={18}/> Dashboard</button><button onClick={() => setActiveTab('bets')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${activeTab === 'bets' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}><List size={18}/> Mis Apuestas</button><div className="pt-6 pb-2 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Configuración</div><button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${activeTab === 'settings' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}><Settings size={18}/> Configuración</button><button onClick={() => setActiveTab('customization')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${activeTab === 'customization' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}><Tags size={18}/> Personalización</button></nav><div className="p-4 border-t border-slate-800/50"><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-xs font-bold text-white">{currentUser.email?.charAt(0).toUpperCase()}</div><div className="text-sm font-medium text-white max-w-[100px] truncate">{currentUser.email?.split('@')[0]}</div></div><button onClick={handleLogout} className="text-slate-500 hover:text-red-400"><LogOut size={16}/></button></div><div className="text-center text-[10px] text-emerald-500"><ShieldCheck size={10} className="inline mr-1"/> Conectado a la nube</div></div></>
+                    <><nav className="p-4 space-y-2 flex-1"><button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'dashboard' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><LayoutDashboard size={18}/> Dashboard</button><button onClick={() => setActiveTab('bets')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'bets' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><List size={18}/> Mis Apuestas</button><div className="pt-6 pb-2 px-4 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Configuración</div><button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'settings' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><Settings size={18}/> Configuración</button><button onClick={() => setActiveTab('customization')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'customization' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><Tags size={18}/> Personalización</button></nav><div className="p-4 border-t border-[var(--border)]"><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center text-xs font-bold text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]">{currentUser.email?.charAt(0).toUpperCase()}</div><div className="text-sm font-medium text-[var(--text-main)] max-w-[100px] truncate">{currentUser.email?.split('@')[0]}</div></div><button onClick={handleLogout} className="text-[var(--text-muted)] hover:text-[var(--red)] bg-[var(--bg-overlay)] p-1.5 rounded-full"><LogOut size={16}/></button></div><div className="text-center text-[10px] text-[var(--accent-80)] mt-3 font-medium"><ShieldCheck size={10} className="inline mr-1"/> Sincronizado en la nube</div></div></>
                 )}
             </aside>
 
-            <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#0B1120] relative mb-16 md:mb-0">
-                <header className="h-16 bg-[#0F1629]/80 backdrop-blur border-b border-slate-800/50 flex items-center justify-between px-4 sticky top-0 z-30">
-                    <div className="flex items-center gap-3">
-                        <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 rounded-lg text-white hover:bg-slate-800"><Menu size={20} /></button>
-                        <div className="md:hidden w-8 h-8 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-lg flex items-center justify-center"><TrendingUp size={16} className="text-white"/></div>
-                        <h2 className="text-lg font-bold text-white truncate">{viewMode === 'visiting' ? <span className="text-indigo-400 flex items-center gap-2"><Eye size={18}/> Visitando: {activeBankData?.name}</span> : (activeTab === 'dashboard' ? 'Panel de Control' : activeTab === 'bets' ? 'Mis Apuestas' : activeTab === 'customization' ? 'Personalización' : 'Configuración')}</h2>
+            <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative mb-16 md:mb-0">
+                <header className="h-16 bg-transparent backdrop-blur-xl border-b border-[var(--border)] flex items-center justify-between px-6 sticky top-0 z-30 transition-colors">
+                    <div className="flex items-center gap-4">
+                        <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 rounded-xl bg-[var(--bg-overlay)] text-[var(--text-main)] hover:bg-[var(--bg-overlay-hover)] border border-[var(--border)]"><Menu size={20} /></button>
+                        <h2 className="text-xl font-bold text-[var(--text-main)] tracking-tight">{viewMode === 'visiting' ? <span className="text-indigo-500 dark:text-indigo-300 flex items-center gap-2 drop-shadow-sm"><Eye size={20}/> Visitando: {activeBankData?.name}</span> : (activeTab === 'dashboard' ? 'Panel de Control' : activeTab === 'bets' ? 'Mis Apuestas' : activeTab === 'customization' ? 'Personalización' : 'Configuración')}</h2>
                     </div>
-                    {viewMode === 'personal' && activeBankData && (
-                        <div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Wallet size={14} className="text-emerald-500"/></div><select value={currentBankId||''} onChange={(e)=>setCurrentBankId(e.target.value)} className="appearance-none bg-[#1A2035] border border-slate-700 text-white pl-9 pr-8 py-1.5 rounded-lg text-xs md:text-sm focus:outline-none focus:border-emerald-500 shadow-lg font-medium">{banks.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select><ChevronDown className="absolute right-2 top-2 text-slate-400 pointer-events-none" size={14}/></div>
-                    )}
-                     {viewMode === 'visiting' && (
-                        <div className="bg-indigo-500/20 border border-indigo-500/30 px-3 py-1 rounded text-xs text-indigo-300 font-bold" title="Por privacidad, las apuestas pendientes están ocultas.">Modo Lectura (Picks ocultos)</div>
-                    )}
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} className="p-2 rounded-xl bg-[var(--bg-overlay)] text-[var(--text-main)] hover:bg-[var(--bg-overlay-hover)] border border-[var(--border)] transition-colors shadow-sm" title="Alternar Tema">
+                            {theme === 'dark' ? <Sun size={18} className="text-[var(--text-muted)] hover:text-white" /> : <Moon size={18} className="text-[var(--text-muted)] hover:text-[#0F172A]" />}
+                        </button>
+                        
+                        {viewMode === 'personal' && activeBankData && (
+                            <div className="relative hidden sm:block"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Wallet size={14} className="text-[var(--accent)] drop-shadow-sm"/></div><select value={currentBankId||''} onChange={(e)=>setCurrentBankId(e.target.value)} className="appearance-none bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-main)] pl-9 pr-9 py-2 rounded-xl text-sm focus:outline-none focus:border-[var(--accent-50)] shadow-inner font-medium transition-colors hover:bg-[var(--bg-hover)] cursor-pointer">{banks.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select><ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" size={14}/></div>
+                        )}
+                        {viewMode === 'visiting' && (
+                            <div className="bg-indigo-500/20 border border-indigo-500/30 px-3 py-1.5 rounded-lg text-xs text-indigo-600 dark:text-indigo-300 font-bold backdrop-blur-sm" title="Por privacidad, las apuestas pendientes están ocultas.">Modo Lectura</div>
+                        )}
+                    </div>
                 </header>
 
-                <div className="flex-1 overflow-auto p-4 space-y-6 custom-scrollbar">
+                <div className="flex-1 overflow-auto p-4 md:p-6 space-y-6 custom-scrollbar relative z-10">
                 {activeTab === 'dashboard' && activeBankData && (
-                    <><div className="relative overflow-hidden bg-gradient-to-r from-emerald-600 to-teal-700 rounded-2xl p-6 md:p-8 shadow-2xl shadow-emerald-500/10">
+                    <><div className="relative overflow-hidden bg-[var(--bg-card)] rounded-3xl p-8 md:p-10 border border-[var(--border)] shadow-md transition-colors">
+                        <div className="absolute inset-0 bg-gradient-to-br from-[var(--bg-card)] to-[var(--bg-base)]"></div>
+                        <div className="absolute inset-0 bg-gradient-to-r from-[var(--accent-5)] to-transparent"></div>
                         <div className="relative z-10 flex justify-between items-start">
-                            <div><h3 className="text-emerald-100 text-sm font-medium mb-1">Beneficio Total ({activeBankData?.name})</h3><h1 className="text-4xl md:text-5xl font-bold text-white tracking-tight">{formatCurrency(stats.totalProfit, activeBankData?.currency)}</h1></div>
+                            <div><h3 className="text-[var(--accent)] text-sm font-bold mb-2 uppercase tracking-widest drop-shadow-sm">Beneficio Total ({activeBankData?.name})</h3><h1 className="text-5xl md:text-6xl font-extrabold text-[var(--text-main)] tracking-tight drop-shadow-lg">{formatCurrency(stats.totalProfit, activeBankData?.currency)}</h1></div>
                             {viewMode === 'personal' && (
                                 <div className="flex gap-2">
-                                    <button onClick={generateShareLink} className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg text-sm font-bold backdrop-blur-sm flex items-center gap-2 transition-colors border border-white/10"><LinkIcon size={16}/> Compartir Banca</button>
+                                    <button onClick={generateShareLink} className="bg-[var(--bg-card)] hover:bg-[var(--bg-hover)] text-[var(--text-main)] px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all border border-[var(--border)] shadow-sm hover:border-[var(--accent-50)]"><LinkIcon size={16} className="text-[var(--accent)]"/> Compartir Banca</button>
                                 </div>
                             )}
                         </div>
-                        <div className="absolute right-0 bottom-0 opacity-10 transform translate-y-1/4 translate-x-1/4"><Wallet size={160} /></div>
+                        <div className="absolute right-0 bottom-0 opacity-5 transform translate-y-1/4 translate-x-1/4 pointer-events-none blur-sm"><Wallet size={200} /></div>
                     </div>
                     
-                    <div className="bg-[#0F1629] border border-slate-800/50 rounded-2xl p-4 md:p-6"><div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4"><StatCard title="Picks" value={stats.picks} subValue="Total" /><StatCard title="Ganados" value={stats.won} colorClass="text-emerald-400" /><StatCard title="U. APOSTADAS" value={formatUnits(stats.stakedUnits)} /><StatCard title="Beneficio/Día" value={formatCurrency(stats.profitDay, activeBankData?.currency)} colorClass={stats.profitDay >= 0 ? "text-emerald-400" : "text-red-400"} /><StatCard title="Factor de Beneficio" value={stats.profitFactor.toFixed(2)} /><StatCard title="Tasa de Acierto" value={`${stats.winRate.toFixed(2)}%`} /><StatCard title="Perdidos" value={stats.lost} colorClass="text-red-400" /><StatCard title="U. GANADAS (NETO)" value={formatUnits(stats.profitUnits)} colorClass={stats.profitUnits >= 0 ? "text-emerald-400" : "text-red-400"} /><StatCard title="Beneficio/Pick" value={formatCurrency(stats.profitPerPick, activeBankData?.currency)} colorClass={stats.profitPerPick >= 0 ? "text-emerald-400" : "text-red-400"} /><StatCard title="Yield" value={`${stats.yield.toFixed(2)}%`} colorClass={stats.yield >= 0 ? "text-emerald-400" : "text-red-400"} /></div></div>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4"><div className="bg-[#0F1629] border border-slate-800/50 rounded-2xl p-4 h-64 flex flex-col relative"><div className="flex justify-between items-center mb-4"><h4 className="text-xs text-slate-400 uppercase font-bold">Beneficio Acumulado</h4><div className="flex bg-[#1A2035] rounded-lg p-0.5"><button onClick={() => setChartViewMode('detailed')} className={`px-2 py-0.5 text-[10px] rounded ${chartViewMode==='detailed'?'bg-emerald-500 text-white':'text-slate-500'}`}><TrendingUp size={12}/></button><button onClick={() => setChartViewMode('weekly')} className={`px-2 py-0.5 text-[10px] rounded ${chartViewMode==='weekly'?'bg-emerald-500 text-white':'text-slate-500'}`}><LineChart size={12}/></button></div></div><ResponsiveContainer width="100%" height="100%">{chartViewMode === 'detailed' ? (<AreaChart data={stats.detailedChart}><defs><linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/><stop offset="95%" stopColor="#10b981" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false}/><XAxis dataKey="name" stroke="#64748b" tick={{fontSize:10}} tickLine={false} axisLine={false}/><YAxis stroke="#64748b" tick={{fontSize:10}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor:'#0f172a', border:'none', borderRadius:'8px'}} itemStyle={{color:'#10b981'}} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']} /><Area type="monotone" dataKey="profit" stroke="#fbbf24" strokeWidth={2} fill="url(#colorProfit)"/></AreaChart>) : (<ReLineChart data={stats.weeklyChart}><CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false}/><XAxis dataKey="name" stroke="#64748b" tick={{fontSize:10}} tickLine={false} axisLine={false} label={{ value: 'Semanas', position: 'insideBottomRight', offset: -5, fill: '#64748b', fontSize: 10 }}/><YAxis stroke="#64748b" tick={{fontSize:10}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor:'#0f172a', border:'none', borderRadius:'8px'}} itemStyle={{color:'#10b981'}} labelFormatter={(l, p) => p[0]?.payload?.fullLabel || l} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']} /><Line type="linear" dataKey="profit" stroke="#fbbf24" strokeWidth={1} dot={{r: 3, fill: '#fbbf24', strokeWidth: 0}} activeDot={{r: 5, stroke: '#fff', strokeWidth: 1}}/></ReLineChart>)}</ResponsiveContainer></div><div className="bg-[#0F1629] border border-slate-800/50 rounded-2xl p-4 h-64 flex flex-col relative"><div className="flex justify-between items-center mb-4"><h4 className="text-xs text-slate-400 uppercase font-bold">Beneficio / {barChartViewMode === 'weekly' ? 'Semana' : 'Mes'}</h4><div className="flex bg-[#1A2035] rounded-lg p-0.5"><button onClick={() => setBarChartViewMode('weekly')} className={`px-2 py-0.5 text-[10px] rounded ${barChartViewMode==='weekly'?'bg-emerald-500 text-white':'text-slate-500'}`}><CalendarDays size={12} className="inline mr-1"/>Semana</button><button onClick={() => setBarChartViewMode('monthly')} className={`px-2 py-0.5 text-[10px] rounded ${barChartViewMode==='monthly'?'bg-emerald-500 text-white':'text-slate-500'}`}><Calendar size={12} className="inline mr-1"/>Mes</button></div></div><ResponsiveContainer width="100%" height="100%"><BarChart data={barChartViewMode === 'weekly' ? stats.weeklyBarChart : stats.monthlyBarChart}><CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false}/><XAxis dataKey="name" stroke="#64748b" tick={{fontSize:10}} tickLine={false} axisLine={false}/><YAxis stroke="#64748b" tick={{fontSize:10}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor:'#0f172a', border:'none', borderRadius:'8px'}} cursor={{fill:'transparent'}} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']}/><Bar dataKey="profit" radius={[4,4,0,0]}>{(barChartViewMode === 'weekly' ? stats.weeklyBarChart : stats.monthlyBarChart).map((e,i)=><Cell key={`c-${i}`} fill={e.profit>=0?'#10b981':'#ef4444'}/>)}</Bar></BarChart></ResponsiveContainer></div></div></>
+                    <div className="bg-transparent"><div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4"><StatCard title="Picks" value={stats.picks} subValue="Total" /><StatCard title="Ganados" value={stats.won} colorClass="text-[var(--accent)]" /><StatCard title="U. APOSTADAS" value={formatUnits(stats.stakedUnits)} /><StatCard title="Beneficio/Día" value={formatCurrency(stats.profitDay, activeBankData?.currency)} colorClass={stats.profitDay >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /><StatCard title="Factor de Beneficio" value={stats.profitFactor.toFixed(2)} /><StatCard title="Tasa de Acierto" value={`${stats.winRate.toFixed(2)}%`} /><StatCard title="Perdidos" value={stats.lost} colorClass="text-[var(--red)]" /><StatCard title="U. GANADAS (NETO)" value={formatUnits(stats.profitUnits)} colorClass={stats.profitUnits >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /><StatCard title="Beneficio/Pick" value={formatCurrency(stats.profitPerPick, activeBankData?.currency)} colorClass={stats.profitPerPick >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /><StatCard title="Yield" value={`${stats.yield.toFixed(2)}%`} colorClass={stats.yield >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /></div></div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-6 h-72 flex flex-col relative shadow-sm transition-colors"><div className="flex justify-between items-center mb-6"><h4 className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider">Evolución del Beneficio</h4><div className="flex bg-[var(--bg-input)] rounded-lg p-1 border border-[var(--border)] backdrop-blur-sm"><button onClick={() => setChartViewMode('detailed')} className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${chartViewMode==='detailed'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><TrendingUp size={14}/></button><button onClick={() => setChartViewMode('weekly')} className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${chartViewMode==='weekly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><LineChart size={14}/></button></div></div><ResponsiveContainer width="100%" height="100%">{chartViewMode === 'detailed' ? (<AreaChart data={stats.detailedChart}><defs><linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={theme === 'dark' ? '#5EE6B1' : '#2563EB'} stopOpacity={0.4}/><stop offset="95%" stopColor={theme === 'dark' ? '#5EE6B1' : '#2563EB'} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} itemStyle={{color: theme === 'dark' ? '#5EE6B1' : '#2563EB', fontWeight:'bold'}} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']} /><Area type="monotone" dataKey="profit" stroke={theme === 'dark' ? '#5EE6B1' : '#2563EB'} strokeWidth={3} fill="url(#colorProfit)"/></AreaChart>) : (<ReLineChart data={stats.weeklyChart}><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} itemStyle={{color: theme === 'dark' ? '#5EE6B1' : '#2563EB', fontWeight:'bold'}} labelFormatter={(l, p) => p[0]?.payload?.fullLabel || l} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']} /><Line type="linear" dataKey="profit" stroke={theme === 'dark' ? '#5EE6B1' : '#2563EB'} strokeWidth={3} dot={{r: 4, fill: theme === 'dark' ? '#5EE6B1' : '#2563EB', strokeWidth: 0}} activeDot={{r: 6, stroke: theme === 'dark' ? '#fff' : '#0F172A', strokeWidth: 2}}/></ReLineChart>)}</ResponsiveContainer></div><div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-6 h-72 flex flex-col relative shadow-sm transition-colors"><div className="flex justify-between items-center mb-6"><h4 className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider">Rendimiento Temporal</h4><div className="flex bg-[var(--bg-input)] rounded-lg p-1 border border-[var(--border)] backdrop-blur-sm"><button onClick={() => setBarChartViewMode('weekly')} className={`px-3 py-1 text-xs rounded-md font-medium flex items-center gap-1 transition-colors ${barChartViewMode==='weekly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><CalendarDays size={12}/> Semana</button><button onClick={() => setBarChartViewMode('monthly')} className={`px-3 py-1 text-xs rounded-md font-medium flex items-center gap-1 transition-colors ${barChartViewMode==='monthly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><Calendar size={12}/> Mes</button></div></div><ResponsiveContainer width="100%" height="100%"><BarChart data={barChartViewMode === 'weekly' ? stats.weeklyBarChart : stats.monthlyBarChart}><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} cursor={{fill: theme === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)'}} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']}/><Bar dataKey="profit" radius={[6,6,0,0]}>{(barChartViewMode === 'weekly' ? stats.weeklyBarChart : stats.monthlyBarChart).map((e,i)=><Cell key={`c-${i}`} fill={e.profit>=0?(theme === 'dark' ? '#5EE6B1' : '#2563EB'):(theme === 'dark' ? '#FF5A5F' : '#EF4444')}/>)}</Bar></BarChart></ResponsiveContainer></div></div></>
                 )}
 
                 {activeTab === 'bets' && (
-                    <div className="space-y-4">
-                    <div className="flex justify-between items-center"><h3 className="text-xl font-bold text-white">{viewMode === 'visiting' ? 'Historial de Apuestas (Solo Lectura)' : 'Mis Apuestas'}</h3>{viewMode === 'personal' && activeBankData && (<button onClick={() => { setEditingBetId(null); setShowBetForm(true); setFormErrors({}); setIsCustomBookmaker(false); }} className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-medium text-sm transition-colors"><Plus size={16}/> Añadir Apuesta</button>)}</div>
-                    {activeBetsData.length===0?<div className="bg-[#0F1629] border border-slate-800/50 rounded-xl p-8 text-center text-slate-500 text-sm">No hay apuestas registradas en esta banca.</div>:
-                    <div className="space-y-4">
+                    <div className="space-y-6">
+                    <div className="flex justify-between items-center"><h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight drop-shadow-sm">{viewMode === 'visiting' ? 'Historial Público' : 'Mis Apuestas'}</h3>{viewMode === 'personal' && activeBankData && (<button onClick={() => { setEditingBetId(null); setShowBetForm(true); setFormErrors({}); setIsCustomBookmaker(false); setAiMessage(''); setNewBet({ date: new Date().toISOString().split('T')[0], time: '00:00', bookmaker: 'Bet365', betMode: 'simple', title: '', selections: [{ id: Date.now(), title: '', selection: '', sport: customOptions.sports?.[0] || 'Fútbol', status: 'pending', category: '', odds: 1.50, isOpen: true }], amount: 0, stake: 0, analysis: '' }); }} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] px-5 py-2.5 rounded-xl flex items-center gap-2 font-bold text-sm transition-all shadow-[var(--shadow-glow-md)]"><Plus size={18}/> Añadir Apuesta</button>)}</div>
+                    
+                    {/* --- CAJA FOMO PARA VISITANTES --- */}
+                    {viewMode === 'visiting' && pendingHiddenCount > 0 && !unlockedBank && (
+                        <div className="bg-[var(--bg-card)] border border-[var(--accent-30)] rounded-3xl p-6 text-center shadow-[var(--shadow-glow-sm)] transition-colors animate-in fade-in">
+                            <Lock size={32} className="text-[var(--accent)] mx-auto mb-3 drop-shadow-md" />
+                            <h4 className="text-lg font-extrabold text-[var(--text-main)] mb-2">
+                                {activeBankData?.premiumPassword ? `Hay ${pendingHiddenCount} apuestas en curso bloqueadas` : `Hay ${pendingHiddenCount} apuestas pendientes (Ocultas)`}
+                            </h4>
+                            {activeBankData?.premiumPassword ? (
+                                <>
+                                    <p className="text-[var(--text-muted)] text-sm mb-5">El autor ha protegido estas jugadas con contraseña. Introdúcela para poder verlas.</p>
+                                    <div className="flex flex-col sm:flex-row gap-3 max-w-sm mx-auto">
+                                        <input type="password" value={visitorPasswordInput} onChange={e=>setVisitorPasswordInput(e.target.value)} className="flex-1 bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--text-main)] outline-none focus:border-[var(--accent)] shadow-inner transition-colors" placeholder="Contraseña..." />
+                                        <button onClick={() => { if(visitorPasswordInput === activeBankData.premiumPassword) { setUnlockedBank(true); alert('✅ Acceso Concedido'); } else alert('Contraseña incorrecta'); }} className="bg-[var(--accent)] text-[var(--accent-fg)] px-6 py-3 rounded-xl font-bold hover:bg-[var(--accent-hover)] transition-all shadow-md">Desbloquear</button>
+                                    </div>
+                                </>
+                            ) : (
+                                <p className="text-[var(--text-muted)] text-sm">El autor mantiene sus jugadas activas en privado hasta que se resuelven.</p>
+                            )}
+                        </div>
+                    )}
+
+                    {activeBetsData.length===0?<div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-12 text-center text-[var(--text-muted)] text-sm shadow-sm transition-colors">El historial está vacío. {viewMode === 'personal' ? 'Escanea un boleto o añade una apuesta para empezar a ver datos.' : ''}</div>:
+                    <div className="space-y-5">
                         {betsByMonth.map(g=>(
-                        <div key={g.id} className="border border-slate-800/50 rounded-xl overflow-hidden bg-[#0F1629]">
-                            <div onClick={()=>toggleMonth(g.id)} className="flex items-center justify-between p-4 bg-[#151b2e] cursor-pointer hover:bg-[#1e2538] transition-colors"><div className="flex items-center gap-3">{expandedMonths[g.id]?<ChevronUp size={18} className="text-slate-400"/>:<ChevronDown size={18} className="text-slate-400"/>}<span className="font-bold text-white text-sm md:text-base">{g.label}</span></div><div className={`px-3 py-1 rounded text-sm font-bold ${g.profit>=0?'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20':'bg-red-500/10 text-red-400 border border-red-500/20'}`}>{g.profit>0?'+':''}{formatCurrency(g.profit, activeBankData?.currency)}</div></div>
+                        <div key={g.id} className="border border-[var(--border)] rounded-2xl overflow-hidden bg-[var(--bg-card)] shadow-sm transition-colors">
+                            <div onClick={()=>toggleMonth(g.id)} className="flex items-center justify-between p-5 bg-[var(--bg-hover)] cursor-pointer hover:bg-[var(--bg-overlay)] transition-all border-b border-[var(--border)]"><div className="flex items-center gap-3">{expandedMonths[g.id]?<ChevronUp size={20} className="text-[var(--accent)]"/>:<ChevronDown size={20} className="text-[var(--text-muted)]"/>}<span className="font-bold text-[var(--text-main)] text-base tracking-wide drop-shadow-sm">{g.label}</span></div><div className={`px-4 py-1.5 rounded-lg text-sm font-bold ${g.profit>=0?'bg-[var(--accent-10)] text-[var(--accent)] border border-[var(--accent-20)]':'bg-[var(--red-10)] text-[var(--red)] border border-[var(--red-20)]'}`}>{g.profit>0?'+':''}{formatCurrency(g.profit, activeBankData?.currency)}</div></div>
                             {expandedMonths[g.id]&&(
-                                <div className="overflow-x-auto border-t border-slate-800/50">
+                                <div className="overflow-x-auto">
                                     <table className="w-full text-left text-sm whitespace-nowrap">
-                                        <thead className="bg-[#0B1120] text-slate-500 text-xs uppercase tracking-wider"><tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Evento</th><th className="px-4 py-3 text-center">Stake</th><th className="px-4 py-3 text-center">Cuota</th><th className="px-4 py-3 text-center">P/L</th><th className="px-4 py-3 text-center">Estado</th>{viewMode === 'personal' && <th className="px-4 py-3 text-center"></th>}</tr></thead>
-                                        <tbody className="divide-y divide-slate-800/50">
+                                        <thead className="bg-[var(--bg-base)]/50 text-[var(--text-muted)] text-xs uppercase tracking-widest font-semibold border-b border-[var(--border)]"><tr><th className="px-5 py-4">Fecha</th><th className="px-5 py-4">Evento</th><th className="px-5 py-4 text-center">Stake</th><th className="px-5 py-4 text-center">Cuota</th><th className="px-5 py-4 text-center">P/L</th><th className="px-5 py-4 text-center">Estado</th>{viewMode === 'personal' && <th className="px-5 py-4 text-center">Acciones</th>}</tr></thead>
+                                        <tbody className="divide-y divide-[var(--border)]">
                                             {g.bets.map(b=>{
                                                 const amt=b.amount?parseFloat(b.amount):parseFloat(b.stake)*10;const pl=b.status==='won'?(amt*b.odds)-amt:b.status==='lost'?-amt:0;const isExp=expandedBetId===b.id;
                                                 return(
                                                     <React.Fragment key={b.id}>
-                                                        <tr className={`hover:bg-slate-800/30 cursor-pointer transition-colors ${isExp?'bg-slate-800/40':''}`} onClick={()=>setExpandedBetId(isExp?null:b.id)}><td className="px-4 py-3 text-slate-400 text-xs">{formatDate(b.date)}</td><td className="px-4 py-3"><div className="font-medium text-white max-w-[150px] md:max-w-xs truncate">{b.title}</div><div className="text-xs text-slate-500 max-w-[150px] md:max-w-xs truncate">{typeof b.selection==='string'?b.selection:'Múltiple'}</div></td><td className="px-4 py-3 text-center text-slate-300">{b.stake}%</td><td className="px-4 py-3 text-center text-yellow-500 font-bold">@{b.odds.toFixed(2)}</td><td className={`px-4 py-3 text-center font-bold ${pl>0?'text-emerald-400':pl<0?'text-red-400':'text-slate-500'}`}>{pl>0?'+':''}{formatCurrency(pl,activeBankData?.currency)}</td><td className="px-4 py-3 text-center"><div onClick={(e)=>{if(viewMode==='personal'){e.stopPropagation();setStatusModalData({id:b.id,currentStatus:b.status});}}} className={viewMode==='personal'?'cursor-pointer':''}><StatusBadge status={b.status}/></div></td>
-                                                        {viewMode === 'personal' && <td className="px-4 py-3 text-center"><div className="flex items-center justify-center gap-2"><button onClick={(e)=>{e.stopPropagation();handleEditClick(b);}} className="text-blue-400 hover:text-blue-300 p-1 rounded hover:bg-blue-500/10"><Edit2 size={14}/></button><button onClick={(e)=>{e.stopPropagation();handleDeleteBet(b.id);}} className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-500/10"><Trash2 size={14}/></button></div></td>}
+                                                        <tr className={`hover:bg-[var(--bg-overlay)] cursor-pointer transition-colors ${isExp?'bg-[var(--bg-overlay-hover)]':''}`} onClick={()=>setExpandedBetId(isExp?null:b.id)}><td className="px-5 py-4 text-[var(--text-muted)] text-xs font-medium">{formatDate(b.date)}</td><td className="px-5 py-4"><div className="font-bold text-[var(--text-main)] max-w-[150px] md:max-w-xs truncate">{b.title}</div><div className="text-xs text-[var(--text-muted)] max-w-[150px] md:max-w-xs truncate mt-0.5">{typeof b.selection==='string'?b.selection:'Múltiple'}</div></td><td className="px-5 py-4 text-center text-[var(--text-muted)] font-medium">{b.stake}%</td><td className="px-5 py-4 text-center text-[var(--accent)] font-bold">@{b.odds.toFixed(2)}</td><td className={`px-5 py-4 text-center font-bold ${pl>0?'text-[var(--accent)]':pl<0?'text-[var(--red)]':'text-[var(--text-muted)]'}`}>{pl>0?'+':''}{formatCurrency(pl,activeBankData?.currency)}</td><td className="px-5 py-4 text-center"><div onClick={(e)=>{if(viewMode==='personal'){e.stopPropagation();setStatusModalData({id:b.id,currentStatus:b.status});}}} className={viewMode==='personal'?'cursor-pointer':''}><StatusBadge status={b.status}/></div></td>
+                                                        {viewMode === 'personal' && <td className="px-5 py-4 text-center"><div className="flex items-center justify-center gap-2"><button onClick={(e)=>{e.stopPropagation();handleEditClick(b);}} className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-2 rounded-lg bg-[var(--bg-overlay)] hover:bg-[var(--bg-overlay-hover)] transition-colors border border-transparent hover:border-[var(--border-strong)]"><Edit2 size={14}/></button><button onClick={(e)=>{e.stopPropagation();handleDeleteBet(b.id);}} className="text-[var(--text-muted)] hover:text-[var(--red)] p-2 rounded-lg bg-[var(--bg-overlay)] hover:bg-[var(--red-10)] transition-colors border border-transparent hover:border-[var(--red-20)]"><Trash2 size={14}/></button></div></td>}
                                                         </tr>
-                                                        {isExp&&(<tr className="bg-[#0B1120]/50"><td colSpan={viewMode==='personal'?7:6} className="p-4 border-b border-slate-800/50"><div className="space-y-4"><div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs text-slate-400"><div className="p-3 bg-slate-800/30 rounded border border-slate-700/50"><span className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Casa</span><span className="text-white font-medium">{b.bookmaker}</span></div><div className="p-3 bg-slate-800/30 rounded border border-slate-700/50"><span className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Hora</span><span className="text-white font-medium">{b.time}</span></div>{b.commission&&<div className="p-3 bg-slate-800/30 rounded border border-slate-700/50"><span className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Comisión</span><span className="text-white font-medium">{b.commission}%</span></div>}</div>{b.selections&&b.selections.map((s,i)=>(<div key={i} className="bg-slate-800/30 p-3 rounded border border-slate-700/50 flex justify-between items-center"><div><div className="text-white text-sm font-bold">{s.title}</div><div className="text-slate-400 text-xs">{s.selection}</div><div className="text-[10px] text-slate-500">{s.competition} • {s.category}</div></div><div className="text-right"><div className="text-yellow-500 font-bold">@{parseFloat(s.odds).toFixed(2)}</div><div className="text-slate-500 text-xs">{s.bookmaker}</div></div></div>))}{b.analysis&&(<div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50"><h4 className="text-emerald-400 font-bold mb-1 flex items-center gap-2 text-xs"><FileText size={12}/> Análisis del Pick</h4><p className="text-slate-300 text-xs leading-relaxed whitespace-pre-wrap">{b.analysis}</p></div>)}</div></td></tr>)}
+                                                        {isExp&&(<tr className="bg-[var(--bg-input)]/50"><td colSpan={viewMode==='personal'?7:6} className="p-5 border-b border-[var(--border)]"><div className="space-y-4"><div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs"><div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm"><span className="block text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1 font-bold">Casa</span><span className="text-[var(--text-main)] font-bold">{b.bookmaker}</span></div><div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm"><span className="block text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1 font-bold">Hora</span><span className="text-[var(--text-main)] font-bold">{b.time}</span></div>{b.commission&&<div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm"><span className="block text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1 font-bold">Comisión</span><span className="text-[var(--text-main)] font-bold">{b.commission}%</span></div>}</div>{b.selections&&b.selections.map((s,i)=>(<div key={i} className="bg-[var(--bg-card)] p-4 rounded-xl border border-[var(--border)] shadow-sm flex justify-between items-center hover:bg-[var(--bg-hover)] transition-colors"><div><div className="text-[var(--text-main)] text-sm font-bold tracking-wide">{s.title}</div><div className="text-[var(--accent)] text-xs font-medium mt-1">{s.selection}</div><div className="text-[10px] text-[var(--text-muted)] mt-1 uppercase tracking-wider">{s.competition} • {s.category}</div></div><div className="text-right"><div className="text-[var(--accent)] font-extrabold text-lg">@{parseFloat(s.odds).toFixed(2)}</div><div className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider font-bold mt-1">{s.bookmaker}</div></div></div>))}{b.analysis&&(<div className="bg-[var(--accent-5)] p-4 rounded-xl border border-[var(--accent-20)]"><h4 className="text-[var(--accent)] font-bold mb-2 flex items-center gap-2 text-xs uppercase tracking-wider"><FileText size={14}/> Análisis</h4><p className="text-[var(--text-muted)] text-sm leading-relaxed whitespace-pre-wrap">{b.analysis}</p></div>)}</div></td></tr>)}
                                                     </React.Fragment>
                                                 );
                                             })}
@@ -698,31 +933,31 @@ export default function App() {
 
                 {activeTab === 'settings' && viewMode === 'personal' && (
                     <div className="max-w-2xl mx-auto space-y-6 pb-20 md:pb-0">
-                        <div className="bg-[#0F1629] border border-slate-800/50 rounded-2xl p-6 shadow-xl">
-                            <div className="flex justify-between items-center mb-8 border-b border-slate-800/50 pb-4"><div><h3 className="text-xl font-bold text-white">Configuración de Banca</h3><p className="text-slate-400 text-sm mt-1">hasta 5 bancas y 5.000 apuestas por banca</p></div>{banks.length < LIMITS.MAX_BANKS && (<button onClick={openAddBankModal} className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors shadow-lg shadow-emerald-500/20"><Plus size={16} /> Nueva Banca</button>)}</div>
-                            <div className="space-y-4">{banks.map((bank) => (<div key={bank.id} className={`relative p-5 rounded-xl border transition-all duration-300 ${bank.id === currentBankId ? 'bg-gradient-to-br from-emerald-900/10 to-emerald-900/5 border-emerald-500/40 shadow-lg shadow-emerald-500/5' : 'bg-[#151b2e] border-slate-700 hover:border-slate-600'}`}>{bank.id === currentBankId && (<div className="absolute -top-2.5 -right-2.5 bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm border border-emerald-400">ACTIVA</div>)}<div className="flex flex-col sm:flex-row justify-between gap-6"><div className="flex-1 space-y-4"><div className="space-y-1"><label className="text-xs text-slate-500 uppercase font-bold tracking-wider">Nombre</label><input type="text" defaultValue={bank.name} onBlur={(e) => { if (e.target.value !== bank.name) handleUpdateBank(bank.id, 'name', e.target.value); }} className="w-full bg-transparent border-b border-slate-600 focus:border-emerald-500 text-lg font-bold text-white outline-none py-1 transition-colors placeholder-slate-600" /></div><div className="flex gap-3"><div className="flex-1 space-y-1"><label className="text-xs text-slate-500 uppercase font-bold tracking-wider">Capital <Lock size={12} className="text-slate-500"/></label><input type="number" value={bank.initialCapital} disabled className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-3 py-2 text-slate-400 font-bold outline-none transition-colors text-sm cursor-not-allowed opacity-70" /></div><div className="w-24 space-y-1"><label className="text-xs text-slate-500 uppercase font-bold tracking-wider">Divisa</label><select value={bank.currency || 'EUR'} onChange={(e) => { handleUpdateBank(bank.id, 'currency', e.target.value); }} className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-2 py-2 text-white text-sm outline-none"><option value="EUR">EUR (€)</option><option value="USD">USD ($)</option><option value="GBP">GBP (£)</option><option value="MXN">MXN ($)</option></select></div></div></div><div className="flex flex-row sm:flex-col justify-between items-end gap-3 border-t sm:border-t-0 sm:border-l border-slate-700/50 pt-4 sm:pt-0 sm:pl-6 min-w-[140px]"><button onClick={() => setCurrentBankId(bank.id)} disabled={bank.id === currentBankId} className={`w-full px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${bank.id === currentBankId ? 'bg-emerald-500/20 text-emerald-400 cursor-default ring-1 ring-emerald-500/30' : 'bg-slate-700 text-slate-300 hover:bg-emerald-600 hover:text-white'}`}>{bank.id === currentBankId ? 'Activa' : 'Seleccionar'}</button><button onClick={() => handleDeleteBank(bank.id)} className="w-full px-3 py-2 text-xs font-medium text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors flex items-center justify-center gap-2 group"><Trash2 size={14} className="group-hover:scale-110 transition-transform"/> Eliminar</button></div></div></div>))}</div>
+                        <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-8 shadow-sm transition-colors">
+                            <div className="flex justify-between items-center mb-8 border-b border-[var(--border)] pb-5"><div><h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">Gestión de Bancas</h3><p className="text-[var(--text-muted)] text-sm mt-1">Sube de nivel controlando hasta 5 bancas independientes.</p></div>{banks.length < LIMITS.MAX_BANKS && (<button onClick={openAddBankModal} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold transition-all shadow-[var(--shadow-glow-md)]"><Plus size={16} /> Nueva Banca</button>)}</div>
+                            <div className="space-y-4">{banks.map((bank) => (<div key={bank.id} className={`relative p-6 rounded-2xl border transition-all duration-300 ${bank.id === currentBankId ? 'bg-[var(--bg-hover)] border-[var(--accent-40)] shadow-[var(--shadow-glow-sm)]' : 'bg-[var(--bg-overlay)] border-[var(--border)] hover:border-[var(--border-strong)]'}`}>{bank.id === currentBankId && (<div className="absolute -top-3 -right-3 bg-[var(--accent)] text-[var(--accent-fg)] text-[10px] font-extrabold px-3 py-1 rounded-full shadow-[var(--shadow-glow-sm)] border border-[var(--accent)] uppercase tracking-widest">Activa</div>)}<div className="flex flex-col sm:flex-row justify-between gap-6"><div className="flex-1 space-y-5"><div className="space-y-1"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Nombre</label><input type="text" defaultValue={bank.name} onBlur={(e) => { if (e.target.value !== bank.name) handleUpdateBank(bank.id, 'name', e.target.value); }} className="w-full bg-transparent border-b border-[var(--border-strong)] focus:border-[var(--accent)] text-xl font-bold text-[var(--text-main)] outline-none py-1.5 transition-colors placeholder-[var(--text-muted)]" /></div><div className="flex flex-wrap gap-4"><div className="flex-1 min-w-[100px] space-y-1"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1 flex items-center gap-1">Capital <Lock size={10}/></label><input type="number" value={bank.initialCapital} disabled className="w-full bg-[var(--bg-base)] border border-[var(--border)] rounded-xl px-4 py-2.5 text-[var(--text-muted)] font-bold outline-none transition-colors text-sm cursor-not-allowed" /></div><div className="w-24 space-y-1"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Divisa</label><select value={bank.currency || 'EUR'} onChange={(e) => { handleUpdateBank(bank.id, 'currency', e.target.value); }} className="w-full bg-[var(--bg-base)] border border-[var(--border)] rounded-xl px-2 py-2.5 text-[var(--text-main)] text-sm outline-none appearance-none"><option value="EUR">EUR (€)</option><option value="USD">USD ($)</option><option value="GBP">GBP (£)</option><option value="MXN">MXN ($)</option></select></div><div className="flex-1 min-w-[130px] space-y-1"><label className="text-xs text-[var(--accent)] uppercase font-bold tracking-wider ml-1 flex items-center gap-1 drop-shadow-sm"><Lock size={12}/> Privacidad</label><input type="text" defaultValue={bank.premiumPassword || ''} onBlur={(e) => { handleUpdateBank(bank.id, 'premiumPassword', e.target.value); }} placeholder="Clave para ver pendientes..." className="w-full bg-[var(--bg-base)] border border-[var(--accent-30)] focus:border-[var(--accent)] rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none transition-colors shadow-inner" /></div></div></div><div className="flex flex-row sm:flex-col justify-between items-end gap-3 border-t sm:border-t-0 sm:border-l border-[var(--border)] pt-5 sm:pt-0 sm:pl-6 min-w-[140px]"><button onClick={() => setCurrentBankId(bank.id)} disabled={bank.id === currentBankId} className={`w-full px-4 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${bank.id === currentBankId ? 'bg-[var(--accent-10)] text-[var(--accent)] cursor-default border border-[var(--accent-30)]' : 'bg-[var(--bg-overlay)] border border-[var(--border)] text-[var(--text-main)] hover:bg-[var(--accent)] hover:text-[var(--accent-fg)] hover:border-transparent'}`}>{bank.id === currentBankId ? 'Operando' : 'Seleccionar'}</button><button onClick={() => handleDeleteBank(bank.id)} className="w-full px-4 py-3 text-xs font-bold text-[var(--text-muted)] hover:text-[var(--red)] hover:bg-[var(--red-10)] rounded-xl transition-all flex items-center justify-center gap-2 border border-transparent"><Trash2 size={16}/> Eliminar</button></div></div></div>))}</div>
                         </div>
-                        <div className="bg-[#0F1629] border border-slate-800/50 rounded-2xl p-6 shadow-xl">
-                            <div className="mb-4"><h3 className="text-lg font-bold text-white flex items-center gap-2"><FileText size={20} className="text-emerald-500" /> Datos y Respaldo</h3><p className="text-slate-400 text-xs mt-1">Exporta tu historial o importa desde Bet-Analytix (CSV)</p></div>
-                            <div className="flex gap-4"><button onClick={handleExportCSV} className="flex-1 bg-[#1A2035] hover:bg-[#232b45] border border-slate-700 hover:border-emerald-500/50 text-white p-4 rounded-xl transition-all group flex flex-col items-center gap-2"><div className="p-3 bg-[#0B1120] rounded-full group-hover:bg-emerald-500/20 transition-colors"><Download size={24} className="text-slate-400 group-hover:text-emerald-400" /></div><span className="text-sm font-medium">Exportar CSV</span></button><div className="flex-1 relative"><input type="file" accept=".csv" ref={fileInputRef} onChange={handleImportCSV} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" /><div className="bg-[#1A2035] hover:bg-[#232b45] border border-slate-700 hover:border-blue-500/50 text-white p-4 rounded-xl transition-all group flex flex-col items-center gap-2 h-full"><div className="p-3 bg-[#0B1120] rounded-full group-hover:bg-blue-500/20 transition-colors"><Upload size={24} className="text-slate-400 group-hover:text-blue-400" /></div><span className="text-sm font-medium">Importar CSV</span></div></div></div>
+                        <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-8 shadow-sm transition-colors">
+                            <div className="mb-6"><h3 className="text-xl font-bold text-[var(--text-main)] flex items-center gap-2"><Database size={22} className="text-[var(--accent)]" /> Respaldo y Migración</h3><p className="text-[var(--text-muted)] text-sm mt-1">Exporta tus joyas o importa tu viejo Excel/Bet-Analytix.</p></div>
+                            <div className="flex gap-4"><button onClick={handleExportCSV} className="flex-1 bg-[var(--bg-base)] hover:bg-[var(--bg-hover)] border border-[var(--border)] hover:border-[var(--accent-30)] text-[var(--text-main)] p-6 rounded-2xl transition-all group flex flex-col items-center gap-3 shadow-inner"><div className="p-4 bg-[var(--bg-overlay)] rounded-2xl group-hover:bg-[var(--accent-10)] transition-colors"><Download size={28} className="text-[var(--text-muted)] group-hover:text-[var(--accent)]" /></div><span className="text-sm font-bold tracking-wide">Descargar CSV</span></button><div className="flex-1 relative"><input type="file" accept=".csv" ref={fileInputRef} onChange={handleImportCSV} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" /><div className="bg-[var(--bg-base)] hover:bg-[var(--bg-hover)] border border-[var(--border)] hover:border-[var(--accent-30)] text-[var(--text-main)] p-6 rounded-2xl transition-all group flex flex-col items-center gap-3 h-full shadow-inner"><div className="p-4 bg-[var(--bg-overlay)] rounded-2xl group-hover:bg-[var(--accent-10)] transition-colors"><Upload size={28} className="text-[var(--text-muted)] group-hover:text-[var(--accent)]" /></div><span className="text-sm font-bold tracking-wide">Importar Datos</span></div></div></div>
                         </div>
                     </div>
                 )}
 
                 {activeTab === 'customization' && viewMode === 'personal' && (
                     <div className="max-w-2xl mx-auto space-y-6 pb-20 md:pb-0">
-                        <div className="bg-[#0F1629] border border-slate-800/50 rounded-2xl p-6 shadow-xl">
-                            <div className="mb-6"><h3 className="text-xl font-bold text-white flex items-center gap-2"><Tags size={20} className="text-emerald-500" /> Personalización</h3><p className="text-slate-400 text-sm mt-1">Añade tus propios deportes y categorías.</p></div>
-                            <div className="space-y-6">
-                                <div className="bg-[#151b2e] p-4 rounded-xl border border-slate-700/50">
-                                    <h4 className="text-sm font-bold text-slate-300 mb-3 uppercase tracking-wider">Deportes</h4>
-                                    <div className="flex gap-2 mb-3"><input type="text" value={newCustomSport} onChange={e => setNewCustomSport(e.target.value)} placeholder="Ej: Ping Pong" className="flex-1 bg-[#0B1120] border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-emerald-500"/><button onClick={() => handleAddOption('sports', newCustomSport)} className="bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded-lg"><Plus size={18}/></button></div>
-                                    <div className="flex flex-wrap gap-2">{(customOptions.sports || []).map(sport => (<span key={sport} className="px-3 py-1 bg-slate-700/50 text-slate-300 rounded-full text-xs flex items-center gap-2 border border-slate-600">{sport} <button onClick={() => handleDeleteOption('sports', sport)} className="hover:text-red-400"><X size={12}/></button></span>))}{(!customOptions.sports || customOptions.sports.length === 0) && <span className="text-xs text-slate-500 italic">No hay deportes personalizados.</span>}</div>
+                        <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-8 shadow-sm transition-colors">
+                            <div className="mb-8"><h3 className="text-2xl font-bold text-[var(--text-main)] flex items-center gap-2 tracking-tight"><Tags size={24} className="text-[var(--accent)]" /> Etiquetas Personalizadas</h3><p className="text-[var(--text-muted)] text-sm mt-2">Añade deportes de nicho o categorías para medir tu rentabilidad al milímetro.</p></div>
+                            <div className="space-y-8">
+                                <div className="bg-[var(--bg-base)] p-6 rounded-2xl border border-[var(--border)] shadow-inner transition-colors">
+                                    <h4 className="text-sm font-extrabold text-[var(--text-main)] mb-4 uppercase tracking-widest">Mis Deportes</h4>
+                                    <div className="flex gap-3 mb-5"><input type="text" value={newCustomSport} onChange={e => setNewCustomSport(e.target.value)} placeholder="Ej: Ping Pong, Dardos..." className="flex-1 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)]"/><button onClick={() => handleAddOption('sports', newCustomSport)} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] p-3 rounded-xl font-bold shadow-[var(--shadow-glow-sm)] transition-all"><Plus size={20}/></button></div>
+                                    <div className="flex flex-wrap gap-2">{(customOptions.sports || []).map(sport => (<span key={sport} className="px-4 py-1.5 bg-[var(--bg-card)] text-[var(--text-main)] rounded-full text-xs font-bold flex items-center gap-2 border border-[var(--border)]">{sport} <button onClick={() => handleDeleteOption('sports', sport)} className="text-[var(--text-muted)] hover:text-[var(--red)] transition-colors"><X size={14}/></button></span>))}{(!customOptions.sports || customOptions.sports.length === 0) && <span className="text-sm text-[var(--text-muted)] italic bg-[var(--bg-overlay)] px-4 py-2 rounded-lg border border-dashed border-[var(--border-strong)]">No hay deportes extra definidos.</span>}</div>
                                 </div>
-                                <div className="bg-[#151b2e] p-4 rounded-xl border border-slate-700/50">
-                                    <h4 className="text-sm font-bold text-slate-300 mb-3 uppercase tracking-wider">Categorías</h4>
-                                    <div className="flex gap-2 mb-3"><input type="text" value={newCustomCategory} onChange={e => setNewCustomCategory(e.target.value)} placeholder="Ej: NBA Playoffs" className="flex-1 bg-[#0B1120] border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-emerald-500"/><button onClick={() => handleAddOption('categories', newCustomCategory)} className="bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded-lg"><Plus size={18}/></button></div>
-                                    <div className="flex flex-wrap gap-2">{(customOptions.categories || []).map(cat => (<span key={cat} className="px-3 py-1 bg-slate-700/50 text-slate-300 rounded-full text-xs flex items-center gap-2 border border-slate-600">{cat} <button onClick={() => handleDeleteOption('categories', cat)} className="hover:text-red-400"><X size={12}/></button></span>))}{(!customOptions.categories || customOptions.categories.length === 0) && <span className="text-xs text-slate-500 italic">No hay categorías personalizadas.</span>}</div>
+                                <div className="bg-[var(--bg-base)] p-6 rounded-2xl border border-[var(--border)] shadow-inner transition-colors">
+                                    <h4 className="text-sm font-extrabold text-[var(--text-main)] mb-4 uppercase tracking-widest">Categorías / Estrategias</h4>
+                                    <div className="flex gap-3 mb-5"><input type="text" value={newCustomCategory} onChange={e => setNewCustomCategory(e.target.value)} placeholder="Ej: Reto Escalera, Stake 10..." className="flex-1 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)]"/><button onClick={() => handleAddOption('categories', newCustomCategory)} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] p-3 rounded-xl font-bold shadow-[var(--shadow-glow-sm)] transition-all"><Plus size={20}/></button></div>
+                                    <div className="flex flex-wrap gap-2">{(customOptions.categories || []).map(cat => (<span key={cat} className="px-4 py-1.5 bg-[var(--bg-card)] text-[var(--text-main)] rounded-full text-xs font-bold flex items-center gap-2 border border-[var(--border)]">{cat} <button onClick={() => handleDeleteOption('categories', cat)} className="text-[var(--text-muted)] hover:text-[var(--red)] transition-colors"><X size={14}/></button></span>))}{(!customOptions.categories || customOptions.categories.length === 0) && <span className="text-sm text-[var(--text-muted)] italic bg-[var(--bg-overlay)] px-4 py-2 rounded-lg border border-dashed border-[var(--border-strong)]">No hay estrategias personalizadas.</span>}</div>
                                 </div>
                             </div>
                         </div>
@@ -732,82 +967,110 @@ export default function App() {
             </main>
 
             {showBetForm && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-                <div className="bg-[#0B1120] w-full max-w-lg rounded-2xl shadow-2xl border border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
-                    <div className="px-5 py-4 border-b border-slate-800 flex justify-between items-center bg-[#0F1629]"><h3 className="font-bold text-white text-lg">{editingBetId ? 'Editar Apuesta' : 'Añadir Apuesta'}</h3><button onClick={() => setShowBetForm(false)} className="text-slate-400 hover:text-white"><X size={20}/></button></div>
-                    <div className="p-5 overflow-y-auto space-y-4 custom-scrollbar">
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 md:p-6 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+                <div className="bg-[var(--bg-base-95)] backdrop-blur-3xl w-full max-w-lg rounded-3xl shadow-[var(--shadow-glow-lg)] border border-[var(--accent-30)] overflow-hidden flex flex-col max-h-[95vh] transition-colors">
+                    <div className="px-6 py-5 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-card)]"><h3 className="font-extrabold text-[var(--text-main)] text-xl tracking-tight">{editingBetId ? 'Editar Apuesta' : 'Nueva Operación'}</h3><button onClick={() => setShowBetForm(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-overlay)] p-2 rounded-full transition-colors"><X size={20}/></button></div>
+                    <div className="p-6 overflow-y-auto space-y-5 custom-scrollbar bg-transparent">
                         
-                        {/* --- BOTÓN DE IA AQUÍ --- */}
-                        <div className="mb-2 bg-emerald-900/20 border border-emerald-500/30 p-4 rounded-xl text-center relative overflow-hidden">
-                            <div className="absolute top-0 right-0 p-2 opacity-10 pointer-events-none"><Crown size={40}/></div>
-                            <p className="text-xs text-emerald-300 mb-3 font-medium flex items-center justify-center gap-2">
-                                <TrendingUp size={14}/> Auto-rellenar con Inteligencia Artificial
+                        {/* --- BOTÓN DE IA PREMIUM --- */}
+                        <div className="bg-[var(--bg-card)] border border-[var(--border)] p-5 rounded-2xl text-center relative overflow-hidden shadow-inner">
+                            <div className="absolute top-0 right-0 p-2 opacity-[0.03] dark:opacity-5 pointer-events-none"><Crown size={60}/></div>
+                            <p className="text-xs text-[var(--accent)] mb-3 font-bold uppercase tracking-widest flex items-center justify-center gap-2">
+                                <Crown size={14}/> Análisis IA Premium
                             </p>
-                            <label className={`cursor-pointer ${isScanning ? 'bg-slate-600 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500'} text-white px-4 py-2 rounded-lg font-bold shadow-lg flex items-center justify-center gap-2 mx-auto w-fit transition-all`}>
-                                <Upload size={16}/> {isScanning ? 'Analizando captura...' : 'Escanear Boleto'}
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={escanearBoleto}
-                                    className="hidden"
-                                    disabled={isScanning}
-                                />
+                            <label className={`cursor-pointer ${isScanning ? 'bg-[var(--bg-hover)] border-[var(--accent-50)]' : 'bg-[var(--bg-hover)] hover:bg-[var(--bg-overlay-hover)] border-[var(--border)] hover:border-[var(--accent-50)]'} text-[var(--text-main)] border px-6 py-3 rounded-xl font-bold shadow-sm flex items-center justify-center gap-3 mx-auto w-fit transition-all`}>
+                                <Upload size={18}/> {isScanning ? 'Procesando visión artificial...' : 'Subir Captura del Boleto'}
+                                <input type="file" accept="image/*" onChange={escanearBoleto} className="hidden" disabled={isScanning} />
                             </label>
+                            
+                            {/* Burbuja de respuesta de la IA */}
+                            {aiMessage && (
+                                <div className="mt-4 p-4 bg-[var(--accent-10)] border border-[var(--accent-30)] rounded-2xl flex items-start gap-3 text-left animate-in fade-in slide-in-from-bottom-2">
+                                    <div className="bg-[var(--accent)] text-[var(--accent-fg)] p-1.5 rounded-full mt-0.5 shadow-sm shrink-0"><Crown size={14}/></div>
+                                    <p className="text-sm text-[var(--text-main)] leading-relaxed font-medium">{aiMessage}</p>
+                                </div>
+                            )}
                         </div>
                         {/* ------------------------ */}
 
-                        <div className="grid grid-cols-2 gap-3"><div className="bg-[#151b2e] border border-slate-700/50 rounded-lg p-2 flex items-center justify-between"><input type="date" className="bg-transparent text-white text-sm outline-none w-full" value={newBet.date} onChange={e => setNewBet({...newBet, date: e.target.value})} /> <Calendar size={14} className="text-slate-500" /></div><div className="bg-[#151b2e] border border-slate-700/50 rounded-lg p-2 flex items-center justify-between"><input type="time" className="bg-transparent text-white text-sm outline-none w-full" value={newBet.time} onChange={e => setNewBet({...newBet, time: e.target.value})} /> <Clock size={14} className="text-slate-500" /></div></div>
-                        <div className="space-y-1"><label className="text-xs text-slate-500 ml-1">Casa de apuestas</label>{isCustomBookmaker ? (<div className="flex gap-2"><input type="text" placeholder="Escribe el nombre..." className="w-full bg-[#151b2e] border border-slate-700/50 rounded-lg px-3 py-2.5 text-white text-sm outline-none focus:border-emerald-500" autoFocus value={newBet.bookmaker} onChange={(e) => setNewBet(prev => ({ ...prev, bookmaker: e.target.value }))} /><button onClick={() => { setIsCustomBookmaker(false); setNewBet(prev => ({ ...prev, bookmaker: 'Bet365' })); }} className="text-xs text-red-400 hover:text-white underline">Cancelar</button></div>) : (<select className="w-full bg-[#151b2e] border border-slate-700/50 rounded-lg px-3 py-2.5 text-white text-sm outline-none focus:border-emerald-500" value={newBet.bookmaker} onChange={handleBookieChange}>{COMMON_BOOKMAKERS.map(b => <option key={b}>{b}</option>)}<option value="Otra">Otra...</option></select>)}</div>
+                        <div className="grid grid-cols-2 gap-4"><div className="bg-[var(--bg-card)] border border-transparent rounded-xl p-2.5 flex items-center justify-between shadow-inner"><input type="date" className="bg-transparent text-[var(--text-main)] text-sm outline-none w-full font-medium" value={newBet.date} onChange={e => setNewBet({...newBet, date: e.target.value})} /> <Calendar size={16} className="text-[var(--text-muted)]" /></div><div className="bg-[var(--bg-card)] border border-transparent rounded-xl p-2.5 flex items-center justify-between shadow-inner"><input type="time" className="bg-transparent text-[var(--text-main)] text-sm outline-none w-full font-medium" value={newBet.time} onChange={e => setNewBet({...newBet, time: e.target.value})} /> <Clock size={16} className="text-[var(--text-muted)]" /></div></div>
+                        <div className="space-y-1.5"><label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Bookie</label>{isCustomBookmaker ? (<div className="flex gap-2"><input type="text" placeholder="Escribe el nombre..." className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" autoFocus value={newBet.bookmaker} onChange={(e) => setNewBet(prev => ({ ...prev, bookmaker: e.target.value }))} /><button onClick={() => { setIsCustomBookmaker(false); setNewBet(prev => ({ ...prev, bookmaker: 'Bet365' })); }} className="text-xs font-bold text-[var(--red)] hover:opacity-80 bg-[var(--red-10)] px-3 rounded-xl">Cancelar</button></div>) : (<select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner appearance-none" value={newBet.bookmaker} onChange={handleBookieChange}>{COMMON_BOOKMAKERS.map(b => <option key={b}>{b}</option>)}<option value="Otra">Otra...</option></select>)}</div>
                         
                         {newBet.selections.map((sel, index) => (
-                            <div key={sel.id} className="border border-slate-700/50 rounded-xl bg-[#151b2e]/50 overflow-hidden">
-                                <div className="flex items-center justify-between p-3 cursor-pointer bg-slate-800/30 hover:bg-slate-800/50" onClick={() => toggleSelection(sel.id)}><div className="flex items-center gap-2 text-xs text-emerald-400 font-medium"><ChevronDown size={14} className={`transform transition-transform ${sel.isOpen ? 'rotate-180' : ''}`} /> Selección {index + 1}</div>{newBet.selections.length > 1 && (<button onClick={(e) => { e.stopPropagation(); handleRemoveSelection(sel.id); }} className="text-slate-500 hover:text-red-400"><X size={14}/></button>)}</div>
+                            <div key={sel.id} className="border border-[var(--border)] rounded-2xl bg-[var(--bg-card)] overflow-hidden shadow-sm transition-colors">
+                                <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors border-b border-[var(--border)]" onClick={() => toggleSelection(sel.id)}><div className="flex items-center gap-2 text-sm text-[var(--accent)] font-bold tracking-wide"><ChevronDown size={16} className={`transform transition-transform ${sel.isOpen ? 'rotate-180' : ''}`} /> Selección {index + 1}</div>{newBet.selections.length > 1 && (<button onClick={(e) => { e.stopPropagation(); handleRemoveSelection(sel.id); }} className="text-[var(--text-muted)] hover:text-[var(--red)] bg-[var(--bg-overlay)] p-1.5 rounded-lg"><X size={14}/></button>)}</div>
                                 {sel.isOpen && (
-                                    <div className="p-4 space-y-3 border-t border-slate-700/50 animate-in slide-in-from-top-2">
-                                        <div className="grid grid-cols-3 gap-3"><div className="col-span-2 space-y-1"><label className="text-[10px] text-slate-500">Evento / Partido</label><input type="text" placeholder="Ej: Real Madrid - Barcelona" className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none" value={sel.title} onChange={e => handleUpdateSelection(sel.id, 'title', e.target.value)} /></div><div className="space-y-1"><label className="text-[10px] text-slate-500">Cuota</label><input type="number" step="0.01" className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none" value={sel.odds} onChange={e => handleUpdateSelection(sel.id, 'odds', e.target.value)} /></div></div>
-                                        <div className="space-y-1"><label className="text-[10px] text-slate-500">Mercado / Pronóstico</label><input type="text" placeholder="Ej: Gana Local, Más de 2.5 Goles..." className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none" value={sel.selection} onChange={e => handleUpdateSelection(sel.id, 'selection', e.target.value)} /></div>
-                                        <div className="grid grid-cols-2 gap-3"><div className="space-y-1"><label className="text-[10px] text-slate-500">Deporte</label><select className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none" value={sel.sport} onChange={e => handleUpdateSelection(sel.id, 'sport', e.target.value)}><option>Fútbol</option><option>Baloncesto</option><option>Tenis</option><option>Esports</option></select></div><div className="space-y-1"><label className="text-[10px] text-slate-500">Estado</label><select className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none" value={sel.status} onChange={e => handleUpdateSelection(sel.id, 'status', e.target.value)}><option value="pending">Pendiente</option><option value="won">Ganada</option><option value="lost">Perdida</option><option value="void">Nula</option></select></div></div>
-                                        <div className="grid grid-cols-2 gap-3"><div className="space-y-1"><label className="text-[10px] text-slate-500">Categoría</label><input type="text" placeholder="Ej: Premium, Reto..." className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none" value={sel.category} onChange={e => handleUpdateSelection(sel.id, 'category', e.target.value)} /></div><div className="space-y-1"><label className="text-[10px] text-slate-500">Competición</label><input type="text" placeholder="Seleccionar" className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none" value={sel.competition} onChange={e => handleUpdateSelection(sel.id, 'competition', e.target.value)} /></div></div>
-                                        <div className="flex justify-center pt-2"><button className="text-xs text-indigo-400 flex items-center gap-1 hover:text-indigo-300" onClick={(e) => { e.stopPropagation(); toggleSelection(sel.id); }}><ChevronUp size={12}/> Menos detalles</button></div>
+                                    <div className="p-5 space-y-4 animate-in slide-in-from-top-2 bg-[var(--bg-base)]">
+                                        <div className="grid grid-cols-3 gap-4"><div className="col-span-2 space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Evento</label><input type="text" placeholder="Ej: RM - FCB" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" value={sel.title} onChange={e => handleUpdateSelection(sel.id, 'title', e.target.value)} /></div><div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Cuota</label><input type="number" step="0.01" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--accent)] font-extrabold text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" value={sel.odds} onChange={e => handleUpdateSelection(sel.id, 'odds', e.target.value)} /></div></div>
+                                        <div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Pronóstico</label><input type="text" placeholder="Ej: Más de 2.5 Goles..." className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" value={sel.selection} onChange={e => handleUpdateSelection(sel.id, 'selection', e.target.value)} /></div>
+                                        <div className="grid grid-cols-2 gap-4"><div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Deporte</label><select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none shadow-inner appearance-none" value={sel.sport} onChange={e => handleUpdateSelection(sel.id, 'sport', e.target.value)}>{(customOptions.sports || []).map(s => <option key={s} value={s}>{s}</option>)}{(!customOptions.sports || customOptions.sports.length === 0) && <option value="">Sin deportes definidos</option>}</select></div><div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Estado</label><select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none shadow-inner appearance-none font-bold" value={sel.status} onChange={e => handleUpdateSelection(sel.id, 'status', e.target.value)}><option value="pending" className="text-[var(--yellow)]">Pendiente</option><option value="won" className="text-[var(--accent)]">Ganada</option><option value="lost" className="text-[var(--red)]">Perdida</option><option value="void">Nula</option></select></div></div>
+                                        <div className="flex justify-center pt-3 border-t border-[var(--border)]"><button className="text-xs font-bold text-[var(--text-muted)] flex items-center gap-1 hover:text-[var(--text-main)] transition-colors" onClick={(e) => { e.stopPropagation(); toggleSelection(sel.id); }}><ChevronUp size={14}/> Ocultar detalles</button></div>
                                     </div>
                                 )}
                             </div>
                         ))}
-                        <button onClick={handleAddSelection} className="w-full py-2 border border-dashed border-slate-600 rounded-lg text-slate-400 hover:text-white hover:border-emerald-500 hover:bg-slate-800/50 flex items-center justify-center gap-2 text-sm transition-all"><Plus size={16} /> Añadir una selección</button>
+                        <button onClick={handleAddSelection} className="w-full py-3 border border-dashed border-[var(--border-strong)] rounded-2xl text-[var(--text-muted)] font-bold hover:text-[var(--accent)] hover:border-[var(--accent-50)] hover:bg-[var(--accent-5)] flex items-center justify-center gap-2 text-sm transition-all shadow-sm"><Plus size={18} /> Convertir en Combinada</button>
                         
-                        {newBet.selections.length > 1 && (<div className="space-y-1 pt-2"><label className="text-xs text-slate-400 font-medium">Nombre de la Combinada</label><input type="text" placeholder="Ej: Combinada Fin de Semana" className="w-full bg-[#151b2e] border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-indigo-500 transition-colors" value={newBet.title} onChange={e => setNewBet(prev => ({ ...prev, title: e.target.value }))} /></div>)}
+                        {newBet.selections.length > 1 && (<div className="space-y-1.5 pt-2"><label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Nombre de la Combi</label><input type="text" placeholder="Ej: Combi Locura Fin de Semana" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] text-sm font-bold outline-none focus:border-[var(--accent-50)] shadow-inner" value={newBet.title} onChange={e => setNewBet(prev => ({ ...prev, title: e.target.value }))} /></div>)}
                         
-                        <div className="bg-[#151b2e] rounded-xl p-4 space-y-4">
-                            <div className="space-y-2"><label className="text-xs text-slate-400 font-medium flex justify-between">Importe {formErrors.amount && <span className="text-red-400 text-[10px] flex items-center gap-1"><AlertTriangle size={10}/> {formErrors.amount}</span>}</label><div className="flex gap-3"><div className={`flex-1 bg-[#0B1120] border ${formErrors.amount ? 'border-red-500/50' : 'border-slate-700'} rounded-lg p-2 relative group focus-within:border-emerald-500 transition-colors`}><span className="text-[10px] text-slate-500 block uppercase tracking-wide">Importe ({currencySymbol})</span><input type="number" className="bg-transparent text-white w-full outline-none font-bold text-lg" value={newBet.amount || ''} onChange={e => handleAmountChange(e.target.value, 'amount')} placeholder="0" /></div><div className="flex-1 bg-[#0B1120] border border-slate-700 rounded-lg p-2 relative group focus-within:border-emerald-500 transition-colors"><span className="text-[10px] text-slate-500 block uppercase tracking-wide">% Capital</span><input type="number" className="bg-transparent text-white w-full outline-none font-bold text-lg" value={newBet.stake || ''} onChange={e => handleAmountChange(e.target.value, 'stake')} placeholder="0" /></div></div><div className="grid grid-cols-4 gap-2 mt-2">{[10, 20, 50, 100].map(val => (<button key={val} onClick={() => handleAmountChange(val, 'amount')} className="bg-[#0B1120] hover:bg-slate-700 border border-slate-700 rounded py-1.5 text-xs text-slate-300 transition-colors font-medium">{val}{currencySymbol}</button>))}</div></div>
-                            <button onClick={() => setShowMoreOptions(!showMoreOptions)} className="w-full text-center text-xs text-indigo-400 font-medium hover:text-indigo-300 flex items-center justify-center gap-1 mt-2 transition-colors border-t border-slate-800/50 pt-2">{showMoreOptions ? <ChevronUp size={14}/> : <ChevronDown size={14}/>} {showMoreOptions ? 'Menos opciones' : 'Más opciones'}</button>
-                            {showMoreOptions && (<div className="grid grid-cols-2 gap-3 pt-2 animate-in fade-in slide-in-from-top-2"><div className="space-y-1"><label className="text-[10px] text-slate-500">Comisión %</label><input type="number" className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none" value={newBet.commission} onChange={e => setNewBet({...newBet, commission: e.target.value})} placeholder="0"/></div><div className="space-y-1"><label className="text-[10px] text-slate-500">Bono</label><input type="number" className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none" value={newBet.bonus} onChange={e => setNewBet({...newBet, bonus: e.target.value})} placeholder="0"/></div><div className="flex items-center gap-2 bg-[#0B1120] p-2 rounded border border-slate-700"><input type="checkbox" checked={newBet.isLive} onChange={e => setNewBet({...newBet, isLive: e.target.checked})} className="accent-emerald-500"/><label className="text-xs text-slate-400">En Vivo (Live)</label></div><div className="flex items-center gap-2 bg-[#0B1120] p-2 rounded border border-slate-700"><input type="checkbox" checked={newBet.isFreebet} onChange={e => setNewBet({...newBet, isFreebet: e.target.checked})} className="accent-pink-500"/><label className="text-xs text-slate-400">Apuesta Gratis</label></div><div className="flex items-center gap-2 bg-[#0B1120] p-2 rounded border border-slate-700"><input type="checkbox" checked={newBet.isEachWay} onChange={e => setNewBet({...newBet, isEachWay: e.target.checked})} className="accent-blue-500"/><label className="text-xs text-slate-400">Each-Way</label></div><div className="space-y-1"><label className="text-[10px] text-slate-500">Cierre</label><input type="number" className="w-full bg-[#0B1120] border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none" value={newBet.cashout} onChange={e => setNewBet({...newBet, cashout: e.target.value})} placeholder="0"/></div></div>)}
+                        <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-5 space-y-5 shadow-inner transition-colors">
+                            <div className="space-y-3"><label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1 flex justify-between">Inversión {formErrors.amount && <span className="text-[var(--red)] text-[10px] flex items-center gap-1"><AlertTriangle size={10}/> {formErrors.amount}</span>}</label><div className="flex gap-4"><div className={`flex-1 bg-[var(--bg-base)] border ${formErrors.amount ? 'border-[var(--red-50)]' : 'border-transparent'} rounded-xl p-3 relative group focus-within:border-[var(--accent-50)] transition-colors shadow-inner`}><span className="text-[10px] text-[var(--text-muted)] font-bold block uppercase tracking-widest mb-1">Efectivo ({currencySymbol})</span><input type="number" className="bg-transparent text-[var(--text-main)] w-full outline-none font-extrabold text-2xl" value={newBet.amount || ''} onChange={e => handleAmountChange(e.target.value, 'amount')} placeholder="0" /></div><div className="flex-1 bg-[var(--bg-base)] border border-transparent rounded-xl p-3 relative group focus-within:border-[var(--accent-50)] transition-colors shadow-inner"><span className="text-[10px] text-[var(--text-muted)] font-bold block uppercase tracking-widest mb-1">% Bank (Stake)</span><input type="number" className="bg-transparent text-[var(--text-main)] w-full outline-none font-extrabold text-2xl" value={newBet.stake || ''} onChange={e => handleAmountChange(e.target.value, 'stake')} placeholder="0" /></div></div><div className="grid grid-cols-4 gap-2 mt-3">{[10, 25, 50, 100].map(val => (<button key={val} onClick={() => handleAmountChange(val, 'amount')} className="bg-[var(--bg-overlay)] hover:bg-[var(--bg-overlay-hover)] border border-transparent rounded-lg py-2 text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors shadow-sm">{val}{currencySymbol}</button>))}</div></div>
+                            <button onClick={() => setShowMoreOptions(!showMoreOptions)} className="w-full text-center text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-main)] flex items-center justify-center gap-2 mt-2 transition-colors border-t border-[var(--border)] pt-4">{showMoreOptions ? <ChevronUp size={14}/> : <ChevronDown size={14}/>} {showMoreOptions ? 'Cerrar Avanzado' : 'Opciones Avanzadas'}</button>
+                            {showMoreOptions && (
+                                <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-2">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Comisión %</label><input type="number" className="w-full bg-[var(--bg-base)] border border-transparent rounded-xl px-3 py-2 text-[var(--text-main)] text-sm outline-none shadow-inner" value={newBet.commission} onChange={e => setNewBet({...newBet, commission: e.target.value})} placeholder="0"/></div>
+                                        <div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Bono</label><input type="number" className="w-full bg-[var(--bg-base)] border border-transparent rounded-xl px-3 py-2 text-[var(--text-main)] text-sm outline-none shadow-inner" value={newBet.bonus} onChange={e => setNewBet({...newBet, bonus: e.target.value})} placeholder="0"/></div>
+                                    </div>
+                                    <div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Estrategia / Categoría</label><select className="w-full bg-[var(--bg-base)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none shadow-inner appearance-none" value={newBet.selections[0]?.category || ''} onChange={e => handleUpdateSelection(newBet.selections[0]?.id, 'category', e.target.value)}><option value="">General (Sin categoría)</option>{(customOptions.categories || []).map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="flex items-center gap-3 bg-[var(--bg-base)] px-3 py-2.5 rounded-xl shadow-inner"><input type="checkbox" checked={newBet.isLive} onChange={e => setNewBet({...newBet, isLive: e.target.checked})} className="accent-[var(--accent)] w-4 h-4"/><label className="text-xs font-bold text-[var(--text-main)]">En Vivo (Live)</label></div>
+                                        <div className="flex items-center gap-3 bg-[var(--bg-base)] px-3 py-2.5 rounded-xl shadow-inner"><input type="checkbox" checked={newBet.isFreebet} onChange={e => setNewBet({...newBet, isFreebet: e.target.checked})} className="accent-pink-500 w-4 h-4"/><label className="text-xs font-bold text-[var(--text-main)]">Freebet</label></div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         
-                        {userRole === 'tipster' && (<div className="space-y-1 pt-2"><label className="text-xs text-slate-500 ml-1">Tipster</label><select className="w-full bg-[#151b2e] border border-slate-700/50 rounded-lg px-3 py-2.5 text-white text-sm outline-none" value={newBet.tipster} onChange={e => setNewBet({...newBet, tipster: e.target.value})}><option>Money Tips</option><option>Admin</option><option>Invitado</option></select></div>)}
-                        <div className="space-y-1 border-t border-slate-800/50 pt-3"><label className="text-xs text-slate-500 flex justify-between"><span>Análisis / Comentario</span><span className={`${newBet.analysis?.length > 1100 ? 'text-red-400' : 'text-slate-600'}`}>{newBet.analysis?.length || 0}/1200</span></label><textarea className="w-full bg-[#151b2e] border border-slate-700/50 rounded-lg p-3 text-white text-sm outline-none focus:border-emerald-500 min-h-[100px] resize-none" placeholder="Escribe aquí tu análisis..." maxLength={1200} value={newBet.analysis} onChange={e => setNewBet({...newBet, analysis: e.target.value})} /></div>
+                        <div className="space-y-1.5 border-t border-[var(--border)] pt-4"><label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1 flex justify-between"><span>Notas</span><span className={`${newBet.analysis?.length > 1100 ? 'text-[var(--red)]' : 'text-[var(--text-muted)]'}`}>{newBet.analysis?.length || 0}/1200</span></label><textarea className="w-full bg-[var(--bg-card)] border border-transparent rounded-2xl p-4 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] min-h-[100px] resize-none shadow-inner" placeholder="Escribe tu razonamiento aquí..." maxLength={1200} value={newBet.analysis} onChange={e => setNewBet({...newBet, analysis: e.target.value})} /></div>
                     </div>
-                    <div className="p-5 border-t border-slate-800 bg-[#0F1629]"><button onClick={handleSaveBet} className="w-full bg-[#6366f1] hover:bg-[#4f46e5] text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/20"><CheckCircle2 size={18} /> {editingBetId ? 'Actualizar apuesta' : 'Guardar apuesta'}</button></div>
+                    <div className="p-6 border-t border-[var(--border)] bg-[var(--bg-card)]"><button onClick={handleSaveBet} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-extrabold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-[var(--shadow-glow-md)] hover:shadow-[var(--shadow-glow-lg)] text-lg tracking-wide"><CheckCircle2 size={22} /> {editingBetId ? 'Actualizar Operación' : 'Registrar Operación'}</button></div>
                 </div>
             </div>
             )}
 
+            {statusModalData && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+                    <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.2)] border border-[var(--accent-20)] p-8 w-full max-w-sm transition-colors"><h3 className="text-[var(--text-main)] font-extrabold text-xl mb-6 text-center tracking-tight drop-shadow-sm">Estado de la Operación</h3><div className="grid grid-cols-2 gap-4"><button onClick={() => handleQuickStatusChange('won')} className="p-4 bg-[var(--accent-10)] hover:bg-[var(--accent-20)] text-[var(--accent)] rounded-2xl font-bold border border-[var(--accent-30)] transition-all flex flex-col items-center gap-2 shadow-inner"><CheckCircle2 size={28}/> Ganada</button><button onClick={() => handleQuickStatusChange('lost')} className="p-4 bg-[var(--red-10)] hover:bg-[var(--red-20)] text-[var(--red)] rounded-2xl font-bold border border-[var(--red-30)] transition-all flex flex-col items-center gap-2 shadow-inner"><XCircle size={28}/> Perdida</button><button onClick={() => handleQuickStatusChange('void')} className="p-4 bg-[var(--bg-overlay)] hover:bg-[var(--bg-overlay-hover)] text-[var(--text-muted)] rounded-2xl font-bold border border-[var(--border-strong)] transition-all flex flex-col items-center gap-2 shadow-inner"><AlertCircle size={28}/> Nula</button><button onClick={() => handleQuickStatusChange('pending')} className="p-4 bg-yellow-500/10 hover:bg-yellow-500/20 text-[var(--yellow)] rounded-2xl font-bold border border-yellow-500/30 transition-all flex flex-col items-center gap-2 shadow-inner"><Clock size={28}/> Pendiente</button></div><button onClick={() => setStatusModalData(null)} className="mt-6 w-full py-3 text-[var(--text-muted)] font-bold hover:text-[var(--text-main)] bg-[var(--bg-card)] rounded-xl transition-colors border border-[var(--border)] hover:border-[var(--border-strong)] shadow-sm">Cancelar</button></div>
+                </div>
+            )}
+
             {isAddingBank && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-[#0B1120] w-full max-w-sm rounded-2xl shadow-2xl border border-slate-800 overflow-hidden flex flex-col">
-                        <div className="px-5 py-4 border-b border-slate-800 flex justify-between items-center bg-[#0F1629]"><h3 className="font-bold text-white text-lg">Nueva Banca</h3><button onClick={() => setIsAddingBank(false)} className="text-slate-400 hover:text-white"><X size={20}/></button></div>
-                        <div className="p-6 space-y-4">
-                            <div className="space-y-1"><label className="text-xs text-slate-500 uppercase font-bold tracking-wider">Nombre</label><input type="text" placeholder="Ej: Bet365 Principal" className="w-full bg-[#151b2e] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-emerald-500 outline-none transition-colors" value={newBankData.name} onChange={e => setNewBankData({...newBankData, name: e.target.value})} autoFocus /></div>
-                            <div className="space-y-1"><label className="text-xs text-slate-500 uppercase font-bold tracking-wider flex items-center gap-2">Capital Inicial<div className="relative group"><HelpCircle size={12} className="text-yellow-500 cursor-help"/><div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-yellow-900/90 text-yellow-100 text-[10px] p-2 rounded shadow-xl border border-yellow-700/50 hidden group-hover:block z-50 pointer-events-none">Define el capital inicial correctamente. Una vez creado, NO se podrá modificar para asegurar la integridad de las estadísticas.</div></div></label><input type="number" placeholder="1000" className="w-full bg-[#151b2e] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-emerald-500 outline-none transition-colors" value={newBankData.initialCapital} onChange={e => setNewBankData({...newBankData, initialCapital: e.target.value})} /></div>
-                            <div className="space-y-1"><label className="text-xs text-slate-500 uppercase font-bold tracking-wider">Divisa</label><select className="w-full bg-[#151b2e] border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-emerald-500 outline-none transition-colors" value={newBankData.currency} onChange={e => setNewBankData({...newBankData, currency: e.target.value})}><option value="EUR">EUR (€)</option><option value="USD">USD ($)</option><option value="GBP">GBP (£)</option><option value="MXN">MXN ($)</option></select></div>
-                            <button onClick={confirmAddBank} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition-all shadow-lg shadow-emerald-500/20 mt-2">Crear Banca</button>
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+                    <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl w-full max-w-sm rounded-3xl shadow-[var(--shadow-glow-lg)] border border-[var(--accent-20)] overflow-hidden flex flex-col transition-colors">
+                        <div className="px-5 py-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-card)]"><h3 className="font-bold text-[var(--text-main)] text-lg">Nueva Banca</h3><button onClick={() => setIsAddingBank(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-overlay)] p-1.5 rounded-full"><X size={18}/></button></div>
+                        <div className="p-6 space-y-5">
+                            <div className="space-y-1.5"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Nombre</label><input type="text" placeholder="Ej: Bet365 Principal" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors" value={newBankData.name} onChange={e => setNewBankData({...newBankData, name: e.target.value})} autoFocus /></div>
+                            <div className="space-y-1.5"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1 flex items-center gap-2">Capital Inicial</label><input type="number" placeholder="1000" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors" value={newBankData.initialCapital} onChange={e => setNewBankData({...newBankData, initialCapital: e.target.value})} /></div>
+                            <div className="space-y-1.5"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Divisa</label><select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors appearance-none" value={newBankData.currency} onChange={e => setNewBankData({...newBankData, currency: e.target.value})}><option value="EUR">EUR (€)</option><option value="USD">USD ($)</option><option value="GBP">GBP (£)</option><option value="MXN">MXN ($)</option></select></div>
+                            <button onClick={confirmAddBank} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-bold py-3.5 rounded-xl transition-all shadow-[var(--shadow-glow-md)] mt-4">Crear Banca</button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {statusModalData && (
-                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-[#0B1120] rounded-xl shadow-2xl border border-slate-800 p-6 w-full max-w-sm"><h3 className="text-white font-bold mb-4 text-center">Actualizar Estado</h3><div className="grid grid-cols-2 gap-3"><button onClick={() => handleQuickStatusChange('won')} className="p-3 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg font-bold border border-emerald-500/30 transition-all flex flex-col items-center gap-1"><CheckCircle2/> Ganada</button><button onClick={() => handleQuickStatusChange('lost')} className="p-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg font-bold border border-red-500/30 transition-all flex flex-col items-center gap-1"><XCircle/> Perdida</button><button onClick={() => handleQuickStatusChange('void')} className="p-3 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-lg font-bold border border-slate-600 transition-all flex flex-col items-center gap-1"><AlertCircle/> Nula</button><button onClick={() => handleQuickStatusChange('pending')} className="p-3 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded-lg font-bold border border-yellow-500/30 transition-all flex flex-col items-center gap-1"><Clock/> Pendiente</button></div><button onClick={() => setStatusModalData(null)} className="mt-4 w-full py-2 text-slate-500 text-sm hover:text-white">Cancelar</button></div>
+            {feedbackModal.isOpen && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+                    <div className="bg-[var(--bg-card)] backdrop-blur-2xl rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.3)] border border-[var(--border-strong)] p-8 w-full max-w-sm text-center transition-colors">
+                        <AlertTriangle size={48} className="text-[var(--accent)] mx-auto mb-4 drop-shadow-md" />
+                        <h3 className="text-[var(--text-main)] font-extrabold text-xl mb-2 tracking-tight">Aviso</h3>
+                        <p className="text-[var(--text-muted)] text-sm mb-6 whitespace-pre-wrap">{feedbackModal.message}</p>
+                        <div className="flex gap-3 justify-center">
+                            {feedbackModal.type === 'confirm' && (
+                                <button onClick={closeFeedbackModal} className="flex-1 py-3 bg-[var(--bg-input)] text-[var(--text-main)] border border-[var(--border)] rounded-xl font-bold hover:bg-[var(--bg-hover)] transition-all">Cancelar</button>
+                            )}
+                            <button onClick={() => { if (feedbackModal.type === 'confirm' && feedbackModal.onConfirm) { feedbackModal.onConfirm(); } closeFeedbackModal(); }} className="flex-1 py-3 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] rounded-xl font-bold shadow-[var(--shadow-glow-md)] transition-all">Aceptar</button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
