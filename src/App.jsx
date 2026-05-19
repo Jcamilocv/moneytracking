@@ -236,7 +236,7 @@ export default function App() {
     const fileInputRef = useRef(null);
     
     const [isScanning, setIsScanning] = useState(false);
-    const [aiMessage, setAiMessage] = useState(''); // Nuevo estado para la burbuja de voz de la IA
+    const [aiMessage, setAiMessage] = useState(''); 
 
     const [newBet, setNewBet] = useState({
         date: new Date().toISOString().split('T')[0], time: '00:00', bookmaker: 'Bet365', betMode: 'simple', title: '', 
@@ -251,7 +251,7 @@ export default function App() {
         if (!file) return;
 
         setIsScanning(true);
-        setAiMessage(''); // Limpiamos mensaje previo
+        setAiMessage(''); 
         try {
             const reader = new FileReader();
             reader.onloadend = async () => {
@@ -570,8 +570,8 @@ export default function App() {
 
     const handleSaveBet = async (e) => {
         e.preventDefault(); if (viewMode === 'visiting') return; 
-        if (!newBet.amount) return alert("Introduce importe"); if (!currentBankId) return alert("Crea una banca primero.");
-        if (!editingBetId && currentBets.length >= LIMITS.MAX_BETS_PER_BANK) { return alert(`Límite de ${LIMITS.MAX_BETS_PER_BANK} apuestas por banca alcanzado.`); }
+        if (!newBet.amount) return showAlert("Introduce importe"); if (!currentBankId) return showAlert("Crea una banca primero.");
+        if (!editingBetId && currentBets.length >= LIMITS.MAX_BETS_PER_BANK) { return showAlert(`Límite de ${LIMITS.MAX_BETS_PER_BANK} apuestas por banca alcanzado.`); }
         
         const totalOdds = newBet.selections.reduce((acc, s) => acc * (parseFloat(s.odds)||1), 1);
         const betData = { ...newBet, odds: parseFloat(totalOdds.toFixed(2)), amount: parseFloat(newBet.amount), bankId: currentBankId, createdAt: new Date().toISOString() };
@@ -586,18 +586,18 @@ export default function App() {
             setNewBet({ date: new Date().toISOString().split('T')[0], time: '00:00', bookmaker: 'Bet365', betMode: 'simple', title: '', selections: [{ id: Date.now(), title: '', selection: '', sport: customOptions.sports?.[0] || 'Fútbol', status: 'pending', category: '', odds: 1.50, isOpen: true }], amount: 0, stake: 0, analysis: '' });
         } catch (error) {
             console.error("Error guardando apuesta:", error);
-            alert("Error guardando apuesta.");
+            showAlert("Error guardando apuesta.");
         }
     };
 
     const handleImportCSV = async (event) => {
-        if (viewMode === 'visiting') return alert("No puedes importar datos.");
+        if (viewMode === 'visiting') return showAlert("No puedes importar datos.");
         const file = event.target.files[0]; if (!file) return;
         const reader = new FileReader();
         reader.onload = async (e) => {
             const allRows = parseComplexCSV(e.target.result);
             const dataRows = (allRows.length > 0 && allRows[0][0] && allRows[0][0].replace(/"/g, '') === 'Date') ? allRows.slice(1) : allRows;
-            if (dataRows.length === 0) return alert("Archivo vacío.");
+            if (dataRows.length === 0) return showAlert("Archivo vacío.");
             const validNewRows = dataRows.filter(cols => cols && cols.length >= 2 && cols[0]);
             let newBets = []; let currentBet = null;
             validNewRows.forEach(cols => {
@@ -613,16 +613,16 @@ export default function App() {
             
             try {
                 for(let b of newBets) { await addDoc(collection(db, 'users', currentUser.uid, 'bets'), b); }
-                alert(`¡Importado con éxito! Añadidas ${newBets.length} apuestas.`);
+                showAlert(`¡Importado con éxito! Añadidas ${newBets.length} apuestas.`);
             } catch(error) {
-                console.error(error); alert("Error importando algunos datos.");
+                console.error(error); showAlert("Error importando algunos datos.");
             }
         };
         reader.readAsText(file); event.target.value = null;
     };
 
     const handleExportCSV = () => {
-        if (!activeBetsData.length) return alert("No hay datos en esta banca.");
+        if (!activeBetsData.length) return showAlert("No hay datos en esta banca.");
         const header = `"Date";"Type";"Sport";"Label";"Odds";"Stake";"State";"Bookmaker";"Tipster";"Category";"Competition";"BetType";"Closing";"Commission";"Bonus";"Live";"Freebet";"Cashout";"Eachway";"Comment"`;
         const rows = activeBetsData.map(b => {
             const statusMap = { 'won': 'W', 'lost': 'L', 'void': 'V', 'pending': 'P', 'half-won': 'HW', 'half-lost': 'HL' }; const dateFull = `${b.date} ${b.time || '00:00'}`; const safeText = (txt) => txt ? txt.replace(/"/g, '""') : '';
@@ -665,7 +665,7 @@ export default function App() {
     const handleAddOption = async (type, value) => { 
         if (!value.trim() || viewMode === 'visiting') return;
         const currentList = customOptions[type] || [];
-        if (currentList.includes(value.trim())) return alert("Esta etiqueta ya existe.");
+        if (currentList.includes(value.trim())) return showAlert("Esta etiqueta ya existe.");
 
         const newOptions = { ...customOptions, [type]: [...currentList, value.trim()] };
         setCustomOptions(newOptions); 
@@ -677,7 +677,7 @@ export default function App() {
             await setDoc(doc(db, 'users', currentUser.uid, 'preferences', 'customOptions'), newOptions, { merge: true });
         } catch (error) {
             console.error("Error guardando etiqueta:", error);
-            alert("Hubo un pequeño error guardando en la nube, pero se ha añadido temporalmente.");
+            showAlert("Hubo un pequeño error guardando en la nube, pero se ha añadido temporalmente.");
         }
     };
 
@@ -695,7 +695,7 @@ export default function App() {
     };
     
     const openAddBankModal = () => {
-        if(banks.length >= LIMITS.MAX_BANKS) return alert(`Límite de ${LIMITS.MAX_BANKS} bancas alcanzado.`);
+        if(banks.length >= LIMITS.MAX_BANKS) return showAlert(`Límite de ${LIMITS.MAX_BANKS} bancas alcanzado.`);
         setNewBankData({ name: `Nueva Banca ${banks.length+1}`, initialCapital: 1000, currency: 'EUR', premiumPassword: '' }); setIsAddingBank(true);
     };
 
@@ -703,7 +703,7 @@ export default function App() {
         e.preventDefault();
         const newBank = { name: newBankData.name || `Nueva Banca ${banks.length+1}`, initialCapital: parseFloat(newBankData.initialCapital) || 1000, currency: newBankData.currency, premiumPassword: newBankData.premiumPassword || '', createdAt: new Date().toISOString(), isEditable: false };
         try { await addDoc(collection(db, 'users', currentUser.uid, 'banks'), newBank); setIsAddingBank(false); }
-        catch(error) { console.error(error); alert("Error creando banca."); }
+        catch(error) { console.error(error); showAlert("Error creando banca."); }
     };
 
     const handleUpdateBank = async (id, field, value) => {
@@ -729,7 +729,9 @@ export default function App() {
             <LiquidBackground theme={theme} />
             <div className="min-h-screen relative flex items-center justify-center p-4">
                 <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl p-8 rounded-[2rem] border border-[var(--border)] shadow-[var(--shadow-glow-lg)] w-full max-w-[400px] animate-in fade-in transition-colors">
-                    <div className="flex justify-center mb-6"><div className="w-16 h-16 bg-[var(--bg-card)] rounded-full flex items-center justify-center shadow-inner border border-[var(--border)]"><Lock size={28} className="text-[var(--yellow)] drop-shadow-md"/></div></div>
+                    <div className="flex justify-center mb-6">
+                        <img src="/favicon.jpg" alt="MoneyTrackING Logo" className="w-20 h-20 rounded-full object-cover shadow-inner border border-[var(--border)]" />
+                    </div>
                     <h1 className="text-3xl font-extrabold text-center text-[var(--text-main)] mb-2 tracking-tight">MoneyTrac<span className="text-[var(--yellow)]">KING</span></h1>
                     <p className="text-[var(--text-muted)] text-center text-sm mb-8 font-medium">Tu gestor de bankroll nivel Dios</p>
                     <div className="flex bg-[var(--bg-input)] p-1.5 rounded-2xl mb-8 border border-[var(--border)] transition-colors"><button type="button" onClick={() => setIsRegistering(false)} className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all uppercase tracking-wider ${!isRegistering ? 'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-md)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>Entrar</button><button type="button" onClick={() => setIsRegistering(true)} className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all uppercase tracking-wider ${isRegistering ? 'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-md)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>Registrarse</button></div>
@@ -780,7 +782,10 @@ export default function App() {
             <LiquidBackground theme={theme} />
             <div className="flex flex-col md:flex-row h-screen text-[var(--text-main)] font-sans overflow-hidden">
                 <aside className="hidden md:flex flex-col w-64 bg-[var(--bg-card)]/80 backdrop-blur-2xl border-r border-[var(--border)] transition-colors">
-                    <div className="p-6 border-b border-[var(--border)] flex items-center gap-3"><div className="w-8 h-8 bg-[var(--accent)] rounded-lg flex items-center justify-center shadow-lg"><TrendingUp size={18} className="text-[var(--accent-fg)]"/></div><h1 className="font-bold text-lg tracking-tight">MoneyTrac<span className="text-[var(--yellow)]">KING</span></h1></div>
+                    <div className="p-6 border-b border-[var(--border)] flex items-center gap-3">
+                        <img src="/favicon.jpg" alt="Logo" className="w-8 h-8 rounded-lg object-cover shadow-[var(--shadow-glow-sm)]" />
+                        <h1 className="font-bold text-lg tracking-tight">MoneyTrac<span className="text-[var(--yellow)]">KING</span></h1>
+                    </div>
                     <div className="flex-1 p-4 flex flex-col justify-end"><div className="p-4 border-t border-[var(--border)]"><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center text-xs font-bold text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]">{currentUser.email?.charAt(0).toUpperCase()}</div><div className="text-sm font-medium text-[var(--text-main)] max-w-[100px] truncate">{currentUser.email?.split('@')[0]}</div></div><button onClick={handleLogout} className="text-[var(--text-muted)] hover:text-[var(--red)]"><LogOut size={16}/></button></div></div></div>
                 </aside>
                 <main className="flex-1 flex flex-col items-center justify-center p-6 text-center">
@@ -823,7 +828,10 @@ export default function App() {
             )}
 
             <aside className={`hidden md:flex flex-col w-64 bg-[var(--bg-card)]/50 backdrop-blur-2xl border-r border-[var(--border)] transition-colors`}>
-                <div className="p-6 border-b border-[var(--border)] flex items-center gap-3"><div className="w-8 h-8 bg-[var(--accent)] rounded-lg flex items-center justify-center shadow-[var(--shadow-glow-sm)]"><TrendingUp size={18} className="text-[var(--accent-fg)]"/></div><h1 className="font-bold text-lg tracking-tight text-[var(--text-main)]">MoneyTrac<span className="text-[var(--yellow)] drop-shadow-sm">KING</span></h1></div>
+                <div className="p-6 border-b border-[var(--border)] flex items-center gap-3">
+                    <img src="/favicon.jpg" alt="Logo" className="w-8 h-8 rounded-lg object-cover shadow-[var(--shadow-glow-sm)]" />
+                    <h1 className="font-bold text-lg tracking-tight text-[var(--text-main)]">MoneyTrac<span className="text-[var(--yellow)] drop-shadow-sm">KING</span></h1>
+                </div>
                 {viewMode === 'visiting' ? (
                     <div className="flex-1 flex flex-col p-4 bg-indigo-500/5">
                         <div className="mb-4 p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl backdrop-blur-md"><p className="text-[10px] text-indigo-500 dark:text-indigo-300 uppercase font-bold mb-1 flex items-center gap-2"><Eye size={12}/> Modo Visitante</p><p className="text-[var(--text-main)] text-sm font-bold truncate drop-shadow-sm">{visitingBank?.name}</p></div>
@@ -891,7 +899,7 @@ export default function App() {
                                     <p className="text-[var(--text-muted)] text-sm mb-5">El autor ha protegido estas jugadas con contraseña. Introdúcela para poder verlas.</p>
                                     <div className="flex flex-col sm:flex-row gap-3 max-w-sm mx-auto">
                                         <input type="password" value={visitorPasswordInput} onChange={e=>setVisitorPasswordInput(e.target.value)} className="flex-1 bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--text-main)] outline-none focus:border-[var(--accent)] shadow-inner transition-colors" placeholder="Contraseña..." />
-                                        <button onClick={() => { if(visitorPasswordInput === activeBankData.premiumPassword) { setUnlockedBank(true); alert('✅ Acceso Concedido'); } else alert('Contraseña incorrecta'); }} className="bg-[var(--accent)] text-[var(--accent-fg)] px-6 py-3 rounded-xl font-bold hover:bg-[var(--accent-hover)] transition-all shadow-md">Desbloquear</button>
+                                        <button onClick={() => { if(visitorPasswordInput === activeBankData.premiumPassword) { setUnlockedBank(true); alert('✅ Acceso Concedido'); } else showAlert('Contraseña incorrecta'); }} className="bg-[var(--accent)] text-[var(--accent-fg)] px-6 py-3 rounded-xl font-bold hover:bg-[var(--accent-hover)] transition-all shadow-md">Desbloquear</button>
                                     </div>
                                 </>
                             ) : (
