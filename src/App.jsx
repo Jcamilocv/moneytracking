@@ -5,13 +5,12 @@ import {
     Clock, Calendar, Download, Upload, FileText, 
     ArrowUpRight, ArrowDownRight, AlertTriangle, 
     BarChart2, LineChart, Tags, LogOut, Database, Eye, Link as LinkIcon, CalendarDays,
-    HelpCircle, Lock, ShieldCheck, XCircle, AlertCircle, Sun, Moon, Layers
+    HelpCircle, Lock, ShieldCheck, XCircle, AlertCircle, Sun, Moon, Layers, Code
 } from 'lucide-react';
 import { 
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
     BarChart, Bar, Cell, Line, LineChart as ReLineChart 
 } from 'recharts';
-import LZString from 'lz-string';
 
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from "firebase/app";
@@ -198,19 +197,21 @@ const StatusBadge = ({ status }) => {
 // --- APP PRINCIPAL ---
 export default function App() {
     const [initialShare] = useState(() => {
-        if (typeof window === 'undefined') return { mode: 'personal', uid: null, bid: null };
+        if (typeof window === 'undefined') return { mode: 'personal', uid: null, bid: null, isEmbed: false };
         const params = new URLSearchParams(window.location.search);
         const sData = params.get('s');
+        const isEmbed = params.get('embed') === 'true'; // NUEVO: Detección de iFrame
         if (sData) {
             try {
                 const decoded = atob(sData);
                 const [uid, bid] = decoded.split('|');
-                if (uid && bid) return { mode: 'visiting', uid, bid };
+                if (uid && bid) return { mode: 'visiting', uid, bid, isEmbed };
             } catch (e) { console.error("Error decodificando enlace público.", e); }
         }
-        return { mode: 'personal', uid: null, bid: null };
+        return { mode: 'personal', uid: null, bid: null, isEmbed: false };
     });
 
+    const [isEmbed] = useState(initialShare.isEmbed);
     const [theme, setTheme] = useState(() => localStorage.getItem('moneytracking_theme') || 'dark');
     const [currentUser, setCurrentUser] = useState(null);
     const [email, setEmail] = useState('');
@@ -224,19 +225,22 @@ export default function App() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     
     const [banks, setBanks] = useState([]);
-    const [balances, setBalances] = useState([]); // NUEVO: Estado de balances agrupados
+    const [balances, setBalances] = useState([]); 
     const [currentBankId, setCurrentBankId] = useState(null);
     const [bets, setBets] = useState([]); 
     const [customOptions, setCustomOptions] = useState({ sports: [], categories: [] });
     
     const [showBetForm, setShowBetForm] = useState(false);
     const [isAddingBank, setIsAddingBank] = useState(false); 
-    const [isAddingBalance, setIsAddingBalance] = useState(false); // NUEVO: Modal crear balance
+    const [isAddingBalance, setIsAddingBalance] = useState(false); 
     const [editingBetId, setEditingBetId] = useState(null); 
     const [expandedBetId, setExpandedBetId] = useState(null); 
     const [showMoreOptions, setShowMoreOptions] = useState(false);
     const [statusModalData, setStatusModalData] = useState(null); 
+    
     const [feedbackModal, setFeedbackModal] = useState({ isOpen: false, type: 'alert', message: '', onConfirm: null });
+    const [shareModal, setShareModal] = useState({ isOpen: false, link: '', iframe: '' }); // NUEVO: Modal de Distribución
+    
     const [isProcessing, setIsProcessing] = useState(false);
     const [expandedMonths, setExpandedMonths] = useState({});
     const [formErrors, setFormErrors] = useState({}); 
@@ -247,8 +251,6 @@ export default function App() {
     const [viewMode, setViewMode] = useState(initialShare.mode); 
     const [visitingUserId, setVisitingUserId] = useState(initialShare.uid);
     const [visitingBankId, setVisitingBankId] = useState(initialShare.bid);
-    const [visitingBank, setVisitingBank] = useState(null);
-    const [visitingBets, setVisitingBets] = useState([]);
     
     const [unlockedBank, setUnlockedBank] = useState(false);
     const [visitorPasswordInput, setVisitorPasswordInput] = useState('');
@@ -256,7 +258,7 @@ export default function App() {
     const [newCustomSport, setNewCustomSport] = useState('');
     const [newCustomCategory, setNewCustomCategory] = useState('');
     const [newBankData, setNewBankData] = useState({ name: '', initialCapital: 1000, currency: 'EUR', premiumPassword: '' }); 
-    const [newBalanceData, setNewBalanceData] = useState({ name: '', bankIds: [] }); // NUEVO: Data balance
+    const [newBalanceData, setNewBalanceData] = useState({ name: '', bankIds: [], premiumPassword: '' }); 
     const fileInputRef = useRef(null);
     
     const [isScanning, setIsScanning] = useState(false);
@@ -370,6 +372,7 @@ export default function App() {
         return () => unsubscribe();
     }, [viewMode]);
 
+    // MOTOR UNIFICADO DE DATOS (Mismo fetch para Owner y Visitantes)
     useEffect(() => {
         const targetUid = viewMode === 'visiting' ? visitingUserId : currentUser?.uid;
         if (!targetUid) {
@@ -382,35 +385,21 @@ export default function App() {
         
         const banksRef = collection(db, 'users', targetUid, 'banks');
         const unsubBanks = onSnapshot(banksRef, (snapshot) => {
-            const banksData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            if (viewMode === 'visiting') {
-                const vBank = banksData.find(b => b.id === visitingBankId);
-                setVisitingBank(vBank || null);
-            } else {
-                setBanks(banksData);
-            }
+            setBanks(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
         }, (error) => {
             console.error("Error en Firebase (Bancos):", error);
             setDbError('Firebase ha bloqueado el acceso. Asegúrate de haber actualizado las Reglas de Firestore.');
             setLoading(false);
         });
 
-        // NUEVO: Sincronizar Balances Agrupados
         const balancesRef = collection(db, 'users', targetUid, 'balances');
         const unsubBalances = onSnapshot(balancesRef, (snapshot) => {
-            if (viewMode === 'personal') {
-                setBalances(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            }
+            setBalances(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
         }, (error) => console.error(error));
 
         const betsRef = collection(db, 'users', targetUid, 'bets');
         const unsubBets = onSnapshot(betsRef, (snapshot) => {
-            const betsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            if (viewMode === 'visiting') {
-                setVisitingBets(betsData.filter(b => b.bankId === visitingBankId));
-            } else {
-                setBets(betsData);
-            }
+            setBets(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
             setLoading(false);
         }, (error) => { 
             console.error("Error en Firebase (Apuestas):", error); 
@@ -430,9 +419,9 @@ export default function App() {
         }, (error) => console.error("Error preferencias:", error));
 
         return () => { unsubBanks(); unsubBets(); unsubPrefs(); unsubBalances(); };
-    }, [currentUser, viewMode, visitingUserId, visitingBankId]);
+    }, [currentUser, viewMode, visitingUserId]);
 
-    // NUEVO: Memoria de última banca seleccionada
+    // Memoria del último banco visitado (Solo para Owner)
     useEffect(() => {
         if (viewMode === 'personal' && banks.length > 0 && !currentBankId) {
             const lastSavedId = localStorage.getItem(`moneytracking_last_bank_${currentUser?.uid}`);
@@ -452,14 +441,15 @@ export default function App() {
         }
     };
 
-    // Modificado para soportar Balances Virtuales
+    // Inteligencia para resolver si la ID pertenece a un Banco o a un Balance Agrupado
     const activeBankData = useMemo(() => {
-        if (viewMode === 'visiting') return visitingBank;
+        const idToFind = viewMode === 'visiting' ? visitingBankId : currentBankId;
+        if (!idToFind) return null;
         
-        const normalBank = banks.find(b => b.id === currentBankId);
+        const normalBank = banks.find(b => b.id === idToFind);
         if (normalBank) return normalBank;
 
-        const balanceGroup = balances.find(b => b.id === currentBankId);
+        const balanceGroup = balances.find(b => b.id === idToFind);
         if (balanceGroup) {
             const includedBanks = banks.filter(b => balanceGroup.bankIds.includes(b.id));
             const totalCapital = includedBanks.reduce((sum, b) => sum + (parseFloat(b.initialCapital) || 0), 0);
@@ -469,35 +459,43 @@ export default function App() {
                 initialCapital: totalCapital,
                 currency: includedBanks[0]?.currency || 'EUR',
                 isBalance: true,
-                bankIds: balanceGroup.bankIds
+                bankIds: balanceGroup.bankIds,
+                premiumPassword: balanceGroup.premiumPassword || ''
             };
         }
         return null;
-    }, [banks, balances, currentBankId, viewMode, visitingBank]);
+    }, [banks, balances, currentBankId, viewMode, visitingBankId]);
 
-    // Modificado para extraer apuestas de múltiples bancas si es un Balance
     const activeBetsData = useMemo(() => {
+        if (!activeBankData) return [];
+        
         let rawBets = [];
-        if (viewMode === 'visiting') rawBets = visitingBets;
-        else if (activeBankData?.isBalance) {
+        if (activeBankData.isBalance) {
             rawBets = bets.filter(b => activeBankData.bankIds.includes(b.bankId));
-        } else if (currentBankId) {
-            rawBets = bets.filter(b => b.bankId === currentBankId);
+        } else {
+            rawBets = bets.filter(b => b.bankId === activeBankData.id);
         }
 
         rawBets = rawBets.sort((a, b) => new Date(`${b.date}T${b.time || '00:00'}`) - new Date(`${a.date}T${a.time || '00:00'}`));
 
         if (viewMode === 'visiting') {
-            if (activeBankData?.premiumPassword && unlockedBank) return rawBets;
+            if (activeBankData.premiumPassword && unlockedBank) return rawBets;
             return rawBets.filter(b => b.status !== 'pending');
         }
+        
         return rawBets; 
-    }, [bets, currentBankId, viewMode, visitingBets, activeBankData, unlockedBank]);
+    }, [bets, activeBankData, viewMode, unlockedBank]);
 
     const pendingHiddenCount = useMemo(() => {
-        if (viewMode !== 'visiting') return 0;
-        return visitingBets.filter(b => b.status === 'pending').length;
-    }, [visitingBets, viewMode]);
+        if (viewMode !== 'visiting' || !activeBankData) return 0;
+        let targetBets = bets;
+        if (activeBankData.isBalance) {
+            targetBets = bets.filter(b => activeBankData.bankIds.includes(b.bankId));
+        } else {
+            targetBets = bets.filter(b => b.bankId === activeBankData.id);
+        }
+        return targetBets.filter(b => b.status === 'pending').length;
+    }, [bets, activeBankData, viewMode]);
 
     const currentBets = activeBetsData;
 
@@ -601,6 +599,10 @@ export default function App() {
 
     const handleLogout = async () => {
         await signOut(auth);
+        if(viewMode === 'visiting') {
+            try { window.history.pushState({}, document.title, window.location.pathname); } catch(e) {}
+            setViewMode('personal'); setVisitingUserId(null); setVisitingBankId(null);
+        }
     };
 
     const showAlert = (message) => setFeedbackModal({ isOpen: true, type: 'alert', message, onConfirm: null });
@@ -611,24 +613,25 @@ export default function App() {
         }
     };
 
-    const generateShareLink = () => {
-        if(!activeBankData || !activeBankData.id || activeBankData.isBalance) return showAlert("Selecciona una banca individual válida. Los balances agrupados no se pueden compartir.");
-        try {
-            const shareStr = btoa(`${currentUser.uid}|${activeBankData.id}`);
-            let currentDomain = window.location.origin + window.location.pathname;
-            const isSandbox = currentDomain.includes('usercontent') || currentDomain.includes('null');
-            const url = `${currentDomain}?s=${shareStr}`;
-            
-            const el = document.createElement('textarea'); el.value = url; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
-            
-            let msg = "✅ ¡Enlace copiado al portapapeles!\n\n";
-            if(isSandbox) {
-                msg += "⚠️ AVISO DEL MENTOR: Estás en el entorno de pruebas. Esta URL interna NO funcionará si la pegas en otra pestaña.\n\nPara que el enlace sea real y se lo puedas pasar a tus clientes o amigos, debes desplegar la app en Vercel.";
-            } else {
-                msg += "Cualquiera con este enlace leerá tu banca en tiempo real.\nPor privacidad, los visitantes nunca verán las apuestas en curso a menos que configures una Privacidad.";
-            }
-            showAlert(msg);
-        } catch (e) { showAlert("Error generando el enlace."); }
+    // NUEVO: Motor Unificado de Modales de Distribución
+    const openShareModalFor = (targetData) => {
+        if(!targetData || !targetData.id) return showAlert("Selecciona una banca o balance válido.");
+        
+        const shareStr = btoa(`${currentUser.uid}|${targetData.id}`);
+        let currentDomain = window.location.origin + window.location.pathname;
+        const link = `${currentDomain}?s=${shareStr}`;
+        const iframeCode = `<iframe src="${link}&embed=true" width="100%" height="700" style="border:none; border-radius: 16px; overflow:hidden; background: transparent;"></iframe>`;
+        setShareModal({ isOpen: true, link, iframe: iframeCode });
+    };
+
+    const copyToClipboard = (text, msg) => {
+        const el = document.createElement('textarea'); 
+        el.value = text; 
+        document.body.appendChild(el); 
+        el.select(); 
+        document.execCommand('copy'); 
+        document.body.removeChild(el);
+        showAlert(msg || "¡Copiado al portapapeles!");
     };
 
     const handleExitVisiting = () => {
@@ -636,8 +639,6 @@ export default function App() {
         setViewMode('personal'); 
         setVisitingUserId(null); 
         setVisitingBankId(null);
-        setVisitingBank(null); 
-        setVisitingBets([]);
         setUnlockedBank(false);
     };
 
@@ -724,13 +725,16 @@ export default function App() {
     const handleDeleteBet = (id) => { 
         if (viewMode === 'visiting') return;
         showConfirm('¿Estás seguro de que deseas eliminar esta operación de forma permanente?', async () => {
+            setIsProcessing(true);
             try { 
                 await deleteDoc(doc(db, 'users', currentUser.uid, 'bets', id)); 
-                closeFeedbackModal();
+                setFeedbackModal(prev => ({ ...prev, isOpen: false }));
             }
             catch(e) { 
                 console.error("Error Firebase:", e); 
                 showAlert(`Fallo en la nube: ${e.message}`); 
+            } finally {
+                setIsProcessing(false);
             }
         });
     };
@@ -843,26 +847,33 @@ export default function App() {
     }
 
     const handleDeleteBank = (id) => {
-        showConfirm('¿Borrar banca? Se eliminarán todos sus datos y apuestas asociadas.', async () => {
+        if (viewMode === 'visiting') return;
+        showConfirm('¿Borrar banca? Se eliminarán todos sus datos y apuestas asociadas de forma irreversible.', async () => {
+            setIsProcessing(true);
             try { 
                 await deleteDoc(doc(db, 'users', currentUser.uid, 'banks', id)); 
-                closeFeedbackModal();
+                setFeedbackModal(prev => ({ ...prev, isOpen: false }));
             }
-            catch(e) { console.error(e); showAlert("Error borrando banca."); }
+            catch(e) { 
+                console.error("Error Firebase:", e); 
+                showAlert(`Error borrando banca: ${e.message}`); 
+            } finally {
+                setIsProcessing(false);
+            }
         });
     };
 
-    // NUEVO: Funciones para Balances Agrupados
     const confirmAddBalance = async (e) => {
         e.preventDefault();
         try {
             await addDoc(collection(db, 'users', currentUser.uid, 'balances'), {
                 name: newBalanceData.name,
                 bankIds: newBalanceData.bankIds,
+                premiumPassword: newBalanceData.premiumPassword || '',
                 createdAt: new Date().toISOString()
             });
             setIsAddingBalance(false);
-            setNewBalanceData({ name: '', bankIds: [] });
+            setNewBalanceData({ name: '', bankIds: [], premiumPassword: '' });
             showAlert("Balance agrupado creado correctamente.");
         } catch (error) {
             console.error("Error creando balance:", error);
@@ -887,6 +898,109 @@ export default function App() {
         <button onClick={() => { setActiveTab(tabId); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === tabId ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><Icon size={18}/> {label}</button>
     );
 
+    // =========================================================================
+    // RENDERIZADO DEL WIDGET (MODO EMBEBIDO / IFRAME)
+    // =========================================================================
+    if (isEmbed && activeBankData) {
+        return (
+            <div className="h-screen flex flex-col bg-[var(--bg-base)] text-[var(--text-main)] font-sans overflow-hidden">
+                <style>{getGlobalStyles(theme)}</style>
+                <LiquidBackground theme={theme} />
+                
+                {/* Cabecera Minimalista para el Iframe */}
+                <header className="flex justify-between items-center px-4 py-3 border-b border-[var(--border)] bg-[var(--bg-card)]/80 backdrop-blur-xl z-20">
+                    <div className="flex items-center gap-3">
+                        <img src="/favicon.jpg" alt="Logo" className="w-7 h-7 rounded-lg shadow-sm" onerror="this.style.display='none'" />
+                        <h1 className="font-bold text-base tracking-tight truncate max-w-[150px] sm:max-w-xs">{activeBankData.name}</h1>
+                    </div>
+                    <div className="flex gap-2 bg-[var(--bg-input)] p-1 rounded-lg border border-[var(--border)]">
+                        <button onClick={() => setActiveTab('dashboard')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab==='dashboard' ? 'bg-[var(--accent)] text-[var(--accent-fg)] shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>Resumen</button>
+                        <button onClick={() => setActiveTab('bets')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab==='bets' ? 'bg-[var(--accent)] text-[var(--accent-fg)] shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>Apuestas</button>
+                    </div>
+                </header>
+
+                {/* Contenido del Widget */}
+                <main className="flex-1 overflow-y-auto custom-scrollbar p-3 md:p-5 z-10 relative">
+                    {/* Caja Privacidad por si tiene contraseña */}
+                    {activeBankData?.premiumPassword && !unlockedBank && pendingHiddenCount > 0 && activeTab === 'bets' && (
+                        <div className="bg-[var(--bg-card)] border border-[var(--border-strong)] rounded-2xl p-5 text-center shadow-sm mb-5">
+                            <Lock size={24} className="text-[var(--text-muted)] mx-auto mb-2" />
+                            <h4 className="text-sm font-bold text-[var(--text-main)] mb-2">Hay {pendingHiddenCount} apuestas ocultas</h4>
+                            <p className="text-[var(--text-muted)] text-xs mb-4">Introduce la clave para ver las jugadas en curso.</p>
+                            <div className="flex gap-2 max-w-xs mx-auto">
+                                <input type="password" value={visitorPasswordInput} onChange={e=>setVisitorPasswordInput(e.target.value)} className="flex-1 bg-[var(--bg-input)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--accent)]" placeholder="Contraseña..." />
+                                <button onClick={() => { if(visitorPasswordInput === activeBankData.premiumPassword) setUnlockedBank(true); else alert('Clave incorrecta'); }} className="bg-[var(--accent)] text-[var(--accent-fg)] px-4 py-2 rounded-lg text-sm font-bold">Ver</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'dashboard' && (
+                        <div className="space-y-4">
+                            <div className="bg-[var(--bg-card)] rounded-2xl p-6 border border-[var(--border)] shadow-sm text-center">
+                                <p className="text-[var(--accent)] text-xs font-bold mb-1 uppercase tracking-widest">Beneficio Total</p>
+                                <h2 className="text-4xl font-extrabold text-[var(--text-main)] tracking-tight">{formatCurrency(stats.totalProfit, activeBankData?.currency)}</h2>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <StatCard title="Picks" value={stats.picks} />
+                                <StatCard title="Ganados" value={stats.won} colorClass="text-[var(--accent)]" />
+                                <StatCard title="Perdidos" value={stats.lost} colorClass="text-[var(--red)]" />
+                                <StatCard title="Yield" value={`${stats.yield.toFixed(2)}%`} colorClass={stats.yield >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} />
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'bets' && (
+                        <div className="space-y-3">
+                            {betsByMonth.map(g => (
+                                <div key={g.id} className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-sm">
+                                    <div onClick={()=>toggleMonth(g.id)} className="flex items-center justify-between p-4 bg-[var(--bg-hover)] cursor-pointer border-b border-[var(--border)]">
+                                        <div className="flex items-center gap-2">
+                                            {expandedMonths[g.id]?<ChevronUp size={16} className="text-[var(--accent)]"/>:<ChevronDown size={16} className="text-[var(--text-muted)]"/>}
+                                            <span className="font-bold text-[var(--text-main)] text-sm">{g.label}</span>
+                                        </div>
+                                        <div className={`px-2.5 py-1 rounded-md text-xs font-bold ${g.profit>=0?'bg-[var(--accent-10)] text-[var(--accent)]':'bg-[var(--red-10)] text-[var(--red)]'}`}>{g.profit>0?'+':''}{formatCurrency(g.profit, activeBankData?.currency)}</div>
+                                    </div>
+                                    {expandedMonths[g.id] && (
+                                        <div className="divide-y divide-[var(--border)]">
+                                            {g.bets.map(b => {
+                                                const amt=b.amount?parseFloat(b.amount):parseFloat(b.stake)*10;
+                                                const pl=b.status==='won'?(amt*b.odds)-amt:b.status==='lost'?-amt:0;
+                                                return (
+                                                    <div key={b.id} className="p-3 text-sm hover:bg-[var(--bg-overlay)] transition-colors">
+                                                        <div className="flex justify-between items-start mb-1">
+                                                            <div className="font-bold text-[var(--text-main)] truncate max-w-[60%]">{b.title}</div>
+                                                            <div className="font-bold text-[var(--accent)]">@{b.odds.toFixed(2)}</div>
+                                                        </div>
+                                                        <div className="flex justify-between items-center text-xs">
+                                                            <div className="text-[var(--text-muted)]">{typeof b.selection==='string'?b.selection:'Múltiple'}</div>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className={`font-bold ${pl>0?'text-[var(--accent)]':pl<0?'text-[var(--red)]':'text-[var(--text-muted)]'}`}>{pl>0?'+':''}{formatCurrency(pl,activeBankData?.currency)}</span>
+                                                                <StatusBadge status={b.status} />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                            {activeBetsData.length === 0 && <p className="text-center text-sm text-[var(--text-muted)] p-8">No hay historial visible.</p>}
+                        </div>
+                    )}
+                </main>
+
+                {/* Footer "Caballo de Troya" */}
+                <a href={window.location.origin} target="_blank" rel="noopener noreferrer" className="block text-center py-2 bg-[var(--bg-card)] border-t border-[var(--border)] text-[10px] font-bold text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors uppercase tracking-widest z-20">
+                    ⚡ Powered by MoneyTracKING
+                </a>
+            </div>
+        );
+    }
+    // =========================================================================
+    // FIN RENDERIZADO WIDGET
+    // =========================================================================
+
     if (!currentUser && viewMode === 'personal') {
         return (
             <><style>{getGlobalStyles(theme)}</style>
@@ -894,9 +1008,7 @@ export default function App() {
             <div className="min-h-screen relative flex items-center justify-center p-4">
                 <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl p-8 rounded-[2rem] border border-[var(--border)] shadow-[var(--shadow-glow-lg)] w-full max-w-[400px] animate-in fade-in transition-colors">
                     <div className="flex justify-center mb-6">
-                        <div className="w-16 h-16 bg-[var(--bg-card)] rounded-full flex items-center justify-center shadow-inner border border-[var(--border)]">
-                            <Lock size={28} className="text-[var(--yellow)] drop-shadow-md"/>
-                        </div>
+                        <img src="/favicon.jpg" alt="MoneyTrackING Logo" className="w-20 h-20 rounded-full object-cover shadow-inner border border-[var(--border)]" />
                     </div>
                     <h1 className="text-3xl font-extrabold text-center text-[var(--text-main)] mb-2 tracking-tight">MoneyTrac<span className="text-[var(--yellow)]">KING</span></h1>
                     <p className="text-[var(--text-muted)] text-center text-sm mb-8 font-medium">Tu gestor de bankroll nivel Dios</p>
@@ -972,6 +1084,51 @@ export default function App() {
                                 <div className="space-y-1.5"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1 flex items-center gap-2">Capital Inicial</label><input type="number" placeholder="1000" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors" value={newBankData.initialCapital} onChange={e => setNewBankData({...newBankData, initialCapital: e.target.value})} /></div>
                                 <div className="space-y-1.5"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Divisa</label><select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors appearance-none" value={newBankData.currency} onChange={e => setNewBankData({...newBankData, currency: e.target.value})}><option value="EUR">EUR (€)</option><option value="USD">USD ($)</option><option value="GBP">GBP (£)</option><option value="MXN">MXN ($)</option></select></div>
                                 <button onClick={confirmAddBank} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-bold py-3.5 rounded-xl transition-all shadow-[var(--shadow-glow-md)] mt-4">Crear Banca</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* MODAL FEEDBACK PREMIUM (INCLUSO SI NO HAY BANCAS) */}
+                {feedbackModal.isOpen && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+                        <div className="bg-[var(--bg-card)] backdrop-blur-2xl rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.3)] border border-[var(--border-strong)] p-8 w-full max-w-sm text-center transition-colors">
+                            {feedbackModal.type === 'alert' ? (
+                                <AlertTriangle size={48} className="text-[var(--accent)] mx-auto mb-4 drop-shadow-md" />
+                            ) : (
+                                <AlertTriangle size={48} className="text-[var(--yellow)] mx-auto mb-4 drop-shadow-md" />
+                            )}
+                            <h3 className="text-[var(--text-main)] font-extrabold text-xl mb-2 tracking-tight">
+                                {feedbackModal.type === 'alert' ? 'Aviso' : 'Confirmación'}
+                            </h3>
+                            <p className="text-[var(--text-muted)] text-sm mb-6 whitespace-pre-wrap">{feedbackModal.message}</p>
+                            <div className="flex gap-3 justify-center">
+                                {feedbackModal.type === 'confirm' && (
+                                    <button 
+                                        onClick={closeFeedbackModal} 
+                                        disabled={isProcessing}
+                                        className="flex-1 py-3 bg-[var(--bg-input)] text-[var(--text-main)] border border-[var(--border)] rounded-xl font-bold hover:bg-[var(--bg-hover)] transition-all disabled:opacity-50"
+                                    >
+                                        Cancelar
+                                    </button>
+                                )}
+                                <button 
+                                    onClick={async () => { 
+                                        if (feedbackModal.type === 'confirm' && feedbackModal.onConfirm) { 
+                                            await feedbackModal.onConfirm(); 
+                                        } else {
+                                            closeFeedbackModal(); 
+                                        }
+                                    }} 
+                                    disabled={isProcessing}
+                                    className="flex-1 py-3 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] rounded-xl font-bold shadow-[var(--shadow-glow-md)] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                >
+                                    {isProcessing ? (
+                                        <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Procesando...</>
+                                    ) : (
+                                        'Aceptar'
+                                    )}
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -1069,7 +1226,7 @@ export default function App() {
                             <div><h3 className="text-[var(--accent)] text-sm font-bold mb-2 uppercase tracking-widest drop-shadow-sm">Beneficio Total ({activeBankData?.name})</h3><h1 className="text-5xl md:text-6xl font-extrabold text-[var(--text-main)] tracking-tight drop-shadow-lg">{formatCurrency(stats.totalProfit, activeBankData?.currency)}</h1></div>
                             {viewMode === 'personal' && !activeBankData.isBalance && (
                                 <div className="flex gap-2">
-                                    <button onClick={generateShareLink} className="bg-[var(--bg-card)] hover:bg-[var(--bg-hover)] text-[var(--text-main)] px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all border border-[var(--border)] shadow-sm hover:border-[var(--accent-50)]"><LinkIcon size={16} className="text-[var(--accent)]"/> Compartir Banca</button>
+                                    <button onClick={() => openShareModalFor(activeBankData)} className="bg-[var(--bg-card)] hover:bg-[var(--bg-hover)] text-[var(--text-main)] px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all border border-[var(--border)] shadow-sm hover:border-[var(--accent-50)]"><Code size={16} className="text-[var(--accent)]"/> Insertar / Compartir</button>
                                 </div>
                             )}
                         </div>
@@ -1142,7 +1299,7 @@ export default function App() {
                                 <h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">Balances Agrupados</h3>
                                 <p className="text-[var(--text-muted)] text-sm mt-1">Agrupa varios bankrolls para ver sus estadísticas globales juntas.</p>
                             </div>
-                            <button onClick={() => { setNewBalanceData({ name: '', bankIds: [] }); setIsAddingBalance(true); }} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold transition-all shadow-[var(--shadow-glow-md)]">
+                            <button onClick={() => { setNewBalanceData({ name: '', bankIds: [], premiumPassword: '' }); setIsAddingBalance(true); }} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold transition-all shadow-[var(--shadow-glow-md)]">
                                 <Plus size={16} /> Crear Balance
                             </button>
                         </div>
@@ -1169,6 +1326,9 @@ export default function App() {
                                                 <div className="flex gap-2">
                                                     <button onClick={() => { handleBankChange({target: {value: balance.id}}); setActiveTab('dashboard'); }} className="p-2 bg-[var(--accent-10)] text-[var(--accent)] rounded-lg hover:bg-[var(--accent-20)] transition-colors" title="Ver Dashboard de este Balance">
                                                         <LayoutDashboard size={18}/>
+                                                    </button>
+                                                    <button onClick={() => openShareModalFor(balance)} className="p-2 bg-[var(--accent-10)] text-[var(--accent)] rounded-lg hover:bg-[var(--accent-20)] transition-colors" title="Compartir Balance">
+                                                        <Code size={18}/>
                                                     </button>
                                                     <button onClick={() => handleDeleteBalance(balance.id)} className="p-2 bg-[var(--red-10)] text-[var(--red)] rounded-lg hover:bg-[var(--red-20)] transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100" title="Eliminar Balance">
                                                         <Trash2 size={18}/>
@@ -1249,7 +1409,7 @@ export default function App() {
                             <p className="text-xs text-[var(--accent)] mb-3 font-bold uppercase tracking-widest flex items-center justify-center gap-2">
                                 <Crown size={14}/> Análisis IA Premium
                             </p>
-                            <label className={`cursor-pointer ${isScanning ? 'bg-[var(--bg-hover)] border-[var(--accent-50)]' : 'bg-[var(--bg-hover)] hover:bg-[var(--bg-overlay-hover)] border-[var(--border)] hover:border-[var(--accent-50)]'} text-[var(--text-main)] border px-6 py-3 rounded-xl font-bold shadow-sm flex items-center justify-center gap-3 mx-auto w-fit transition-all`}>
+                            <label className={`cursor-pointer ${isScanning ? 'bg-slate-700 border-slate-600 text-slate-300' : 'bg-[var(--bg-hover)] hover:bg-[var(--bg-overlay-hover)] border-[var(--border)] text-[var(--text-main)] hover:border-[var(--accent-50)]'} border px-6 py-3 rounded-xl font-bold shadow-sm flex items-center justify-center gap-3 mx-auto w-fit transition-all`}>
                                 <Upload size={18}/> {isScanning ? 'Procesando visión artificial...' : 'Subir Captura del Boleto'}
                                 <input type="file" accept="image/*" onChange={escanearBoleto} className="hidden" disabled={isScanning} />
                             </label>
@@ -1274,7 +1434,7 @@ export default function App() {
                                     <div className="p-5 space-y-4 animate-in slide-in-from-top-2 bg-[var(--bg-base)]">
                                         <div className="grid grid-cols-3 gap-4"><div className="col-span-2 space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Evento</label><input type="text" placeholder="Ej: RM - FCB" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" value={sel.title} onChange={e => handleUpdateSelection(sel.id, 'title', e.target.value)} /></div><div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Cuota</label><input type="number" step="0.01" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--accent)] font-extrabold text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" value={sel.odds} onChange={e => handleUpdateSelection(sel.id, 'odds', e.target.value)} /></div></div>
                                         <div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Pronóstico</label><input type="text" placeholder="Ej: Más de 2.5 Goles..." className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" value={sel.selection} onChange={e => handleUpdateSelection(sel.id, 'selection', e.target.value)} /></div>
-                                        <div className="grid grid-cols-2 gap-4"><div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Deporte</label><select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none shadow-inner appearance-none" value={sel.sport} onChange={e => handleUpdateSelection(sel.id, 'sport', e.target.value)}>{(customOptions.sports || []).map(s => <option key={s} value={s}>{s}</option>)}</select></div><div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Estado</label><select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none shadow-inner appearance-none font-bold" value={sel.status} onChange={e => handleUpdateSelection(sel.id, 'status', e.target.value)}><option value="pending" className="text-[var(--yellow)]">Pendiente</option><option value="won" className="text-[var(--accent)]">Ganada</option><option value="lost" className="text-[var(--red)]">Perdida</option><option value="void">Nula</option></select></div></div>
+                                        <div className="grid grid-cols-2 gap-4"><div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Deporte</label><select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none shadow-inner appearance-none" value={sel.sport} onChange={e => handleUpdateSelection(sel.id, 'sport', e.target.value)}>{(customOptions.sports || []).map(s => <option key={s} value={s}>{s}</option>)}{(!customOptions.sports || customOptions.sports.length === 0) && <option value="">Sin deportes definidos</option>}</select></div><div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Estado</label><select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none shadow-inner appearance-none font-bold" value={sel.status} onChange={e => handleUpdateSelection(sel.id, 'status', e.target.value)}><option value="pending" className="text-[var(--yellow)]">Pendiente</option><option value="won" className="text-[var(--accent)]">Ganada</option><option value="lost" className="text-[var(--red)]">Perdida</option><option value="void">Nula</option></select></div></div>
                                         <div className="flex justify-center pt-3 border-t border-[var(--border)]"><button className="text-xs font-bold text-[var(--text-muted)] flex items-center gap-1 hover:text-[var(--text-main)] transition-colors" onClick={(e) => { e.stopPropagation(); toggleSelection(sel.id); }}><ChevronUp size={14}/> Ocultar detalles</button></div>
                                     </div>
                                 )}
@@ -1309,9 +1469,58 @@ export default function App() {
             </div>
             )}
 
+            {isAddingBalance && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+                    <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl w-full max-w-sm rounded-3xl shadow-[var(--shadow-glow-lg)] border border-[var(--accent-20)] overflow-hidden flex flex-col transition-colors">
+                        <div className="px-5 py-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-card)]">
+                            <h3 className="font-bold text-[var(--text-main)] text-lg">Nuevo Balance</h3>
+                            <button onClick={() => setIsAddingBalance(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-overlay)] p-1.5 rounded-full"><X size={18}/></button>
+                        </div>
+                        <div className="p-6 space-y-5">
+                            <div className="space-y-1.5">
+                                <label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Nombre del Balance</label>
+                                <input type="text" placeholder="Ej: General 2026" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors" value={newBalanceData.name} onChange={e => setNewBalanceData({...newBalanceData, name: e.target.value})} autoFocus />
+                            </div>
+                            <div className="space-y-3">
+                                <label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Selecciona Bancas</label>
+                                <div className="max-h-40 overflow-y-auto space-y-2 custom-scrollbar">
+                                    {banks.map(b => (
+                                        <label key={b.id} className="flex items-center gap-3 p-3 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] cursor-pointer hover:bg-[var(--bg-hover)] transition-colors">
+                                            <input 
+                                                type="checkbox" 
+                                                className="accent-[var(--accent)] w-4 h-4"
+                                                checked={newBalanceData.bankIds.includes(b.id)}
+                                                onChange={(e) => {
+                                                    const newIds = e.target.checked 
+                                                        ? [...newBalanceData.bankIds, b.id] 
+                                                        : newBalanceData.bankIds.filter(id => id !== b.id);
+                                                    setNewBalanceData({...newBalanceData, bankIds: newIds});
+                                                }}
+                                            />
+                                            <span className="text-sm font-bold text-[var(--text-main)]">{b.name}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1 flex items-center gap-1"><Lock size={12}/> Privacidad (Opcional)</label>
+                                <input type="text" placeholder="Clave para ver pendientes..." className="w-full bg-[var(--bg-card)] border border-[var(--accent-30)] focus:border-[var(--accent)] rounded-xl px-4 py-3 text-[var(--text-main)] shadow-inner outline-none transition-colors" value={newBalanceData.premiumPassword || ''} onChange={e => setNewBalanceData({...newBalanceData, premiumPassword: e.target.value})} />
+                            </div>
+                            <button onClick={confirmAddBalance} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-bold py-3.5 rounded-xl transition-all shadow-[var(--shadow-glow-md)] mt-4 disabled:opacity-50" disabled={!newBalanceData.name || newBalanceData.bankIds.length === 0}>Crear Balance Agrupado</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {statusModalData && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+                    <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.2)] border border-[var(--accent-20)] p-8 w-full max-w-sm transition-colors"><h3 className="text-[var(--text-main)] font-extrabold text-xl mb-6 text-center tracking-tight drop-shadow-sm">Estado de la Operación</h3><div className="grid grid-cols-2 gap-4"><button onClick={() => handleQuickStatusChange('won')} className="p-4 bg-[var(--accent-10)] hover:bg-[var(--accent-20)] text-[var(--accent)] rounded-2xl font-bold border border-[var(--accent-30)] transition-all flex flex-col items-center gap-2 shadow-inner"><CheckCircle2 size={28}/> Ganada</button><button onClick={() => handleQuickStatusChange('lost')} className="p-4 bg-[var(--red-10)] hover:bg-[var(--red-20)] text-[var(--red)] rounded-2xl font-bold border border-[var(--red-30)] transition-all flex flex-col items-center gap-2 shadow-inner"><XCircle size={28}/> Perdida</button><button onClick={() => handleQuickStatusChange('void')} className="p-4 bg-[var(--bg-overlay)] hover:bg-[var(--bg-overlay-hover)] text-[var(--text-muted)] rounded-2xl font-bold border border-[var(--border-strong)] transition-all flex flex-col items-center gap-2 shadow-inner"><AlertCircle size={28}/> Nula</button><button onClick={() => handleQuickStatusChange('pending')} className="p-4 bg-yellow-500/10 hover:bg-yellow-500/20 text-[var(--yellow)] rounded-2xl font-bold border border-yellow-500/30 transition-all flex flex-col items-center gap-2 shadow-inner"><Clock size={28}/> Pendiente</button></div><button onClick={() => setStatusModalData(null)} className="mt-6 w-full py-3 text-[var(--text-muted)] font-bold hover:text-[var(--text-main)] bg-[var(--bg-card)] rounded-xl transition-colors border border-[var(--border)] hover:border-[var(--border-strong)] shadow-sm">Cancelar</button></div>
+                </div>
+            )}
+
             {/* MODAL DE CONFIRMACIÓN / AVISO */}
             {feedbackModal.isOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
                     <div className="bg-[var(--bg-card)] backdrop-blur-2xl rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.3)] border border-[var(--border-strong)] p-8 w-full max-w-sm text-center transition-colors">
                         {feedbackModal.type === 'alert' ? (
                             <AlertTriangle size={48} className="text-[var(--accent)] mx-auto mb-4 drop-shadow-md" />
@@ -1355,52 +1564,6 @@ export default function App() {
                     </div>
                 </div>
             )}
-
-            {isAddingBalance && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
-                    <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl w-full max-w-sm rounded-3xl shadow-[var(--shadow-glow-lg)] border border-[var(--accent-20)] overflow-hidden flex flex-col transition-colors">
-                        <div className="px-5 py-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-card)]">
-                            <h3 className="font-bold text-[var(--text-main)] text-lg">Nuevo Balance</h3>
-                            <button onClick={() => setIsAddingBalance(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-overlay)] p-1.5 rounded-full"><X size={18}/></button>
-                        </div>
-                        <div className="p-6 space-y-5">
-                            <div className="space-y-1.5">
-                                <label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Nombre del Balance</label>
-                                <input type="text" placeholder="Ej: General 2026" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors" value={newBalanceData.name} onChange={e => setNewBalanceData({...newBalanceData, name: e.target.value})} autoFocus />
-                            </div>
-                            <div className="space-y-3">
-                                <label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Selecciona Bancas</label>
-                                <div className="max-h-40 overflow-y-auto space-y-2 custom-scrollbar">
-                                    {banks.map(b => (
-                                        <label key={b.id} className="flex items-center gap-3 p-3 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] cursor-pointer hover:bg-[var(--bg-hover)] transition-colors">
-                                            <input 
-                                                type="checkbox" 
-                                                className="accent-[var(--accent)] w-4 h-4"
-                                                checked={newBalanceData.bankIds.includes(b.id)}
-                                                onChange={(e) => {
-                                                    const newIds = e.target.checked 
-                                                        ? [...newBalanceData.bankIds, b.id] 
-                                                        : newBalanceData.bankIds.filter(id => id !== b.id);
-                                                    setNewBalanceData({...newBalanceData, bankIds: newIds});
-                                                }}
-                                            />
-                                            <span className="text-sm font-bold text-[var(--text-main)]">{b.name}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            </div>
-                            <button onClick={confirmAddBalance} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-bold py-3.5 rounded-xl transition-all shadow-[var(--shadow-glow-md)] mt-4 disabled:opacity-50" disabled={!newBalanceData.name || newBalanceData.bankIds.length === 0}>Crear Balance Agrupado</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {statusModalData && (
-                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
-                    <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.2)] border border-[var(--accent-20)] p-8 w-full max-w-sm transition-colors"><h3 className="text-[var(--text-main)] font-extrabold text-xl mb-6 text-center tracking-tight drop-shadow-sm">Estado de la Operación</h3><div className="grid grid-cols-2 gap-4"><button onClick={() => handleQuickStatusChange('won')} className="p-4 bg-[var(--accent-10)] hover:bg-[var(--accent-20)] text-[var(--accent)] rounded-2xl font-bold border border-[var(--accent-30)] transition-all flex flex-col items-center gap-2 shadow-inner"><CheckCircle2 size={28}/> Ganada</button><button onClick={() => handleQuickStatusChange('lost')} className="p-4 bg-[var(--red-10)] hover:bg-[var(--red-20)] text-[var(--red)] rounded-2xl font-bold border border-[var(--red-30)] transition-all flex flex-col items-center gap-2 shadow-inner"><XCircle size={28}/> Perdida</button><button onClick={() => handleQuickStatusChange('void')} className="p-4 bg-[var(--bg-overlay)] hover:bg-[var(--bg-overlay-hover)] text-[var(--text-muted)] rounded-2xl font-bold border border-[var(--border-strong)] transition-all flex flex-col items-center gap-2 shadow-inner"><AlertCircle size={28}/> Nula</button><button onClick={() => handleQuickStatusChange('pending')} className="p-4 bg-yellow-500/10 hover:bg-yellow-500/20 text-[var(--yellow)] rounded-2xl font-bold border border-yellow-500/30 transition-all flex flex-col items-center gap-2 shadow-inner"><Clock size={28}/> Pendiente</button></div><button onClick={() => setStatusModalData(null)} className="mt-6 w-full py-3 text-[var(--text-muted)] font-bold hover:text-[var(--text-main)] bg-[var(--bg-card)] rounded-xl transition-colors border border-[var(--border)] hover:border-[var(--border-strong)] shadow-sm">Cancelar</button></div>
-                </div>
-            )}
-
         </div>
         </>
     );
