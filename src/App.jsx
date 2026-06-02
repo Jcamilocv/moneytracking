@@ -1518,6 +1518,46 @@ export default function App() {
                 </div>
             )}
 
+            {/* MODAL DE COMPARTIR Y DISTRIBUCIÓN (WIDGETS) */}
+            {shareModal.isOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+                    <div className="bg-[var(--bg-card)] backdrop-blur-2xl rounded-3xl shadow-2xl border border-[var(--border-strong)] p-6 md:p-8 w-full max-w-lg transition-colors overflow-hidden relative">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-[var(--accent)] blur-[80px] opacity-20 pointer-events-none"></div>
+                        <button onClick={() => setShareModal({ isOpen: false, link: '', iframe: '' })} className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors bg-[var(--bg-overlay)] p-1.5 rounded-full"><X size={18}/></button>
+                        
+                        <div className="flex items-center gap-3 mb-6 relative z-10">
+                            <div className="w-12 h-12 bg-[var(--accent-10)] rounded-xl flex items-center justify-center text-[var(--accent)] shadow-inner border border-[var(--accent-20)]"><Code size={24}/></div>
+                            <div>
+                                <h3 className="text-[var(--text-main)] font-extrabold text-xl tracking-tight">Insertar o Compartir</h3>
+                                <p className="text-[var(--text-muted)] text-sm">Elige cómo quieres distribuir tus datos.</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-6 relative z-10">
+                            {/* Opción 1: Link Directo */}
+                            <div className="bg-[var(--bg-base)] p-4 rounded-2xl border border-[var(--border)] shadow-inner">
+                                <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-main)] mb-2 flex items-center gap-2"><LinkIcon size={14} className="text-[var(--accent)]"/> Link Público (Sólo lectura)</h4>
+                                <p className="text-[10px] text-[var(--text-muted)] mb-3 leading-relaxed">Envía este enlace por Telegram o WhatsApp. Cualquiera podrá ver los resultados de esta banca o balance sin registrarse.</p>
+                                <div className="flex gap-2">
+                                    <input type="text" readOnly value={shareModal.link} className="flex-1 bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-xs text-[var(--text-muted)] outline-none" />
+                                    <button onClick={() => copyToClipboard(shareModal.link, "¡Enlace público copiado!")} className="bg-[var(--accent)] text-[var(--accent-fg)] px-4 py-2.5 rounded-xl text-xs font-bold hover:opacity-90 transition-opacity">Copiar</button>
+                                </div>
+                            </div>
+
+                            {/* Opción 2: Widget Embebido */}
+                            <div className="bg-[var(--bg-base)] p-4 rounded-2xl border border-[var(--border)] shadow-inner relative overflow-hidden">
+                                <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-main)] mb-2 flex items-center gap-2"><Layers size={14} className="text-[var(--accent)]"/> Insertar Widget en tu Web</h4>
+                                <p className="text-[10px] text-[var(--text-muted)] mb-3 leading-relaxed">Copia este código HTML y pégalo en tu web (WordPress, Shopify, etc.). Se mostrará un Widget premium adaptado y sin menús laterales.</p>
+                                <div className="relative group">
+                                    <textarea readOnly value={shareModal.iframe} className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-3 text-[10px] font-mono text-[var(--text-muted)] outline-none resize-none h-20 custom-scrollbar"></textarea>
+                                    <button onClick={() => copyToClipboard(shareModal.iframe, "¡Código HTML del Widget copiado!")} className="absolute right-2 bottom-2 bg-[var(--accent)] text-[var(--accent-fg)] px-3 py-1.5 rounded-lg text-xs font-bold hover:opacity-90 transition-opacity shadow-md">Copiar Código</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* MODAL DE CONFIRMACIÓN / AVISO */}
             {feedbackModal.isOpen && (
                 <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
