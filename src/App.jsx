@@ -5,17 +5,18 @@ import {
     Clock, Calendar, Download, Upload, FileText, 
     ArrowUpRight, ArrowDownRight, AlertTriangle, 
     BarChart2, LineChart, Tags, LogOut, Database, Eye, Link as LinkIcon, CalendarDays,
-    HelpCircle, Lock, ShieldCheck, XCircle, AlertCircle, Sun, Moon
+    HelpCircle, Lock, ShieldCheck, XCircle, AlertCircle, Sun, Moon, Layers
 } from 'lucide-react';
 import { 
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
     BarChart, Bar, Cell, Line, LineChart as ReLineChart 
 } from 'recharts';
+import LZString from 'lz-string';
 
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
-import { getFirestore, collection, onSnapshot, addDoc, doc, deleteDoc, updateDoc, setDoc } from "firebase/firestore";
+import { getFirestore, collection, onSnapshot, addDoc, doc, deleteDoc, updateDoc, setDoc, writeBatch } from "firebase/firestore";
 
 // --- CONFIGURACIÓN DE FIREBASE ---
 const firebaseConfig = {
@@ -151,6 +152,26 @@ const fetchWithRetry = async (url, options, retries = 5) => {
     throw new Error("Failed after retries");
 };
 
+// --- HELPER ESTADÍSTICAS BÁSICAS ---
+const getStatsForBets = (betList, initialCap) => {
+    let staked=0, returned=0, runningProfit=0;
+    betList.forEach(bet => {
+        if(bet.status === 'pending') return;
+        const amt = bet.amount || 0; 
+        staked += amt; 
+        let profit = 0;
+        if (bet.status === 'won') { profit = (amt * bet.odds) - amt; returned += (amt * bet.odds); } 
+        else if (bet.status === 'lost') { profit = -amt; }
+        else if (bet.status === 'half-won') { profit = (amt/2)*(bet.odds-1); returned += (amt + profit); }
+        else if (bet.status === 'half-lost') { profit = -(amt/2); returned += (amt/2); }
+        runningProfit += profit;
+    });
+    const yieldPerc = staked > 0 ? (runningProfit / staked) * 100 : 0;
+    const progression = initialCap > 0 ? (runningProfit / initialCap) * 100 : 0;
+    return { picks: betList.filter(b => b.status !== 'pending').length, profit: runningProfit, yieldPerc, progression };
+};
+
+// --- COMPONENTES UI ---
 const StatCard = ({ title, value, subValue, isCurrency = false, currency = 'EUR', colorClass = "text-[var(--text-main)]" }) => (
     <div className="p-3 md:p-4 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl hover:bg-[var(--bg-hover)] transition-all flex flex-col justify-between min-h-[90px] shadow-sm">
         <p className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider font-semibold mb-1 truncate" title={title}>{title}</p>
@@ -203,24 +224,26 @@ export default function App() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     
     const [banks, setBanks] = useState([]);
+    const [balances, setBalances] = useState([]); // NUEVO: Estado de balances agrupados
     const [currentBankId, setCurrentBankId] = useState(null);
     const [bets, setBets] = useState([]); 
     const [customOptions, setCustomOptions] = useState({ sports: [], categories: [] });
     
     const [showBetForm, setShowBetForm] = useState(false);
     const [isAddingBank, setIsAddingBank] = useState(false); 
+    const [isAddingBalance, setIsAddingBalance] = useState(false); // NUEVO: Modal crear balance
     const [editingBetId, setEditingBetId] = useState(null); 
     const [expandedBetId, setExpandedBetId] = useState(null); 
     const [showMoreOptions, setShowMoreOptions] = useState(false);
     const [statusModalData, setStatusModalData] = useState(null); 
     const [feedbackModal, setFeedbackModal] = useState({ isOpen: false, type: 'alert', message: '', onConfirm: null });
+    const [isProcessing, setIsProcessing] = useState(false);
     const [expandedMonths, setExpandedMonths] = useState({});
     const [formErrors, setFormErrors] = useState({}); 
     const [isCustomBookmaker, setIsCustomBookmaker] = useState(false);
     const [chartViewMode, setChartViewMode] = useState('detailed');
     const [barChartViewMode, setBarChartViewMode] = useState('weekly'); 
 
-    // Estados para el modo visitante y contraseñas
     const [viewMode, setViewMode] = useState(initialShare.mode); 
     const [visitingUserId, setVisitingUserId] = useState(initialShare.uid);
     const [visitingBankId, setVisitingBankId] = useState(initialShare.bid);
@@ -233,6 +256,7 @@ export default function App() {
     const [newCustomSport, setNewCustomSport] = useState('');
     const [newCustomCategory, setNewCustomCategory] = useState('');
     const [newBankData, setNewBankData] = useState({ name: '', initialCapital: 1000, currency: 'EUR', premiumPassword: '' }); 
+    const [newBalanceData, setNewBalanceData] = useState({ name: '', bankIds: [] }); // NUEVO: Data balance
     const fileInputRef = useRef(null);
     
     const [isScanning, setIsScanning] = useState(false);
@@ -341,7 +365,7 @@ export default function App() {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             setCurrentUser(user);
-            if (!user && viewMode === 'personal') { setLoading(false); setBanks([]); setBets([]); }
+            if (!user && viewMode === 'personal') { setLoading(false); setBanks([]); setBets([]); setBalances([]); }
         });
         return () => unsubscribe();
     }, [viewMode]);
@@ -364,13 +388,20 @@ export default function App() {
                 setVisitingBank(vBank || null);
             } else {
                 setBanks(banksData);
-                if (banksData.length > 0 && !currentBankId) setCurrentBankId(banksData[0].id);
             }
         }, (error) => {
             console.error("Error en Firebase (Bancos):", error);
             setDbError('Firebase ha bloqueado el acceso. Asegúrate de haber actualizado las Reglas de Firestore.');
             setLoading(false);
         });
+
+        // NUEVO: Sincronizar Balances Agrupados
+        const balancesRef = collection(db, 'users', targetUid, 'balances');
+        const unsubBalances = onSnapshot(balancesRef, (snapshot) => {
+            if (viewMode === 'personal') {
+                setBalances(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            }
+        }, (error) => console.error(error));
 
         const betsRef = collection(db, 'users', targetUid, 'bets');
         const unsubBets = onSnapshot(betsRef, (snapshot) => {
@@ -398,28 +429,68 @@ export default function App() {
             }
         }, (error) => console.error("Error preferencias:", error));
 
-        return () => { unsubBanks(); unsubBets(); unsubPrefs(); };
-    }, [currentUser, viewMode, visitingUserId, visitingBankId, currentBankId]);
+        return () => { unsubBanks(); unsubBets(); unsubPrefs(); unsubBalances(); };
+    }, [currentUser, viewMode, visitingUserId, visitingBankId]);
 
+    // NUEVO: Memoria de última banca seleccionada
+    useEffect(() => {
+        if (viewMode === 'personal' && banks.length > 0 && !currentBankId) {
+            const lastSavedId = localStorage.getItem(`moneytracking_last_bank_${currentUser?.uid}`);
+            if (lastSavedId && (banks.find(b => b.id === lastSavedId) || balances.find(b => b.id === lastSavedId))) {
+                setCurrentBankId(lastSavedId);
+            } else {
+                setCurrentBankId(banks[0].id);
+            }
+        }
+    }, [banks, balances, currentBankId, currentUser, viewMode]);
+
+    const handleBankChange = (e) => {
+        const newId = e.target.value;
+        setCurrentBankId(newId);
+        if (currentUser) {
+            localStorage.setItem(`moneytracking_last_bank_${currentUser.uid}`, newId);
+        }
+    };
+
+    // Modificado para soportar Balances Virtuales
     const activeBankData = useMemo(() => {
         if (viewMode === 'visiting') return visitingBank;
-        return banks.find(b => b.id === currentBankId) || null; 
-    }, [banks, currentBankId, viewMode, visitingBank]);
+        
+        const normalBank = banks.find(b => b.id === currentBankId);
+        if (normalBank) return normalBank;
 
+        const balanceGroup = balances.find(b => b.id === currentBankId);
+        if (balanceGroup) {
+            const includedBanks = banks.filter(b => balanceGroup.bankIds.includes(b.id));
+            const totalCapital = includedBanks.reduce((sum, b) => sum + (parseFloat(b.initialCapital) || 0), 0);
+            return {
+                id: balanceGroup.id,
+                name: `[Balance] ${balanceGroup.name}`,
+                initialCapital: totalCapital,
+                currency: includedBanks[0]?.currency || 'EUR',
+                isBalance: true,
+                bankIds: balanceGroup.bankIds
+            };
+        }
+        return null;
+    }, [banks, balances, currentBankId, viewMode, visitingBank]);
+
+    // Modificado para extraer apuestas de múltiples bancas si es un Balance
     const activeBetsData = useMemo(() => {
         let rawBets = [];
         if (viewMode === 'visiting') rawBets = visitingBets;
-        else if (currentBankId) rawBets = bets.filter(b => b.bankId === currentBankId);
+        else if (activeBankData?.isBalance) {
+            rawBets = bets.filter(b => activeBankData.bankIds.includes(b.bankId));
+        } else if (currentBankId) {
+            rawBets = bets.filter(b => b.bankId === currentBankId);
+        }
 
         rawBets = rawBets.sort((a, b) => new Date(`${b.date}T${b.time || '00:00'}`) - new Date(`${a.date}T${a.time || '00:00'}`));
 
         if (viewMode === 'visiting') {
-            if (activeBankData?.premiumPassword && unlockedBank) {
-                return rawBets;
-            }
+            if (activeBankData?.premiumPassword && unlockedBank) return rawBets;
             return rawBets.filter(b => b.status !== 'pending');
         }
-        
         return rawBets; 
     }, [bets, currentBankId, viewMode, visitingBets, activeBankData, unlockedBank]);
 
@@ -532,8 +603,16 @@ export default function App() {
         await signOut(auth);
     };
 
+    const showAlert = (message) => setFeedbackModal({ isOpen: true, type: 'alert', message, onConfirm: null });
+    const showConfirm = (message, onConfirm) => setFeedbackModal({ isOpen: true, type: 'confirm', message, onConfirm });
+    const closeFeedbackModal = () => {
+        if (!isProcessing) {
+            setFeedbackModal(prev => ({ ...prev, isOpen: false }));
+        }
+    };
+
     const generateShareLink = () => {
-        if(!activeBankData || !activeBankData.id) return alert("Selecciona una banca válida.");
+        if(!activeBankData || !activeBankData.id || activeBankData.isBalance) return showAlert("Selecciona una banca individual válida. Los balances agrupados no se pueden compartir.");
         try {
             const shareStr = btoa(`${currentUser.uid}|${activeBankData.id}`);
             let currentDomain = window.location.origin + window.location.pathname;
@@ -548,8 +627,8 @@ export default function App() {
             } else {
                 msg += "Cualquiera con este enlace leerá tu banca en tiempo real.\nPor privacidad, los visitantes nunca verán las apuestas en curso a menos que configures una Privacidad.";
             }
-            alert(msg);
-        } catch (e) { alert("Error generando el enlace."); }
+            showAlert(msg);
+        } catch (e) { showAlert("Error generando el enlace."); }
     };
 
     const handleExitVisiting = () => {
@@ -570,7 +649,8 @@ export default function App() {
 
     const handleSaveBet = async (e) => {
         e.preventDefault(); if (viewMode === 'visiting') return; 
-        if (!newBet.amount) return showAlert("Introduce importe"); if (!currentBankId) return showAlert("Crea una banca primero.");
+        if (!newBet.amount) return showAlert("Introduce un importe válido."); if (!currentBankId) return showAlert("Crea una banca primero.");
+        if (activeBankData?.isBalance) return showAlert("No puedes añadir apuestas en una vista de Balance Agrupado. Selecciona una banca individual.");
         if (!editingBetId && currentBets.length >= LIMITS.MAX_BETS_PER_BANK) { return showAlert(`Límite de ${LIMITS.MAX_BETS_PER_BANK} apuestas por banca alcanzado.`); }
         
         const totalOdds = newBet.selections.reduce((acc, s) => acc * (parseFloat(s.odds)||1), 1);
@@ -597,9 +677,12 @@ export default function App() {
         reader.onload = async (e) => {
             const allRows = parseComplexCSV(e.target.result);
             const dataRows = (allRows.length > 0 && allRows[0][0] && allRows[0][0].replace(/"/g, '') === 'Date') ? allRows.slice(1) : allRows;
-            if (dataRows.length === 0) return showAlert("Archivo vacío.");
+            if (dataRows.length === 0) return showAlert("Archivo vacío o no válido.");
             const validNewRows = dataRows.filter(cols => cols && cols.length >= 2 && cols[0]);
             let newBets = []; let currentBet = null;
+            const batch = writeBatch(db);
+            const betsCollection = collection(db, 'users', currentUser.uid, 'bets');
+
             validNewRows.forEach(cols => {
                 const cleanCols = cols.map(c => c ? c.replace(/^"|"$/g, '').trim() : ''); const dateVal = cleanCols[0]; const statusMap = { 'W': 'won', 'L': 'lost', 'V': 'void', 'P': 'pending' };
                 if (dateVal) {
@@ -612,34 +695,43 @@ export default function App() {
             if (currentBet) newBets.push(currentBet);
             
             try {
-                for(let b of newBets) { await addDoc(collection(db, 'users', currentUser.uid, 'bets'), b); }
-                showAlert(`¡Importado con éxito! Añadidas ${newBets.length} apuestas.`);
+                setIsProcessing(true);
+                newBets.forEach(b => {
+                    const newDocRef = doc(betsCollection);
+                    batch.set(newDocRef, b);
+                });
+                await batch.commit();
+                showAlert(`¡Importado con éxito! Añadidas ${newBets.length} apuestas a la nube.`);
             } catch(error) {
-                console.error(error); showAlert("Error importando algunos datos.");
+                console.error(error); showAlert("Hubo algún error procesando algunos datos de tu Excel.");
+            } finally {
+                setIsProcessing(false);
             }
         };
         reader.readAsText(file); event.target.value = null;
     };
 
     const handleExportCSV = () => {
-        if (!activeBetsData.length) return showAlert("No hay datos en esta banca.");
+        if (!activeBetsData.length) return showAlert("No hay datos en esta banca para exportar.");
         const header = `"Date";"Type";"Sport";"Label";"Odds";"Stake";"State";"Bookmaker";"Tipster";"Category";"Competition";"BetType";"Closing";"Commission";"Bonus";"Live";"Freebet";"Cashout";"Eachway";"Comment"`;
         const rows = activeBetsData.map(b => {
             const statusMap = { 'won': 'W', 'lost': 'L', 'void': 'V', 'pending': 'P', 'half-won': 'HW', 'half-lost': 'HL' }; const dateFull = `${b.date} ${b.time || '00:00'}`; const safeText = (txt) => txt ? txt.replace(/"/g, '""') : '';
-            return `"${dateFull}";"${b.selections?.length > 1 ? 'Combined' : 'Simple'}";"${safeText(b.selections[0]?.sport)}";"${safeText(b.title)}";"${b.odds}";"${b.amount || 0}";"${statusMap[b.status] || 'P'}";"${safeText(b.bookmaker)}";"";"${safeText(b.selections[0]?.category)}";"";"${safeText(b.selection)}";"";"";"";"${b.isLive ? 'Yes' : 'No'}";"${b.isFreebet ? 'Yes' : 'No'}";"${b.cashout || ''}";"${b.isEachWay ? 'Yes' : 'No'}";"${safeText(b.analysis)}"`
+            return `"${dateFull}";"${b.selections?.length > 1 ? 'Combined' : 'Simple'}";"${safeText(b.selections?.[0]?.sport || '')}";"${safeText(b.title)}";"${b.odds}";"${b.amount || 0}";"${statusMap[b.status] || 'P'}";"${safeText(b.bookmaker)}";"";"${safeText(b.category || b.selections?.[0]?.category || '')}";"";"${safeText(b.selection || b.selections?.[0]?.selection || '')}";"";"";"";"${b.isLive ? 'Yes' : 'No'}";"${b.isFreebet ? 'Yes' : 'No'}";"${b.cashout || ''}";"${b.isEachWay ? 'Yes' : 'No'}";"${safeText(b.analysis)}"`
         });
         const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([[header, ...rows].join("\n")], { type: 'text/csv;charset=utf-8;' })); link.setAttribute("download", `MoneyTracKING_Export_${new Date().toISOString().slice(0,10)}.csv`); document.body.appendChild(link); link.click(); document.body.removeChild(link);
     };
 
-    const showAlert = (message) => setFeedbackModal({ isOpen: true, type: 'alert', message, onConfirm: null });
-    const showConfirm = (message, onConfirm) => setFeedbackModal({ isOpen: true, type: 'confirm', message, onConfirm });
-    const closeFeedbackModal = () => setFeedbackModal(prev => ({ ...prev, isOpen: false }));
-
     const handleDeleteBet = (id) => { 
         if (viewMode === 'visiting') return;
         showConfirm('¿Estás seguro de que deseas eliminar esta operación de forma permanente?', async () => {
-            try { await deleteDoc(doc(db, 'users', currentUser.uid, 'bets', id)); }
-            catch(e) { console.error(e); showAlert("Error borrando apuesta. Revisa tu conexión."); }
+            try { 
+                await deleteDoc(doc(db, 'users', currentUser.uid, 'bets', id)); 
+                closeFeedbackModal();
+            }
+            catch(e) { 
+                console.error("Error Firebase:", e); 
+                showAlert(`Fallo en la nube: ${e.message}`); 
+            }
         });
     };
 
@@ -648,7 +740,7 @@ export default function App() {
         try {
             const betToUpdate = bets.find(b => b.id === statusModalData.id);
             if(betToUpdate) {
-                const newSels = betToUpdate.selections.map(s => ({...s, status}));
+                const newSels = (betToUpdate.selections || []).map(s => ({...s, status}));
                 await updateDoc(doc(db, 'users', currentUser.uid, 'bets', statusModalData.id), { status, selections: newSels });
             }
             setStatusModalData(null); 
@@ -656,7 +748,45 @@ export default function App() {
     };
 
     const handleBookieChange = (e) => { const val=e.target.value; if(val==='Otra'){setIsCustomBookmaker(true);setNewBet(p=>({...p,bookmaker:''}))}else{setIsCustomBookmaker(false);setNewBet(p=>({...p,bookmaker:val}))}};
-    const handleEditClick = (bet) => { if (viewMode === 'visiting') return; setIsCustomBookmaker(!COMMON_BOOKMAKERS.includes(bet.bookmaker)); setEditingBetId(bet.id); setFormErrors({}); setNewBet(bet); setShowBetForm(true); setAiMessage(''); };
+    
+    const handleEditClick = (bet) => { 
+        if (viewMode === 'visiting') return; 
+        setIsCustomBookmaker(!COMMON_BOOKMAKERS.includes(bet.bookmaker || '')); 
+        setEditingBetId(bet.id); 
+        setFormErrors({}); 
+        
+        setNewBet({
+            ...bet,
+            date: bet.date || new Date().toISOString().split('T')[0],
+            time: bet.time || '00:00',
+            bookmaker: bet.bookmaker || 'Bet365',
+            betMode: bet.betMode || 'simple',
+            title: bet.title || '',
+            selections: bet.selections?.length > 0 ? bet.selections : [{ 
+                id: Date.now(), 
+                title: bet.title || '', 
+                selection: bet.selection || '', 
+                sport: bet.sport || customOptions.sports?.[0] || 'Fútbol', 
+                status: bet.status || 'pending', 
+                category: bet.category || '', 
+                odds: bet.odds || 1.50, 
+                isOpen: true 
+            }],
+            amount: bet.amount || 0,
+            stake: bet.stake || 0,
+            analysis: bet.analysis || '',
+            commission: bet.commission || '',
+            bonus: bet.bonus || '',
+            isLive: bet.isLive || false,
+            isFreebet: bet.isFreebet || false,
+            cashout: bet.cashout || '',
+            isEachWay: bet.isEachWay || false,
+            tipster: bet.tipster || 'Money Tips'
+        }); 
+        setShowBetForm(true); 
+        setAiMessage(''); 
+    };
+
     const handleAddSelection = () => setNewBet(p => ({...p, selections: [...p.selections, { id: Date.now(), title: '', selection: '', sport: customOptions.sports?.[0] || 'Fútbol', status: 'pending', category: '', odds: 1.50, isOpen: true }]}));
     const handleRemoveSelection = (id) => { if(newBet.selections.length > 1) setNewBet(p => ({ ...p, selections: p.selections.filter(s => s.id !== id) })); };
     const handleUpdateSelection = (id, f, v) => setNewBet(p => ({ ...p, selections: p.selections.map(s => s.id === id ? { ...s, [f]: v } : s) }));
@@ -695,7 +825,7 @@ export default function App() {
     };
     
     const openAddBankModal = () => {
-        if(banks.length >= LIMITS.MAX_BANKS) return showAlert(`Límite de ${LIMITS.MAX_BANKS} bancas alcanzado.`);
+        if(banks.length >= LIMITS.MAX_BANKS) return showAlert(`Límite de ${LIMITS.MAX_BANKS} bancas individuales alcanzado.`);
         setNewBankData({ name: `Nueva Banca ${banks.length+1}`, initialCapital: 1000, currency: 'EUR', premiumPassword: '' }); setIsAddingBank(true);
     };
 
@@ -713,9 +843,43 @@ export default function App() {
     }
 
     const handleDeleteBank = (id) => {
-        showConfirm('¿Borrar banca? Se eliminarán todos sus datos y apuestas asociadas de forma irreversible.', async () => {
-            try { await deleteDoc(doc(db, 'users', currentUser.uid, 'banks', id)); }
+        showConfirm('¿Borrar banca? Se eliminarán todos sus datos y apuestas asociadas.', async () => {
+            try { 
+                await deleteDoc(doc(db, 'users', currentUser.uid, 'banks', id)); 
+                closeFeedbackModal();
+            }
             catch(e) { console.error(e); showAlert("Error borrando banca."); }
+        });
+    };
+
+    // NUEVO: Funciones para Balances Agrupados
+    const confirmAddBalance = async (e) => {
+        e.preventDefault();
+        try {
+            await addDoc(collection(db, 'users', currentUser.uid, 'balances'), {
+                name: newBalanceData.name,
+                bankIds: newBalanceData.bankIds,
+                createdAt: new Date().toISOString()
+            });
+            setIsAddingBalance(false);
+            setNewBalanceData({ name: '', bankIds: [] });
+            showAlert("Balance agrupado creado correctamente.");
+        } catch (error) {
+            console.error("Error creando balance:", error);
+            showAlert("Error creando el balance.");
+        }
+    };
+
+    const handleDeleteBalance = (id) => {
+        showConfirm('¿Eliminar esta agrupación? Las bancas individuales no se verán afectadas.', async () => {
+            try { 
+                await deleteDoc(doc(db, 'users', currentUser.uid, 'balances', id)); 
+                closeFeedbackModal();
+                if (currentBankId === id) {
+                    setCurrentBankId(banks[0]?.id || null);
+                }
+            }
+            catch(e) { console.error(e); showAlert("Error borrando balance."); }
         });
     };
 
@@ -730,7 +894,9 @@ export default function App() {
             <div className="min-h-screen relative flex items-center justify-center p-4">
                 <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl p-8 rounded-[2rem] border border-[var(--border)] shadow-[var(--shadow-glow-lg)] w-full max-w-[400px] animate-in fade-in transition-colors">
                     <div className="flex justify-center mb-6">
-                        <img src="/favicon.jpg" alt="MoneyTrackING Logo" className="w-20 h-20 rounded-full object-cover shadow-inner border border-[var(--border)]" />
+                        <div className="w-16 h-16 bg-[var(--bg-card)] rounded-full flex items-center justify-center shadow-inner border border-[var(--border)]">
+                            <Lock size={28} className="text-[var(--yellow)] drop-shadow-md"/>
+                        </div>
                     </div>
                     <h1 className="text-3xl font-extrabold text-center text-[var(--text-main)] mb-2 tracking-tight">MoneyTrac<span className="text-[var(--yellow)]">KING</span></h1>
                     <p className="text-[var(--text-muted)] text-center text-sm mb-8 font-medium">Tu gestor de bankroll nivel Dios</p>
@@ -746,7 +912,7 @@ export default function App() {
         );
     }
 
-    if (loading) return <><style>{getGlobalStyles(theme)}</style><LiquidBackground theme={theme}/><div className="min-h-screen flex items-center justify-center text-[var(--accent)] animate-pulse font-bold text-xl drop-shadow-md">Conectando con la nube...</div></>;
+    if (loading && viewMode === 'personal') return <><style>{getGlobalStyles(theme)}</style><LiquidBackground theme={theme}/><div className="min-h-screen flex items-center justify-center text-[var(--accent)] animate-pulse font-bold text-xl drop-shadow-md">Conectando con la nube...</div></>;
 
     if (viewMode === 'visiting' && !loading && !visitingBank) {
         return (
@@ -822,7 +988,14 @@ export default function App() {
                 <div className="fixed inset-0 z-50 bg-[var(--bg-modal)] backdrop-blur-md md:hidden animate-in fade-in" onClick={() => setIsMobileMenuOpen(false)}>
                     <div className="absolute top-0 left-0 bottom-0 w-64 bg-[var(--bg-base-95)] backdrop-blur-2xl p-4 shadow-2xl border-r border-[var(--accent-20)] slide-in transition-colors" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between items-center mb-6"><h2 className="font-bold text-lg text-[var(--text-main)]">Menú</h2><button onClick={() => setIsMobileMenuOpen(false)} className="p-1.5 rounded-full bg-[var(--bg-overlay)] hover:bg-[var(--bg-overlay-hover)] text-[var(--text-muted)]"><X size={18}/></button></div>
-                        <nav className="space-y-2"><MobileMenuItem icon={LayoutDashboard} label="Dashboard" tabId="dashboard" /><MobileMenuItem icon={List} label="Mis Apuestas" tabId="bets" /><div className="pt-6 pb-2 px-4 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Configuración</div><MobileMenuItem icon={Settings} label="Configuración" tabId="settings" /><MobileMenuItem icon={Tags} label="Personalización" tabId="customization" /></nav>
+                        <nav className="space-y-2">
+                            <MobileMenuItem icon={LayoutDashboard} label="Dashboard" tabId="dashboard" />
+                            <MobileMenuItem icon={List} label="Mis Apuestas" tabId="bets" />
+                            <MobileMenuItem icon={Layers} label="Balances" tabId="balances" />
+                            <div className="pt-6 pb-2 px-4 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Configuración</div>
+                            <MobileMenuItem icon={Settings} label="Configuración" tabId="settings" />
+                            <MobileMenuItem icon={Tags} label="Personalización" tabId="customization" />
+                        </nav>
                     </div>
                 </div>
             )}
@@ -839,7 +1012,14 @@ export default function App() {
                         <div className="mt-auto"><button onClick={handleExitVisiting} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-[var(--text-main)] bg-[var(--bg-overlay)] border border-[var(--border)] hover:bg-[var(--bg-overlay-hover)] transition-all backdrop-blur-md"><LogOut size={16}/> {currentUser ? 'Volver a mi Banca' : 'Ir al Inicio de Sesión'}</button></div>
                     </div>
                 ) : (
-                    <><nav className="p-4 space-y-2 flex-1"><button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'dashboard' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><LayoutDashboard size={18}/> Dashboard</button><button onClick={() => setActiveTab('bets')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'bets' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><List size={18}/> Mis Apuestas</button><div className="pt-6 pb-2 px-4 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Configuración</div><button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'settings' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><Settings size={18}/> Configuración</button><button onClick={() => setActiveTab('customization')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'customization' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><Tags size={18}/> Personalización</button></nav><div className="p-4 border-t border-[var(--border)]"><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center text-xs font-bold text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]">{currentUser.email?.charAt(0).toUpperCase()}</div><div className="text-sm font-medium text-[var(--text-main)] max-w-[100px] truncate">{currentUser.email?.split('@')[0]}</div></div><button onClick={handleLogout} className="text-[var(--text-muted)] hover:text-[var(--red)] bg-[var(--bg-overlay)] p-1.5 rounded-full"><LogOut size={16}/></button></div><div className="text-center text-[10px] text-[var(--accent-80)] mt-3 font-medium"><ShieldCheck size={10} className="inline mr-1"/> Sincronizado en la nube</div></div></>
+                    <><nav className="p-4 space-y-2 flex-1">
+                        <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'dashboard' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><LayoutDashboard size={18}/> Dashboard</button>
+                        <button onClick={() => setActiveTab('bets')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'bets' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><List size={18}/> Mis Apuestas</button>
+                        <button onClick={() => setActiveTab('balances')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'balances' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><Layers size={18}/> Balances</button>
+                        <div className="pt-6 pb-2 px-4 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Configuración</div>
+                        <button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'settings' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><Settings size={18}/> Configuración</button>
+                        <button onClick={() => setActiveTab('customization')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'customization' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><Tags size={18}/> Personalización</button>
+                    </nav><div className="p-4 border-t border-[var(--border)]"><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center text-xs font-bold text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]">{currentUser.email?.charAt(0).toUpperCase()}</div><div className="text-sm font-medium text-[var(--text-main)] max-w-[100px] truncate">{currentUser.email?.split('@')[0]}</div></div><button onClick={handleLogout} className="text-[var(--text-muted)] hover:text-[var(--red)] bg-[var(--bg-overlay)] p-1.5 rounded-full"><LogOut size={16}/></button></div><div className="text-center text-[10px] text-[var(--accent-80)] mt-3 font-medium"><ShieldCheck size={10} className="inline mr-1"/> Sincronizado en la nube</div></div></>
                 )}
             </aside>
 
@@ -847,15 +1027,32 @@ export default function App() {
                 <header className="h-16 bg-transparent backdrop-blur-xl border-b border-[var(--border)] flex items-center justify-between px-6 sticky top-0 z-30 transition-colors">
                     <div className="flex items-center gap-4">
                         <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 rounded-xl bg-[var(--bg-overlay)] text-[var(--text-main)] hover:bg-[var(--bg-overlay-hover)] border border-[var(--border)]"><Menu size={20} /></button>
-                        <h2 className="text-xl font-bold text-[var(--text-main)] tracking-tight">{viewMode === 'visiting' ? <span className="text-indigo-500 dark:text-indigo-300 flex items-center gap-2 drop-shadow-sm"><Eye size={20}/> Visitando: {activeBankData?.name}</span> : (activeTab === 'dashboard' ? 'Panel de Control' : activeTab === 'bets' ? 'Mis Apuestas' : activeTab === 'customization' ? 'Personalización' : 'Configuración')}</h2>
+                        <h2 className="text-xl font-bold text-[var(--text-main)] tracking-tight">
+                            {viewMode === 'visiting' 
+                                ? <span className="text-indigo-500 dark:text-indigo-300 flex items-center gap-2 drop-shadow-sm"><Eye size={20}/> Visitando: {activeBankData?.name}</span> 
+                                : (activeTab === 'dashboard' ? 'Panel de Control' : activeTab === 'bets' ? 'Mis Apuestas' : activeTab === 'customization' ? 'Personalización' : activeTab === 'balances' ? 'Balances' : 'Configuración')}
+                        </h2>
                     </div>
                     <div className="flex items-center gap-3">
                         <button onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} className="p-2 rounded-xl bg-[var(--bg-overlay)] text-[var(--text-main)] hover:bg-[var(--bg-overlay-hover)] border border-[var(--border)] transition-colors shadow-sm" title="Alternar Tema">
                             {theme === 'dark' ? <Sun size={18} className="text-[var(--text-muted)] hover:text-white" /> : <Moon size={18} className="text-[var(--text-muted)] hover:text-[#0F172A]" />}
                         </button>
                         
-                        {viewMode === 'personal' && activeBankData && (
-                            <div className="relative hidden sm:block"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Wallet size={14} className="text-[var(--accent)] drop-shadow-sm"/></div><select value={currentBankId||''} onChange={(e)=>setCurrentBankId(e.target.value)} className="appearance-none bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-main)] pl-9 pr-9 py-2 rounded-xl text-sm focus:outline-none focus:border-[var(--accent-50)] shadow-inner font-medium transition-colors hover:bg-[var(--bg-hover)] cursor-pointer">{banks.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select><ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" size={14}/></div>
+                        {viewMode === 'personal' && (banks.length > 0 || balances.length > 0) && (
+                            <div className="relative hidden sm:block">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Wallet size={14} className="text-[var(--accent)] drop-shadow-sm"/></div>
+                                <select value={currentBankId || ''} onChange={handleBankChange} className="appearance-none bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-main)] pl-9 pr-9 py-2 rounded-xl text-sm focus:outline-none focus:border-[var(--accent-50)] shadow-inner font-medium transition-colors hover:bg-[var(--bg-hover)] cursor-pointer max-w-[200px] truncate">
+                                    <optgroup label="Bancas Individuales">
+                                        {banks.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
+                                    </optgroup>
+                                    {balances.length > 0 && (
+                                        <optgroup label="Balances Agrupados">
+                                            {balances.map(b=><option key={b.id} value={b.id}>📊 {b.name}</option>)}
+                                        </optgroup>
+                                    )}
+                                </select>
+                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none" size={14}/>
+                            </div>
                         )}
                         {viewMode === 'visiting' && (
                             <div className="bg-indigo-500/20 border border-indigo-500/30 px-3 py-1.5 rounded-lg text-xs text-indigo-600 dark:text-indigo-300 font-bold backdrop-blur-sm" title="Por privacidad, las apuestas pendientes están ocultas.">Modo Lectura</div>
@@ -870,7 +1067,7 @@ export default function App() {
                         <div className="absolute inset-0 bg-gradient-to-r from-[var(--accent-5)] to-transparent"></div>
                         <div className="relative z-10 flex justify-between items-start">
                             <div><h3 className="text-[var(--accent)] text-sm font-bold mb-2 uppercase tracking-widest drop-shadow-sm">Beneficio Total ({activeBankData?.name})</h3><h1 className="text-5xl md:text-6xl font-extrabold text-[var(--text-main)] tracking-tight drop-shadow-lg">{formatCurrency(stats.totalProfit, activeBankData?.currency)}</h1></div>
-                            {viewMode === 'personal' && (
+                            {viewMode === 'personal' && !activeBankData.isBalance && (
                                 <div className="flex gap-2">
                                     <button onClick={generateShareLink} className="bg-[var(--bg-card)] hover:bg-[var(--bg-hover)] text-[var(--text-main)] px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all border border-[var(--border)] shadow-sm hover:border-[var(--accent-50)]"><LinkIcon size={16} className="text-[var(--accent)]"/> Compartir Banca</button>
                                 </div>
@@ -885,21 +1082,20 @@ export default function App() {
 
                 {activeTab === 'bets' && (
                     <div className="space-y-6">
-                    <div className="flex justify-between items-center"><h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight drop-shadow-sm">{viewMode === 'visiting' ? 'Historial Público' : 'Mis Apuestas'}</h3>{viewMode === 'personal' && activeBankData && (<button onClick={() => { setEditingBetId(null); setShowBetForm(true); setFormErrors({}); setIsCustomBookmaker(false); setAiMessage(''); setNewBet({ date: new Date().toISOString().split('T')[0], time: '00:00', bookmaker: 'Bet365', betMode: 'simple', title: '', selections: [{ id: Date.now(), title: '', selection: '', sport: customOptions.sports?.[0] || 'Fútbol', status: 'pending', category: '', odds: 1.50, isOpen: true }], amount: 0, stake: 0, analysis: '' }); }} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] px-5 py-2.5 rounded-xl flex items-center gap-2 font-bold text-sm transition-all shadow-[var(--shadow-glow-md)]"><Plus size={18}/> Añadir Apuesta</button>)}</div>
+                    <div className="flex justify-between items-center"><h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight drop-shadow-sm">{viewMode === 'visiting' ? 'Historial Público' : 'Mis Apuestas'}</h3>{viewMode === 'personal' && activeBankData && !activeBankData.isBalance && (<button onClick={() => { setEditingBetId(null); setShowBetForm(true); setFormErrors({}); setIsCustomBookmaker(false); setAiMessage(''); setNewBet({ date: new Date().toISOString().split('T')[0], time: '00:00', bookmaker: 'Bet365', betMode: 'simple', title: '', selections: [{ id: Date.now(), title: '', selection: '', sport: customOptions.sports?.[0] || 'Fútbol', status: 'pending', category: '', odds: 1.50, isOpen: true }], amount: 0, stake: 0, analysis: '' }); }} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] px-5 py-2.5 rounded-xl flex items-center gap-2 font-bold text-sm transition-all shadow-[var(--shadow-glow-md)]"><Plus size={18}/> Añadir Apuesta</button>)}</div>
                     
-                    {/* --- CAJA FOMO PARA VISITANTES --- */}
                     {viewMode === 'visiting' && pendingHiddenCount > 0 && !unlockedBank && (
-                        <div className="bg-[var(--bg-card)] border border-[var(--accent-30)] rounded-3xl p-6 text-center shadow-[var(--shadow-glow-sm)] transition-colors animate-in fade-in">
-                            <Lock size={32} className="text-[var(--accent)] mx-auto mb-3 drop-shadow-md" />
+                        <div className="bg-[var(--bg-card)] border border-[var(--border-strong)] rounded-3xl p-6 text-center shadow-sm transition-colors animate-in fade-in">
+                            <Lock size={32} className="text-[var(--text-muted)] mx-auto mb-3" />
                             <h4 className="text-lg font-extrabold text-[var(--text-main)] mb-2">
-                                {activeBankData?.premiumPassword ? `Hay ${pendingHiddenCount} apuestas en curso bloqueadas` : `Hay ${pendingHiddenCount} apuestas pendientes (Ocultas)`}
+                                Hay {pendingHiddenCount} apuestas en curso bloqueadas
                             </h4>
                             {activeBankData?.premiumPassword ? (
                                 <>
                                     <p className="text-[var(--text-muted)] text-sm mb-5">El autor ha protegido estas jugadas con contraseña. Introdúcela para poder verlas.</p>
                                     <div className="flex flex-col sm:flex-row gap-3 max-w-sm mx-auto">
                                         <input type="password" value={visitorPasswordInput} onChange={e=>setVisitorPasswordInput(e.target.value)} className="flex-1 bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--text-main)] outline-none focus:border-[var(--accent)] shadow-inner transition-colors" placeholder="Contraseña..." />
-                                        <button onClick={() => { if(visitorPasswordInput === activeBankData.premiumPassword) { setUnlockedBank(true); alert('✅ Acceso Concedido'); } else showAlert('Contraseña incorrecta'); }} className="bg-[var(--accent)] text-[var(--accent-fg)] px-6 py-3 rounded-xl font-bold hover:bg-[var(--accent-hover)] transition-all shadow-md">Desbloquear</button>
+                                        <button onClick={() => { if(visitorPasswordInput === activeBankData.premiumPassword) { setUnlockedBank(true); showAlert('✅ Acceso Concedido'); } else { showAlert('Contraseña incorrecta'); } }} className="bg-[var(--accent)] text-[var(--accent-fg)] px-6 py-3 rounded-xl font-bold hover:bg-[var(--accent-hover)] transition-all shadow-md">Desbloquear</button>
                                     </div>
                                 </>
                             ) : (
@@ -908,7 +1104,7 @@ export default function App() {
                         </div>
                     )}
 
-                    {activeBetsData.length===0?<div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-12 text-center text-[var(--text-muted)] text-sm shadow-sm transition-colors">El historial está vacío. {viewMode === 'personal' ? 'Escanea un boleto o añade una apuesta para empezar a ver datos.' : ''}</div>:
+                    {activeBetsData.length===0?<div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-12 text-center text-[var(--text-muted)] text-sm shadow-sm transition-colors">El historial está vacío. {viewMode === 'personal' && !activeBankData?.isBalance ? 'Escanea un boleto o añade una apuesta para empezar a ver datos.' : ''}</div>:
                     <div className="space-y-5">
                         {betsByMonth.map(g=>(
                         <div key={g.id} className="border border-[var(--border)] rounded-2xl overflow-hidden bg-[var(--bg-card)] shadow-sm transition-colors">
@@ -939,11 +1135,78 @@ export default function App() {
                     </div>
                 )}
 
+                {activeTab === 'balances' && viewMode === 'personal' && (
+                    <div className="max-w-4xl mx-auto space-y-6 pb-20 md:pb-0">
+                        <div className="flex justify-between items-center mb-2">
+                            <div>
+                                <h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">Balances Agrupados</h3>
+                                <p className="text-[var(--text-muted)] text-sm mt-1">Agrupa varios bankrolls para ver sus estadísticas globales juntas.</p>
+                            </div>
+                            <button onClick={() => { setNewBalanceData({ name: '', bankIds: [] }); setIsAddingBalance(true); }} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold transition-all shadow-[var(--shadow-glow-md)]">
+                                <Plus size={16} /> Crear Balance
+                            </button>
+                        </div>
+
+                        {balances.length === 0 ? (
+                            <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-12 text-center text-[var(--text-muted)] text-sm shadow-sm transition-colors">
+                                No tienes balances agrupados. Crea uno para combinar las estadísticas de múltiples bancas.
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 gap-6">
+                                {balances.map(balance => {
+                                    const includedBanks = banks.filter(b => balance.bankIds.includes(b.id));
+                                    const totalInitialCapital = includedBanks.reduce((sum, b) => sum + (parseFloat(b.initialCapital) || 0), 0);
+                                    const balanceBets = bets.filter(b => balance.bankIds.includes(b.bankId));
+                                    const bStats = getStatsForBets(balanceBets, totalInitialCapital);
+                                    
+                                    return (
+                                        <div key={balance.id} className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-6 shadow-sm transition-all hover:border-[var(--accent-50)] group">
+                                            <div className="flex justify-between items-start mb-6">
+                                                <div>
+                                                    <h3 className="text-xl font-bold text-[var(--text-main)]">{balance.name}</h3>
+                                                    <p className="text-sm text-[var(--text-muted)]">{balance.bankIds.length} Bankrolls</p>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => { handleBankChange({target: {value: balance.id}}); setActiveTab('dashboard'); }} className="p-2 bg-[var(--accent-10)] text-[var(--accent)] rounded-lg hover:bg-[var(--accent-20)] transition-colors" title="Ver Dashboard de este Balance">
+                                                        <LayoutDashboard size={18}/>
+                                                    </button>
+                                                    <button onClick={() => handleDeleteBalance(balance.id)} className="p-2 bg-[var(--red-10)] text-[var(--red)] rounded-lg hover:bg-[var(--red-20)] transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100" title="Eliminar Balance">
+                                                        <Trash2 size={18}/>
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                <div className="bg-[var(--bg-input)] rounded-2xl p-4 text-center border border-[var(--border)]">
+                                                    <p className="text-[10px] uppercase font-bold text-[var(--text-muted)] tracking-wider mb-1">BETS</p>
+                                                    <p className="text-xl font-bold text-[var(--accent)]">{bStats.picks}</p>
+                                                </div>
+                                                <div className="bg-[var(--bg-input)] rounded-2xl p-4 text-center border border-[var(--border)]">
+                                                    <p className="text-[10px] uppercase font-bold text-[var(--text-muted)] tracking-wider mb-1">PROFITS</p>
+                                                    <p className={`text-xl font-bold ${bStats.profit >= 0 ? 'text-[var(--accent)]' : 'text-[var(--red)]'}`}>{formatCurrency(bStats.profit, includedBanks[0]?.currency)}</p>
+                                                </div>
+                                                <div className="bg-[var(--bg-input)] rounded-2xl p-4 text-center border border-[var(--border)]">
+                                                    <p className="text-[10px] uppercase font-bold text-[var(--text-muted)] tracking-wider mb-1">ROI / YIELD</p>
+                                                    <p className={`text-xl font-bold ${bStats.yieldPerc >= 0 ? 'text-[var(--accent)]' : 'text-[var(--red)]'}`}>{bStats.yieldPerc.toFixed(2)}%</p>
+                                                </div>
+                                                <div className="bg-[var(--bg-input)] rounded-2xl p-4 text-center border border-[var(--border)]">
+                                                    <p className="text-[10px] uppercase font-bold text-[var(--text-muted)] tracking-wider mb-1">PROGRESSION</p>
+                                                    <p className={`text-xl font-bold ${bStats.progression >= 0 ? 'text-[var(--accent)]' : 'text-[var(--red)]'}`}>{bStats.progression.toFixed(2)}%</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {activeTab === 'settings' && viewMode === 'personal' && (
                     <div className="max-w-2xl mx-auto space-y-6 pb-20 md:pb-0">
                         <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-8 shadow-sm transition-colors">
                             <div className="flex justify-between items-center mb-8 border-b border-[var(--border)] pb-5"><div><h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">Gestión de Bancas</h3><p className="text-[var(--text-muted)] text-sm mt-1">Sube de nivel controlando hasta 5 bancas independientes.</p></div>{banks.length < LIMITS.MAX_BANKS && (<button onClick={openAddBankModal} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold transition-all shadow-[var(--shadow-glow-md)]"><Plus size={16} /> Nueva Banca</button>)}</div>
-                            <div className="space-y-4">{banks.map((bank) => (<div key={bank.id} className={`relative p-6 rounded-2xl border transition-all duration-300 ${bank.id === currentBankId ? 'bg-[var(--bg-hover)] border-[var(--accent-40)] shadow-[var(--shadow-glow-sm)]' : 'bg-[var(--bg-overlay)] border-[var(--border)] hover:border-[var(--border-strong)]'}`}>{bank.id === currentBankId && (<div className="absolute -top-3 -right-3 bg-[var(--accent)] text-[var(--accent-fg)] text-[10px] font-extrabold px-3 py-1 rounded-full shadow-[var(--shadow-glow-sm)] border border-[var(--accent)] uppercase tracking-widest">Activa</div>)}<div className="flex flex-col sm:flex-row justify-between gap-6"><div className="flex-1 space-y-5"><div className="space-y-1"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Nombre</label><input type="text" defaultValue={bank.name} onBlur={(e) => { if (e.target.value !== bank.name) handleUpdateBank(bank.id, 'name', e.target.value); }} className="w-full bg-transparent border-b border-[var(--border-strong)] focus:border-[var(--accent)] text-xl font-bold text-[var(--text-main)] outline-none py-1.5 transition-colors placeholder-[var(--text-muted)]" /></div><div className="flex flex-wrap gap-4"><div className="flex-1 min-w-[100px] space-y-1"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1 flex items-center gap-1">Capital <Lock size={10}/></label><input type="number" value={bank.initialCapital} disabled className="w-full bg-[var(--bg-base)] border border-[var(--border)] rounded-xl px-4 py-2.5 text-[var(--text-muted)] font-bold outline-none transition-colors text-sm cursor-not-allowed" /></div><div className="w-24 space-y-1"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Divisa</label><select value={bank.currency || 'EUR'} onChange={(e) => { handleUpdateBank(bank.id, 'currency', e.target.value); }} className="w-full bg-[var(--bg-base)] border border-[var(--border)] rounded-xl px-2 py-2.5 text-[var(--text-main)] text-sm outline-none appearance-none"><option value="EUR">EUR (€)</option><option value="USD">USD ($)</option><option value="GBP">GBP (£)</option><option value="MXN">MXN ($)</option></select></div><div className="flex-1 min-w-[130px] space-y-1"><label className="text-xs text-[var(--accent)] uppercase font-bold tracking-wider ml-1 flex items-center gap-1 drop-shadow-sm"><Lock size={12}/> Privacidad</label><input type="text" defaultValue={bank.premiumPassword || ''} onBlur={(e) => { handleUpdateBank(bank.id, 'premiumPassword', e.target.value); }} placeholder="Clave para ver pendientes..." className="w-full bg-[var(--bg-base)] border border-[var(--accent-30)] focus:border-[var(--accent)] rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none transition-colors shadow-inner" /></div></div></div><div className="flex flex-row sm:flex-col justify-between items-end gap-3 border-t sm:border-t-0 sm:border-l border-[var(--border)] pt-5 sm:pt-0 sm:pl-6 min-w-[140px]"><button onClick={() => setCurrentBankId(bank.id)} disabled={bank.id === currentBankId} className={`w-full px-4 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${bank.id === currentBankId ? 'bg-[var(--accent-10)] text-[var(--accent)] cursor-default border border-[var(--accent-30)]' : 'bg-[var(--bg-overlay)] border border-[var(--border)] text-[var(--text-main)] hover:bg-[var(--accent)] hover:text-[var(--accent-fg)] hover:border-transparent'}`}>{bank.id === currentBankId ? 'Operando' : 'Seleccionar'}</button><button onClick={() => handleDeleteBank(bank.id)} className="w-full px-4 py-3 text-xs font-bold text-[var(--text-muted)] hover:text-[var(--red)] hover:bg-[var(--red-10)] rounded-xl transition-all flex items-center justify-center gap-2 border border-transparent"><Trash2 size={16}/> Eliminar</button></div></div></div>))}</div>
+                            <div className="space-y-4">{banks.map((bank) => (<div key={bank.id} className={`relative p-6 rounded-2xl border transition-all duration-300 ${bank.id === currentBankId ? 'bg-[var(--bg-hover)] border-[var(--accent-40)] shadow-[var(--shadow-glow-sm)]' : 'bg-[var(--bg-overlay)] border-[var(--border)] hover:border-[var(--border-strong)]'}`}>{bank.id === currentBankId && (<div className="absolute -top-3 -right-3 bg-[var(--accent)] text-[var(--accent-fg)] text-[10px] font-extrabold px-3 py-1 rounded-full shadow-[var(--shadow-glow-sm)] border border-[var(--accent)] uppercase tracking-widest">Activa</div>)}<div className="flex flex-col sm:flex-row justify-between gap-6"><div className="flex-1 space-y-5"><div className="space-y-1"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Nombre</label><input type="text" defaultValue={bank.name} onBlur={(e) => { if (e.target.value !== bank.name) handleUpdateBank(bank.id, 'name', e.target.value); }} className="w-full bg-transparent border-b border-[var(--border-strong)] focus:border-[var(--accent)] text-xl font-bold text-[var(--text-main)] outline-none py-1.5 transition-colors placeholder-[var(--text-muted)]" /></div><div className="flex flex-wrap gap-4"><div className="flex-1 min-w-[100px] space-y-1"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1 flex items-center gap-1">Capital <Lock size={10}/></label><input type="number" value={bank.initialCapital} disabled className="w-full bg-[var(--bg-base)] border border-[var(--border)] rounded-xl px-4 py-2.5 text-[var(--text-muted)] font-bold outline-none transition-colors text-sm cursor-not-allowed" /></div><div className="w-24 space-y-1"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Divisa</label><select value={bank.currency || 'EUR'} onChange={(e) => { handleUpdateBank(bank.id, 'currency', e.target.value); }} className="w-full bg-[var(--bg-base)] border border-[var(--border)] rounded-xl px-2 py-2.5 text-[var(--text-main)] text-sm outline-none appearance-none"><option value="EUR">EUR (€)</option><option value="USD">USD ($)</option><option value="GBP">GBP (£)</option><option value="MXN">MXN ($)</option></select></div><div className="flex-1 min-w-[130px] space-y-1"><label className="text-xs text-[var(--accent)] uppercase font-bold tracking-wider ml-1 flex items-center gap-1 drop-shadow-sm"><Lock size={12}/> Privacidad</label><input type="text" defaultValue={bank.premiumPassword || ''} onBlur={(e) => { handleUpdateBank(bank.id, 'premiumPassword', e.target.value); }} placeholder="Clave para ver pendientes..." className="w-full bg-[var(--bg-base)] border border-[var(--accent-30)] focus:border-[var(--accent)] rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none transition-colors shadow-inner" /></div></div></div><div className="flex flex-row sm:flex-col justify-between items-end gap-3 border-t sm:border-t-0 sm:border-l border-[var(--border)] pt-5 sm:pt-0 sm:pl-6 min-w-[140px]"><button onClick={() => handleBankChange({target: {value: bank.id}})} disabled={bank.id === currentBankId} className={`w-full px-4 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${bank.id === currentBankId ? 'bg-[var(--accent-10)] text-[var(--accent)] cursor-default border border-[var(--accent-30)]' : 'bg-[var(--bg-overlay)] border border-[var(--border)] text-[var(--text-main)] hover:bg-[var(--accent)] hover:text-[var(--accent-fg)] hover:border-transparent'}`}>{bank.id === currentBankId ? 'Operando' : 'Seleccionar'}</button><button onClick={() => handleDeleteBank(bank.id)} className="w-full px-4 py-3 text-xs font-bold text-[var(--text-muted)] hover:text-[var(--red)] hover:bg-[var(--red-10)] rounded-xl transition-all flex items-center justify-center gap-2 border border-transparent"><Trash2 size={16}/> Eliminar</button></div></div></div>))}</div>
                         </div>
                         <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-8 shadow-sm transition-colors">
                             <div className="mb-6"><h3 className="text-xl font-bold text-[var(--text-main)] flex items-center gap-2"><Database size={22} className="text-[var(--accent)]" /> Respaldo y Migración</h3><p className="text-[var(--text-muted)] text-sm mt-1">Exporta tus joyas o importa tu viejo Excel/Bet-Analytix.</p></div>
@@ -1011,7 +1274,7 @@ export default function App() {
                                     <div className="p-5 space-y-4 animate-in slide-in-from-top-2 bg-[var(--bg-base)]">
                                         <div className="grid grid-cols-3 gap-4"><div className="col-span-2 space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Evento</label><input type="text" placeholder="Ej: RM - FCB" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" value={sel.title} onChange={e => handleUpdateSelection(sel.id, 'title', e.target.value)} /></div><div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Cuota</label><input type="number" step="0.01" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--accent)] font-extrabold text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" value={sel.odds} onChange={e => handleUpdateSelection(sel.id, 'odds', e.target.value)} /></div></div>
                                         <div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Pronóstico</label><input type="text" placeholder="Ej: Más de 2.5 Goles..." className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" value={sel.selection} onChange={e => handleUpdateSelection(sel.id, 'selection', e.target.value)} /></div>
-                                        <div className="grid grid-cols-2 gap-4"><div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Deporte</label><select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none shadow-inner appearance-none" value={sel.sport} onChange={e => handleUpdateSelection(sel.id, 'sport', e.target.value)}>{(customOptions.sports || []).map(s => <option key={s} value={s}>{s}</option>)}{(!customOptions.sports || customOptions.sports.length === 0) && <option value="">Sin deportes definidos</option>}</select></div><div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Estado</label><select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none shadow-inner appearance-none font-bold" value={sel.status} onChange={e => handleUpdateSelection(sel.id, 'status', e.target.value)}><option value="pending" className="text-[var(--yellow)]">Pendiente</option><option value="won" className="text-[var(--accent)]">Ganada</option><option value="lost" className="text-[var(--red)]">Perdida</option><option value="void">Nula</option></select></div></div>
+                                        <div className="grid grid-cols-2 gap-4"><div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Deporte</label><select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none shadow-inner appearance-none" value={sel.sport} onChange={e => handleUpdateSelection(sel.id, 'sport', e.target.value)}>{(customOptions.sports || []).map(s => <option key={s} value={s}>{s}</option>)}</select></div><div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Estado</label><select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none shadow-inner appearance-none font-bold" value={sel.status} onChange={e => handleUpdateSelection(sel.id, 'status', e.target.value)}><option value="pending" className="text-[var(--yellow)]">Pendiente</option><option value="won" className="text-[var(--accent)]">Ganada</option><option value="lost" className="text-[var(--red)]">Perdida</option><option value="void">Nula</option></select></div></div>
                                         <div className="flex justify-center pt-3 border-t border-[var(--border)]"><button className="text-xs font-bold text-[var(--text-muted)] flex items-center gap-1 hover:text-[var(--text-main)] transition-colors" onClick={(e) => { e.stopPropagation(); toggleSelection(sel.id); }}><ChevronUp size={14}/> Ocultar detalles</button></div>
                                     </div>
                                 )}
@@ -1046,41 +1309,98 @@ export default function App() {
             </div>
             )}
 
+            {/* MODAL DE CONFIRMACIÓN / AVISO */}
+            {feedbackModal.isOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+                    <div className="bg-[var(--bg-card)] backdrop-blur-2xl rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.3)] border border-[var(--border-strong)] p-8 w-full max-w-sm text-center transition-colors">
+                        {feedbackModal.type === 'alert' ? (
+                            <AlertTriangle size={48} className="text-[var(--accent)] mx-auto mb-4 drop-shadow-md" />
+                        ) : (
+                            <AlertTriangle size={48} className="text-[var(--yellow)] mx-auto mb-4 drop-shadow-md" />
+                        )}
+                        <h3 className="text-[var(--text-main)] font-extrabold text-xl mb-2 tracking-tight">
+                            {feedbackModal.type === 'alert' ? 'Aviso' : 'Confirmación'}
+                        </h3>
+                        <p className="text-[var(--text-muted)] text-sm mb-6 whitespace-pre-wrap">{feedbackModal.message}</p>
+                        <div className="flex gap-3 justify-center">
+                            {feedbackModal.type === 'confirm' && (
+                                <button 
+                                    onClick={closeFeedbackModal} 
+                                    disabled={isProcessing}
+                                    className="flex-1 py-3 bg-[var(--bg-input)] text-[var(--text-main)] border border-[var(--border)] rounded-xl font-bold hover:bg-[var(--bg-hover)] transition-all disabled:opacity-50"
+                                >
+                                    Cancelar
+                                </button>
+                            )}
+                            <button 
+                                onClick={async () => { 
+                                    if (feedbackModal.type === 'confirm' && feedbackModal.onConfirm) { 
+                                        setIsProcessing(true);
+                                        await feedbackModal.onConfirm(); 
+                                        setIsProcessing(false);
+                                    } else {
+                                        closeFeedbackModal(); 
+                                    }
+                                }} 
+                                disabled={isProcessing}
+                                className="flex-1 py-3 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] rounded-xl font-bold shadow-[var(--shadow-glow-md)] transition-all flex justify-center items-center gap-2 disabled:opacity-50"
+                            >
+                                {isProcessing ? (
+                                    <><div className="w-4 h-4 border-2 border-[var(--bg-input)] border-t-[var(--accent-fg)] rounded-full animate-spin"></div> Procesando...</>
+                                ) : (
+                                    'Aceptar'
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isAddingBalance && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+                    <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl w-full max-w-sm rounded-3xl shadow-[var(--shadow-glow-lg)] border border-[var(--accent-20)] overflow-hidden flex flex-col transition-colors">
+                        <div className="px-5 py-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-card)]">
+                            <h3 className="font-bold text-[var(--text-main)] text-lg">Nuevo Balance</h3>
+                            <button onClick={() => setIsAddingBalance(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-overlay)] p-1.5 rounded-full"><X size={18}/></button>
+                        </div>
+                        <div className="p-6 space-y-5">
+                            <div className="space-y-1.5">
+                                <label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Nombre del Balance</label>
+                                <input type="text" placeholder="Ej: General 2026" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors" value={newBalanceData.name} onChange={e => setNewBalanceData({...newBalanceData, name: e.target.value})} autoFocus />
+                            </div>
+                            <div className="space-y-3">
+                                <label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Selecciona Bancas</label>
+                                <div className="max-h-40 overflow-y-auto space-y-2 custom-scrollbar">
+                                    {banks.map(b => (
+                                        <label key={b.id} className="flex items-center gap-3 p-3 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] cursor-pointer hover:bg-[var(--bg-hover)] transition-colors">
+                                            <input 
+                                                type="checkbox" 
+                                                className="accent-[var(--accent)] w-4 h-4"
+                                                checked={newBalanceData.bankIds.includes(b.id)}
+                                                onChange={(e) => {
+                                                    const newIds = e.target.checked 
+                                                        ? [...newBalanceData.bankIds, b.id] 
+                                                        : newBalanceData.bankIds.filter(id => id !== b.id);
+                                                    setNewBalanceData({...newBalanceData, bankIds: newIds});
+                                                }}
+                                            />
+                                            <span className="text-sm font-bold text-[var(--text-main)]">{b.name}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                            <button onClick={confirmAddBalance} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-bold py-3.5 rounded-xl transition-all shadow-[var(--shadow-glow-md)] mt-4 disabled:opacity-50" disabled={!newBalanceData.name || newBalanceData.bankIds.length === 0}>Crear Balance Agrupado</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {statusModalData && (
                 <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
                     <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.2)] border border-[var(--accent-20)] p-8 w-full max-w-sm transition-colors"><h3 className="text-[var(--text-main)] font-extrabold text-xl mb-6 text-center tracking-tight drop-shadow-sm">Estado de la Operación</h3><div className="grid grid-cols-2 gap-4"><button onClick={() => handleQuickStatusChange('won')} className="p-4 bg-[var(--accent-10)] hover:bg-[var(--accent-20)] text-[var(--accent)] rounded-2xl font-bold border border-[var(--accent-30)] transition-all flex flex-col items-center gap-2 shadow-inner"><CheckCircle2 size={28}/> Ganada</button><button onClick={() => handleQuickStatusChange('lost')} className="p-4 bg-[var(--red-10)] hover:bg-[var(--red-20)] text-[var(--red)] rounded-2xl font-bold border border-[var(--red-30)] transition-all flex flex-col items-center gap-2 shadow-inner"><XCircle size={28}/> Perdida</button><button onClick={() => handleQuickStatusChange('void')} className="p-4 bg-[var(--bg-overlay)] hover:bg-[var(--bg-overlay-hover)] text-[var(--text-muted)] rounded-2xl font-bold border border-[var(--border-strong)] transition-all flex flex-col items-center gap-2 shadow-inner"><AlertCircle size={28}/> Nula</button><button onClick={() => handleQuickStatusChange('pending')} className="p-4 bg-yellow-500/10 hover:bg-yellow-500/20 text-[var(--yellow)] rounded-2xl font-bold border border-yellow-500/30 transition-all flex flex-col items-center gap-2 shadow-inner"><Clock size={28}/> Pendiente</button></div><button onClick={() => setStatusModalData(null)} className="mt-6 w-full py-3 text-[var(--text-muted)] font-bold hover:text-[var(--text-main)] bg-[var(--bg-card)] rounded-xl transition-colors border border-[var(--border)] hover:border-[var(--border-strong)] shadow-sm">Cancelar</button></div>
                 </div>
             )}
 
-            {isAddingBank && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
-                    <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl w-full max-w-sm rounded-3xl shadow-[var(--shadow-glow-lg)] border border-[var(--accent-20)] overflow-hidden flex flex-col transition-colors">
-                        <div className="px-5 py-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-card)]"><h3 className="font-bold text-[var(--text-main)] text-lg">Nueva Banca</h3><button onClick={() => setIsAddingBank(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-overlay)] p-1.5 rounded-full"><X size={18}/></button></div>
-                        <div className="p-6 space-y-5">
-                            <div className="space-y-1.5"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Nombre</label><input type="text" placeholder="Ej: Bet365 Principal" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors" value={newBankData.name} onChange={e => setNewBankData({...newBankData, name: e.target.value})} autoFocus /></div>
-                            <div className="space-y-1.5"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1 flex items-center gap-2">Capital Inicial</label><input type="number" placeholder="1000" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors" value={newBankData.initialCapital} onChange={e => setNewBankData({...newBankData, initialCapital: e.target.value})} /></div>
-                            <div className="space-y-1.5"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Divisa</label><select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors appearance-none" value={newBankData.currency} onChange={e => setNewBankData({...newBankData, currency: e.target.value})}><option value="EUR">EUR (€)</option><option value="USD">USD ($)</option><option value="GBP">GBP (£)</option><option value="MXN">MXN ($)</option></select></div>
-                            <button onClick={confirmAddBank} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-bold py-3.5 rounded-xl transition-all shadow-[var(--shadow-glow-md)] mt-4">Crear Banca</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {feedbackModal.isOpen && (
-                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
-                    <div className="bg-[var(--bg-card)] backdrop-blur-2xl rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.3)] border border-[var(--border-strong)] p-8 w-full max-w-sm text-center transition-colors">
-                        <AlertTriangle size={48} className="text-[var(--accent)] mx-auto mb-4 drop-shadow-md" />
-                        <h3 className="text-[var(--text-main)] font-extrabold text-xl mb-2 tracking-tight">Aviso</h3>
-                        <p className="text-[var(--text-muted)] text-sm mb-6 whitespace-pre-wrap">{feedbackModal.message}</p>
-                        <div className="flex gap-3 justify-center">
-                            {feedbackModal.type === 'confirm' && (
-                                <button onClick={closeFeedbackModal} className="flex-1 py-3 bg-[var(--bg-input)] text-[var(--text-main)] border border-[var(--border)] rounded-xl font-bold hover:bg-[var(--bg-hover)] transition-all">Cancelar</button>
-                            )}
-                            <button onClick={() => { if (feedbackModal.type === 'confirm' && feedbackModal.onConfirm) { feedbackModal.onConfirm(); } closeFeedbackModal(); }} className="flex-1 py-3 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] rounded-xl font-bold shadow-[var(--shadow-glow-md)] transition-all">Aceptar</button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
         </>
     );
