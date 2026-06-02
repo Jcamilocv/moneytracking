@@ -1164,7 +1164,11 @@ export default function App() {
                 </div>
                 {viewMode === 'visiting' ? (
                     <div className="flex-1 flex flex-col p-4 bg-indigo-500/5">
-                        <div className="mb-4 p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl backdrop-blur-md"><p className="text-[10px] text-indigo-500 dark:text-indigo-300 uppercase font-bold mb-1 flex items-center gap-2"><Eye size={12}/> Modo Visitante</p><p className="text-[var(--text-main)] text-sm font-bold truncate drop-shadow-sm">{visitingBank?.name}</p></div>
+                        <div className="mb-4 p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl backdrop-blur-md">
+                            <p className="text-[10px] text-indigo-500 dark:text-indigo-300 uppercase font-bold mb-1 flex items-center gap-2"><Eye size={12}/> Modo Visitante</p>
+                            {/* AQUÍ ESTABA EL ERROR: CAMBIAMOS visitingBank POR activeBankData */}
+                            <p className="text-[var(--text-main)] text-sm font-bold truncate drop-shadow-sm">{activeBankData?.name}</p>
+                        </div>
                         <nav className="space-y-2"><button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'dashboard' ? 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30 shadow-lg' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay)] hover:text-[var(--text-main)]'}`}><LayoutDashboard size={18}/> Dashboard</button><button onClick={() => setActiveTab('bets')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'bets' ? 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30 shadow-lg' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay)] hover:text-[var(--text-main)]'}`}><List size={18}/> Historial</button></nav>
                         <div className="mt-auto"><button onClick={handleExitVisiting} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-[var(--text-main)] bg-[var(--bg-overlay)] border border-[var(--border)] hover:bg-[var(--bg-overlay-hover)] transition-all backdrop-blur-md"><LogOut size={16}/> {currentUser ? 'Volver a mi Banca' : 'Ir al Inicio de Sesión'}</button></div>
                     </div>
