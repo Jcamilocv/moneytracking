@@ -11,6 +11,7 @@ import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
     BarChart, Bar, Cell, Line, LineChart as ReLineChart 
 } from 'recharts';
+import LZString from 'lz-string';
 
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from "firebase/app";
@@ -170,13 +171,13 @@ const getStatsForBets = (betList, initialCap) => {
     return { picks: betList.filter(b => b.status !== 'pending').length, profit: runningProfit, yieldPerc, progression };
 };
 
-// --- COMPONENTES UI ---
+// --- COMPONENTES UI (AJUSTADOS PARA DESKTOP 100% ZOOM) ---
 const StatCard = ({ title, value, subValue, isCurrency = false, currency = 'EUR', colorClass = "text-[var(--text-main)]" }) => (
-    <div className="p-3 md:p-4 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl hover:bg-[var(--bg-hover)] transition-all flex flex-col justify-between min-h-[90px] shadow-sm">
-        <p className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider font-semibold mb-1 truncate" title={title}>{title}</p>
+    <div className="p-3 md:p-3 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl hover:bg-[var(--bg-hover)] transition-all flex flex-col justify-between min-h-[76px] shadow-sm">
+        <p className="text-[var(--text-muted)] text-[9px] uppercase tracking-wider font-bold mb-0.5 truncate" title={title}>{title}</p>
         <div className="flex-1 flex flex-col justify-end">
-            <h3 className={`text-lg md:text-xl font-bold ${colorClass} truncate drop-shadow-sm`}>{isCurrency ? formatCurrency(value, currency) : value}</h3>
-            {subValue && <p className="text-[10px] text-[var(--text-muted)] opacity-80 mt-0.5 truncate">{String(subValue)}</p>}
+            <h3 className={`text-base md:text-xl font-bold ${colorClass} truncate drop-shadow-sm leading-tight`}>{isCurrency ? formatCurrency(value, currency) : value}</h3>
+            {subValue && <p className="text-[9px] text-[var(--text-muted)] opacity-80 mt-0.5 truncate">{String(subValue)}</p>}
         </div>
     </div>
 );
@@ -191,7 +192,7 @@ const StatusBadge = ({ status }) => {
         'half-lost': 'bg-orange-500/10 text-orange-500 border-orange-500/30',
     };
     const labels = { won: 'Ganada', lost: 'Perdida', pending: 'Pendiente', void: 'Nula', 'half-won': 'Mitad Ganada', 'half-lost': 'Mitad Perdida' };
-    return <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border backdrop-blur-md ${styles[status] || styles.pending}`}>{labels[status] || status}</span>;
+    return <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide border backdrop-blur-md ${styles[status] || styles.pending}`}>{labels[status] || status}</span>;
 };
 
 // --- APP PRINCIPAL ---
@@ -200,7 +201,7 @@ export default function App() {
         if (typeof window === 'undefined') return { mode: 'personal', uid: null, bid: null, isEmbed: false };
         const params = new URLSearchParams(window.location.search);
         const sData = params.get('s');
-        const isEmbed = params.get('embed') === 'true'; // NUEVO: Detección de iFrame
+        const isEmbed = params.get('embed') === 'true'; // Detección de iFrame
         if (sData) {
             try {
                 const decoded = atob(sData);
@@ -239,7 +240,7 @@ export default function App() {
     const [statusModalData, setStatusModalData] = useState(null); 
     
     const [feedbackModal, setFeedbackModal] = useState({ isOpen: false, type: 'alert', message: '', onConfirm: null });
-    const [shareModal, setShareModal] = useState({ isOpen: false, link: '', iframe: '' }); // NUEVO: Modal de Distribución
+    const [shareModal, setShareModal] = useState({ isOpen: false, link: '', iframe: '' }); 
     
     const [isProcessing, setIsProcessing] = useState(false);
     const [expandedMonths, setExpandedMonths] = useState({});
@@ -251,6 +252,8 @@ export default function App() {
     const [viewMode, setViewMode] = useState(initialShare.mode); 
     const [visitingUserId, setVisitingUserId] = useState(initialShare.uid);
     const [visitingBankId, setVisitingBankId] = useState(initialShare.bid);
+    const [visitingBank, setVisitingBank] = useState(null);
+    const [visitingBets, setVisitingBets] = useState([]);
     
     const [unlockedBank, setUnlockedBank] = useState(false);
     const [visitorPasswordInput, setVisitorPasswordInput] = useState('');
@@ -258,7 +261,7 @@ export default function App() {
     const [newCustomSport, setNewCustomSport] = useState('');
     const [newCustomCategory, setNewCustomCategory] = useState('');
     const [newBankData, setNewBankData] = useState({ name: '', initialCapital: 1000, currency: 'EUR', premiumPassword: '' }); 
-    const [newBalanceData, setNewBalanceData] = useState({ name: '', bankIds: [], premiumPassword: '' }); 
+    const [newBalanceData, setNewBalanceData] = useState({ name: '', bankIds: [] }); 
     const fileInputRef = useRef(null);
     
     const [isScanning, setIsScanning] = useState(false);
@@ -372,7 +375,6 @@ export default function App() {
         return () => unsubscribe();
     }, [viewMode]);
 
-    // MOTOR UNIFICADO DE DATOS (Mismo fetch para Owner y Visitantes)
     useEffect(() => {
         const targetUid = viewMode === 'visiting' ? visitingUserId : currentUser?.uid;
         if (!targetUid) {
@@ -385,7 +387,13 @@ export default function App() {
         
         const banksRef = collection(db, 'users', targetUid, 'banks');
         const unsubBanks = onSnapshot(banksRef, (snapshot) => {
-            setBanks(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+            const banksData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+            if (viewMode === 'visiting') {
+                const vBank = banksData.find(b => b.id === visitingBankId);
+                setVisitingBank(vBank || null);
+            } else {
+                setBanks(banksData);
+            }
         }, (error) => {
             console.error("Error en Firebase (Bancos):", error);
             setDbError('Firebase ha bloqueado el acceso. Asegúrate de haber actualizado las Reglas de Firestore.');
@@ -394,12 +402,22 @@ export default function App() {
 
         const balancesRef = collection(db, 'users', targetUid, 'balances');
         const unsubBalances = onSnapshot(balancesRef, (snapshot) => {
-            setBalances(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+            if (viewMode === 'personal') {
+                setBalances(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+            } else if (viewMode === 'visiting') {
+                const vBalance = snapshot.docs.map(d=>({...d.data(), id: d.id})).find(b => b.id === visitingBankId);
+                if(vBalance) setVisitingBank({...vBalance, isBalance: true});
+            }
         }, (error) => console.error(error));
 
         const betsRef = collection(db, 'users', targetUid, 'bets');
         const unsubBets = onSnapshot(betsRef, (snapshot) => {
-            setBets(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+            const betsData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+            if (viewMode === 'visiting') {
+                setVisitingBets(betsData); 
+            } else {
+                setBets(betsData);
+            }
             setLoading(false);
         }, (error) => { 
             console.error("Error en Firebase (Apuestas):", error); 
@@ -419,9 +437,8 @@ export default function App() {
         }, (error) => console.error("Error preferencias:", error));
 
         return () => { unsubBanks(); unsubBets(); unsubPrefs(); unsubBalances(); };
-    }, [currentUser, viewMode, visitingUserId]);
+    }, [currentUser, viewMode, visitingUserId, visitingBankId]);
 
-    // Memoria del último banco visitado (Solo para Owner)
     useEffect(() => {
         if (viewMode === 'personal' && banks.length > 0 && !currentBankId) {
             const lastSavedId = localStorage.getItem(`moneytracking_last_bank_${currentUser?.uid}`);
@@ -441,15 +458,20 @@ export default function App() {
         }
     };
 
-    // Inteligencia para resolver si la ID pertenece a un Banco o a un Balance Agrupado
     const activeBankData = useMemo(() => {
-        const idToFind = viewMode === 'visiting' ? visitingBankId : currentBankId;
-        if (!idToFind) return null;
+        if (viewMode === 'visiting') {
+            if (!visitingBank) return null;
+            if (visitingBank.isBalance) {
+                const includedBanks = banks.length > 0 ? banks.filter(b => visitingBank.bankIds.includes(b.id)) : [];
+                return { ...visitingBank, currency: 'EUR' }; 
+            }
+            return visitingBank;
+        }
         
-        const normalBank = banks.find(b => b.id === idToFind);
+        const normalBank = banks.find(b => b.id === currentBankId);
         if (normalBank) return normalBank;
 
-        const balanceGroup = balances.find(b => b.id === idToFind);
+        const balanceGroup = balances.find(b => b.id === currentBankId);
         if (balanceGroup) {
             const includedBanks = banks.filter(b => balanceGroup.bankIds.includes(b.id));
             const totalCapital = includedBanks.reduce((sum, b) => sum + (parseFloat(b.initialCapital) || 0), 0);
@@ -459,43 +481,42 @@ export default function App() {
                 initialCapital: totalCapital,
                 currency: includedBanks[0]?.currency || 'EUR',
                 isBalance: true,
-                bankIds: balanceGroup.bankIds,
-                premiumPassword: balanceGroup.premiumPassword || ''
+                bankIds: balanceGroup.bankIds
             };
         }
         return null;
-    }, [banks, balances, currentBankId, viewMode, visitingBankId]);
+    }, [banks, balances, currentBankId, viewMode, visitingBank]);
 
     const activeBetsData = useMemo(() => {
-        if (!activeBankData) return [];
-        
         let rawBets = [];
-        if (activeBankData.isBalance) {
+        if (viewMode === 'visiting' && activeBankData) {
+            if(activeBankData.isBalance) {
+                rawBets = visitingBets.filter(b => activeBankData.bankIds?.includes(b.bankId));
+            } else {
+                rawBets = visitingBets.filter(b => b.bankId === activeBankData.id);
+            }
+        } else if (activeBankData?.isBalance) {
             rawBets = bets.filter(b => activeBankData.bankIds.includes(b.bankId));
-        } else {
-            rawBets = bets.filter(b => b.bankId === activeBankData.id);
+        } else if (currentBankId) {
+            rawBets = bets.filter(b => b.bankId === currentBankId);
         }
 
         rawBets = rawBets.sort((a, b) => new Date(`${b.date}T${b.time || '00:00'}`) - new Date(`${a.date}T${a.time || '00:00'}`));
 
         if (viewMode === 'visiting') {
-            if (activeBankData.premiumPassword && unlockedBank) return rawBets;
+            if (activeBankData?.premiumPassword && unlockedBank) return rawBets;
             return rawBets.filter(b => b.status !== 'pending');
         }
-        
         return rawBets; 
-    }, [bets, activeBankData, viewMode, unlockedBank]);
+    }, [bets, currentBankId, viewMode, visitingBets, activeBankData, unlockedBank]);
 
     const pendingHiddenCount = useMemo(() => {
         if (viewMode !== 'visiting' || !activeBankData) return 0;
-        let targetBets = bets;
-        if (activeBankData.isBalance) {
-            targetBets = bets.filter(b => activeBankData.bankIds.includes(b.bankId));
-        } else {
-            targetBets = bets.filter(b => b.bankId === activeBankData.id);
-        }
-        return targetBets.filter(b => b.status === 'pending').length;
-    }, [bets, activeBankData, viewMode]);
+        let bList = [];
+        if(activeBankData.isBalance) bList = visitingBets.filter(b => activeBankData.bankIds?.includes(b.bankId));
+        else bList = visitingBets.filter(b => b.bankId === activeBankData.id);
+        return bList.filter(b => b.status === 'pending').length;
+    }, [visitingBets, viewMode, activeBankData]);
 
     const currentBets = activeBetsData;
 
@@ -599,10 +620,6 @@ export default function App() {
 
     const handleLogout = async () => {
         await signOut(auth);
-        if(viewMode === 'visiting') {
-            try { window.history.pushState({}, document.title, window.location.pathname); } catch(e) {}
-            setViewMode('personal'); setVisitingUserId(null); setVisitingBankId(null);
-        }
     };
 
     const showAlert = (message) => setFeedbackModal({ isOpen: true, type: 'alert', message, onConfirm: null });
@@ -613,11 +630,9 @@ export default function App() {
         }
     };
 
-    // NUEVO: Motor Unificado de Modales de Distribución
-    const openShareModalFor = (targetData) => {
-        if(!targetData || !targetData.id) return showAlert("Selecciona una banca o balance válido.");
-        
-        const shareStr = btoa(`${currentUser.uid}|${targetData.id}`);
+    const openShareModal = () => {
+        if(!activeBankData || !activeBankData.id) return showAlert("Selecciona una banca o balance válido.");
+        const shareStr = btoa(`${currentUser.uid}|${activeBankData.id}`);
         let currentDomain = window.location.origin + window.location.pathname;
         const link = `${currentDomain}?s=${shareStr}`;
         const iframeCode = `<iframe src="${link}&embed=true" width="100%" height="700" style="border:none; border-radius: 16px; overflow:hidden; background: transparent;"></iframe>`;
@@ -639,6 +654,8 @@ export default function App() {
         setViewMode('personal'); 
         setVisitingUserId(null); 
         setVisitingBankId(null);
+        setVisitingBank(null); 
+        setVisitingBets([]);
         setUnlockedBank(false);
     };
 
@@ -869,11 +886,10 @@ export default function App() {
             await addDoc(collection(db, 'users', currentUser.uid, 'balances'), {
                 name: newBalanceData.name,
                 bankIds: newBalanceData.bankIds,
-                premiumPassword: newBalanceData.premiumPassword || '',
                 createdAt: new Date().toISOString()
             });
             setIsAddingBalance(false);
-            setNewBalanceData({ name: '', bankIds: [], premiumPassword: '' });
+            setNewBalanceData({ name: '', bankIds: [] });
             showAlert("Balance agrupado creado correctamente.");
         } catch (error) {
             console.error("Error creando balance:", error);
@@ -921,7 +937,7 @@ export default function App() {
 
                 {/* Contenido del Widget */}
                 <main className="flex-1 overflow-y-auto custom-scrollbar p-3 md:p-5 z-10 relative">
-                    {/* Caja Privacidad por si tiene contraseña */}
+                    {/* Caja FOMO por si tiene contraseña */}
                     {activeBankData?.premiumPassword && !unlockedBank && pendingHiddenCount > 0 && activeTab === 'bets' && (
                         <div className="bg-[var(--bg-card)] border border-[var(--border-strong)] rounded-2xl p-5 text-center shadow-sm mb-5">
                             <Lock size={24} className="text-[var(--text-muted)] mx-auto mb-2" />
@@ -1164,11 +1180,7 @@ export default function App() {
                 </div>
                 {viewMode === 'visiting' ? (
                     <div className="flex-1 flex flex-col p-4 bg-indigo-500/5">
-                        <div className="mb-4 p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl backdrop-blur-md">
-                            <p className="text-[10px] text-indigo-500 dark:text-indigo-300 uppercase font-bold mb-1 flex items-center gap-2"><Eye size={12}/> Modo Visitante</p>
-                            {/* AQUÍ ESTABA EL ERROR: CAMBIAMOS visitingBank POR activeBankData */}
-                            <p className="text-[var(--text-main)] text-sm font-bold truncate drop-shadow-sm">{activeBankData?.name}</p>
-                        </div>
+                        <div className="mb-4 p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl backdrop-blur-md"><p className="text-[10px] text-indigo-500 dark:text-indigo-300 uppercase font-bold mb-1 flex items-center gap-2"><Eye size={12}/> Modo Visitante</p><p className="text-[var(--text-main)] text-sm font-bold truncate drop-shadow-sm">{activeBankData?.name}</p></div>
                         <nav className="space-y-2"><button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'dashboard' ? 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30 shadow-lg' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay)] hover:text-[var(--text-main)]'}`}><LayoutDashboard size={18}/> Dashboard</button><button onClick={() => setActiveTab('bets')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'bets' ? 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30 shadow-lg' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay)] hover:text-[var(--text-main)]'}`}><List size={18}/> Historial</button></nav>
                         <div className="mt-auto"><button onClick={handleExitVisiting} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-[var(--text-main)] bg-[var(--bg-overlay)] border border-[var(--border)] hover:bg-[var(--bg-overlay-hover)] transition-all backdrop-blur-md"><LogOut size={16}/> {currentUser ? 'Volver a mi Banca' : 'Ir al Inicio de Sesión'}</button></div>
                     </div>
@@ -1221,24 +1233,24 @@ export default function App() {
                     </div>
                 </header>
 
-                <div className="flex-1 overflow-auto p-4 md:p-6 space-y-6 custom-scrollbar relative z-10">
+                <div className="flex-1 overflow-auto p-4 md:p-5 space-y-4 md:space-y-5 custom-scrollbar relative z-10">
                 {activeTab === 'dashboard' && activeBankData && (
-                    <><div className="relative overflow-hidden bg-[var(--bg-card)] rounded-3xl p-8 md:p-10 border border-[var(--border)] shadow-md transition-colors">
+                    <><div className="relative overflow-hidden bg-[var(--bg-card)] rounded-3xl p-6 md:p-8 border border-[var(--border)] shadow-md transition-colors">
                         <div className="absolute inset-0 bg-gradient-to-br from-[var(--bg-card)] to-[var(--bg-base)]"></div>
                         <div className="absolute inset-0 bg-gradient-to-r from-[var(--accent-5)] to-transparent"></div>
                         <div className="relative z-10 flex justify-between items-start">
-                            <div><h3 className="text-[var(--accent)] text-sm font-bold mb-2 uppercase tracking-widest drop-shadow-sm">Beneficio Total ({activeBankData?.name})</h3><h1 className="text-5xl md:text-6xl font-extrabold text-[var(--text-main)] tracking-tight drop-shadow-lg">{formatCurrency(stats.totalProfit, activeBankData?.currency)}</h1></div>
-                            {viewMode === 'personal' && !activeBankData.isBalance && (
+                            <div><h3 className="text-[var(--accent)] text-sm font-bold mb-2 uppercase tracking-widest drop-shadow-sm">Beneficio Total ({activeBankData?.name})</h3><h1 className="text-4xl md:text-5xl font-extrabold text-[var(--text-main)] tracking-tight drop-shadow-lg">{formatCurrency(stats.totalProfit, activeBankData?.currency)}</h1></div>
+                            {viewMode === 'personal' && (
                                 <div className="flex gap-2">
-                                    <button onClick={() => openShareModalFor(activeBankData)} className="bg-[var(--bg-card)] hover:bg-[var(--bg-hover)] text-[var(--text-main)] px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all border border-[var(--border)] shadow-sm hover:border-[var(--accent-50)]"><Code size={16} className="text-[var(--accent)]"/> Insertar / Compartir</button>
+                                    <button onClick={openShareModal} className="bg-[var(--bg-card)] hover:bg-[var(--bg-hover)] text-[var(--text-main)] px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all border border-[var(--border)] shadow-sm hover:border-[var(--accent-50)]"><Code size={16} className="text-[var(--accent)]"/> Compartir Banca</button>
                                 </div>
                             )}
                         </div>
-                        <div className="absolute right-0 bottom-0 opacity-5 transform translate-y-1/4 translate-x-1/4 pointer-events-none blur-sm"><Wallet size={200} /></div>
+                        <div className="absolute right-0 bottom-0 opacity-5 transform translate-y-1/4 translate-x-1/4 pointer-events-none blur-sm"><Wallet size={160} /></div>
                     </div>
                     
-                    <div className="bg-transparent"><div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4"><StatCard title="Picks" value={stats.picks} subValue="Total" /><StatCard title="Ganados" value={stats.won} colorClass="text-[var(--accent)]" /><StatCard title="U. APOSTADAS" value={formatUnits(stats.stakedUnits)} /><StatCard title="Beneficio/Día" value={formatCurrency(stats.profitDay, activeBankData?.currency)} colorClass={stats.profitDay >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /><StatCard title="Factor de Beneficio" value={stats.profitFactor.toFixed(2)} /><StatCard title="Tasa de Acierto" value={`${stats.winRate.toFixed(2)}%`} /><StatCard title="Perdidos" value={stats.lost} colorClass="text-[var(--red)]" /><StatCard title="U. GANADAS (NETO)" value={formatUnits(stats.profitUnits)} colorClass={stats.profitUnits >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /><StatCard title="Beneficio/Pick" value={formatCurrency(stats.profitPerPick, activeBankData?.currency)} colorClass={stats.profitPerPick >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /><StatCard title="Yield" value={`${stats.yield.toFixed(2)}%`} colorClass={stats.yield >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /></div></div>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-6 h-72 flex flex-col relative shadow-sm transition-colors"><div className="flex justify-between items-center mb-6"><h4 className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider">Evolución del Beneficio</h4><div className="flex bg-[var(--bg-input)] rounded-lg p-1 border border-[var(--border)] backdrop-blur-sm"><button onClick={() => setChartViewMode('detailed')} className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${chartViewMode==='detailed'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><TrendingUp size={14}/></button><button onClick={() => setChartViewMode('weekly')} className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${chartViewMode==='weekly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><LineChart size={14}/></button></div></div><ResponsiveContainer width="100%" height="100%">{chartViewMode === 'detailed' ? (<AreaChart data={stats.detailedChart}><defs><linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={theme === 'dark' ? '#5EE6B1' : '#2563EB'} stopOpacity={0.4}/><stop offset="95%" stopColor={theme === 'dark' ? '#5EE6B1' : '#2563EB'} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} itemStyle={{color: theme === 'dark' ? '#5EE6B1' : '#2563EB', fontWeight:'bold'}} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']} /><Area type="monotone" dataKey="profit" stroke={theme === 'dark' ? '#5EE6B1' : '#2563EB'} strokeWidth={3} fill="url(#colorProfit)"/></AreaChart>) : (<ReLineChart data={stats.weeklyChart}><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} itemStyle={{color: theme === 'dark' ? '#5EE6B1' : '#2563EB', fontWeight:'bold'}} labelFormatter={(l, p) => p[0]?.payload?.fullLabel || l} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']} /><Line type="linear" dataKey="profit" stroke={theme === 'dark' ? '#5EE6B1' : '#2563EB'} strokeWidth={3} dot={{r: 4, fill: theme === 'dark' ? '#5EE6B1' : '#2563EB', strokeWidth: 0}} activeDot={{r: 6, stroke: theme === 'dark' ? '#fff' : '#0F172A', strokeWidth: 2}}/></ReLineChart>)}</ResponsiveContainer></div><div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-6 h-72 flex flex-col relative shadow-sm transition-colors"><div className="flex justify-between items-center mb-6"><h4 className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider">Rendimiento Temporal</h4><div className="flex bg-[var(--bg-input)] rounded-lg p-1 border border-[var(--border)] backdrop-blur-sm"><button onClick={() => setBarChartViewMode('weekly')} className={`px-3 py-1 text-xs rounded-md font-medium flex items-center gap-1 transition-colors ${barChartViewMode==='weekly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><CalendarDays size={12}/> Semana</button><button onClick={() => setBarChartViewMode('monthly')} className={`px-3 py-1 text-xs rounded-md font-medium flex items-center gap-1 transition-colors ${barChartViewMode==='monthly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><Calendar size={12}/> Mes</button></div></div><ResponsiveContainer width="100%" height="100%"><BarChart data={barChartViewMode === 'weekly' ? stats.weeklyBarChart : stats.monthlyBarChart}><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} cursor={{fill: theme === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)'}} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']}/><Bar dataKey="profit" radius={[6,6,0,0]}>{(barChartViewMode === 'weekly' ? stats.weeklyBarChart : stats.monthlyBarChart).map((e,i)=><Cell key={`c-${i}`} fill={e.profit>=0?(theme === 'dark' ? '#5EE6B1' : '#2563EB'):(theme === 'dark' ? '#FF5A5F' : '#EF4444')}/>)}</Bar></BarChart></ResponsiveContainer></div></div></>
+                    <div className="bg-transparent"><div className="grid grid-cols-2 md:grid-cols-5 gap-3"><StatCard title="Picks" value={stats.picks} subValue="Total" /><StatCard title="Ganados" value={stats.won} colorClass="text-[var(--accent)]" /><StatCard title="U. APOSTADAS" value={formatUnits(stats.stakedUnits)} /><StatCard title="Beneficio/Día" value={formatCurrency(stats.profitDay, activeBankData?.currency)} colorClass={stats.profitDay >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /><StatCard title="Factor de Beneficio" value={stats.profitFactor.toFixed(2)} /><StatCard title="Tasa de Acierto" value={`${stats.winRate.toFixed(2)}%`} /><StatCard title="Perdidos" value={stats.lost} colorClass="text-[var(--red)]" /><StatCard title="U. GANADAS (NETO)" value={formatUnits(stats.profitUnits)} colorClass={stats.profitUnits >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /><StatCard title="Beneficio/Pick" value={formatCurrency(stats.profitPerPick, activeBankData?.currency)} colorClass={stats.profitPerPick >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /><StatCard title="Yield" value={`${stats.yield.toFixed(2)}%`} colorClass={stats.yield >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /></div></div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5"><div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 h-60 md:h-[260px] flex flex-col relative shadow-sm transition-colors"><div className="flex justify-between items-center mb-4"><h4 className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider">Evolución del Beneficio</h4><div className="flex bg-[var(--bg-input)] rounded-lg p-1 border border-[var(--border)] backdrop-blur-sm"><button onClick={() => setChartViewMode('detailed')} className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${chartViewMode==='detailed'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><TrendingUp size={14}/></button><button onClick={() => setChartViewMode('weekly')} className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${chartViewMode==='weekly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><LineChart size={14}/></button></div></div><ResponsiveContainer width="100%" height="100%">{chartViewMode === 'detailed' ? (<AreaChart data={stats.detailedChart}><defs><linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={theme === 'dark' ? '#5EE6B1' : '#2563EB'} stopOpacity={0.4}/><stop offset="95%" stopColor={theme === 'dark' ? '#5EE6B1' : '#2563EB'} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} itemStyle={{color: theme === 'dark' ? '#5EE6B1' : '#2563EB', fontWeight:'bold'}} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']} /><Area type="monotone" dataKey="profit" stroke={theme === 'dark' ? '#5EE6B1' : '#2563EB'} strokeWidth={3} fill="url(#colorProfit)"/></AreaChart>) : (<ReLineChart data={stats.weeklyChart}><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} itemStyle={{color: theme === 'dark' ? '#5EE6B1' : '#2563EB', fontWeight:'bold'}} labelFormatter={(l, p) => p[0]?.payload?.fullLabel || l} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']} /><Line type="linear" dataKey="profit" stroke={theme === 'dark' ? '#5EE6B1' : '#2563EB'} strokeWidth={3} dot={{r: 4, fill: theme === 'dark' ? '#5EE6B1' : '#2563EB', strokeWidth: 0}} activeDot={{r: 6, stroke: theme === 'dark' ? '#fff' : '#0F172A', strokeWidth: 2}}/></ReLineChart>)}</ResponsiveContainer></div><div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 h-60 md:h-[260px] flex flex-col relative shadow-sm transition-colors"><div className="flex justify-between items-center mb-4"><h4 className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider">Rendimiento Temporal</h4><div className="flex bg-[var(--bg-input)] rounded-lg p-1 border border-[var(--border)] backdrop-blur-sm"><button onClick={() => setBarChartViewMode('weekly')} className={`px-3 py-1 text-xs rounded-md font-medium flex items-center gap-1 transition-colors ${barChartViewMode==='weekly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><CalendarDays size={12}/> Semana</button><button onClick={() => setBarChartViewMode('monthly')} className={`px-3 py-1 text-xs rounded-md font-medium flex items-center gap-1 transition-colors ${barChartViewMode==='monthly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><Calendar size={12}/> Mes</button></div></div><ResponsiveContainer width="100%" height="100%"><BarChart data={barChartViewMode === 'weekly' ? stats.weeklyBarChart : stats.monthlyBarChart}><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} cursor={{fill: theme === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)'}} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']}/><Bar dataKey="profit" radius={[6,6,0,0]}>{(barChartViewMode === 'weekly' ? stats.weeklyBarChart : stats.monthlyBarChart).map((e,i)=><Cell key={`c-${i}`} fill={e.profit>=0?(theme === 'dark' ? '#5EE6B1' : '#2563EB'):(theme === 'dark' ? '#FF5A5F' : '#EF4444')}/>)}</Bar></BarChart></ResponsiveContainer></div></div></>
                 )}
 
                 {activeTab === 'bets' && (
@@ -1303,7 +1315,7 @@ export default function App() {
                                 <h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">Balances Agrupados</h3>
                                 <p className="text-[var(--text-muted)] text-sm mt-1">Agrupa varios bankrolls para ver sus estadísticas globales juntas.</p>
                             </div>
-                            <button onClick={() => { setNewBalanceData({ name: '', bankIds: [], premiumPassword: '' }); setIsAddingBalance(true); }} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold transition-all shadow-[var(--shadow-glow-md)]">
+                            <button onClick={() => { setNewBalanceData({ name: '', bankIds: [] }); setIsAddingBalance(true); }} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold transition-all shadow-[var(--shadow-glow-md)]">
                                 <Plus size={16} /> Crear Balance
                             </button>
                         </div>
@@ -1330,9 +1342,6 @@ export default function App() {
                                                 <div className="flex gap-2">
                                                     <button onClick={() => { handleBankChange({target: {value: balance.id}}); setActiveTab('dashboard'); }} className="p-2 bg-[var(--accent-10)] text-[var(--accent)] rounded-lg hover:bg-[var(--accent-20)] transition-colors" title="Ver Dashboard de este Balance">
                                                         <LayoutDashboard size={18}/>
-                                                    </button>
-                                                    <button onClick={() => openShareModalFor(balance)} className="p-2 bg-[var(--accent-10)] text-[var(--accent)] rounded-lg hover:bg-[var(--accent-20)] transition-colors" title="Compartir Balance">
-                                                        <Code size={18}/>
                                                     </button>
                                                     <button onClick={() => handleDeleteBalance(balance.id)} className="p-2 bg-[var(--red-10)] text-[var(--red)] rounded-lg hover:bg-[var(--red-20)] transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100" title="Eliminar Balance">
                                                         <Trash2 size={18}/>
@@ -1413,7 +1422,7 @@ export default function App() {
                             <p className="text-xs text-[var(--accent)] mb-3 font-bold uppercase tracking-widest flex items-center justify-center gap-2">
                                 <Crown size={14}/> Análisis IA Premium
                             </p>
-                            <label className={`cursor-pointer ${isScanning ? 'bg-slate-700 border-slate-600 text-slate-300' : 'bg-[var(--bg-hover)] hover:bg-[var(--bg-overlay-hover)] border-[var(--border)] text-[var(--text-main)] hover:border-[var(--accent-50)]'} border px-6 py-3 rounded-xl font-bold shadow-sm flex items-center justify-center gap-3 mx-auto w-fit transition-all`}>
+                            <label className={`cursor-pointer ${isScanning ? 'bg-[var(--bg-hover)] border-[var(--accent-50)]' : 'bg-[var(--bg-hover)] hover:bg-[var(--bg-overlay-hover)] border-[var(--border)] hover:border-[var(--accent-50)]'} text-[var(--text-main)] border px-6 py-3 rounded-xl font-bold shadow-sm flex items-center justify-center gap-3 mx-auto w-fit transition-all`}>
                                 <Upload size={18}/> {isScanning ? 'Procesando visión artificial...' : 'Subir Captura del Boleto'}
                                 <input type="file" accept="image/*" onChange={escanearBoleto} className="hidden" disabled={isScanning} />
                             </label>
@@ -1473,67 +1482,18 @@ export default function App() {
             </div>
             )}
 
-            {isAddingBalance && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
-                    <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl w-full max-w-sm rounded-3xl shadow-[var(--shadow-glow-lg)] border border-[var(--accent-20)] overflow-hidden flex flex-col transition-colors">
-                        <div className="px-5 py-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-card)]">
-                            <h3 className="font-bold text-[var(--text-main)] text-lg">Nuevo Balance</h3>
-                            <button onClick={() => setIsAddingBalance(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-overlay)] p-1.5 rounded-full"><X size={18}/></button>
-                        </div>
-                        <div className="p-6 space-y-5">
-                            <div className="space-y-1.5">
-                                <label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Nombre del Balance</label>
-                                <input type="text" placeholder="Ej: General 2026" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors" value={newBalanceData.name} onChange={e => setNewBalanceData({...newBalanceData, name: e.target.value})} autoFocus />
-                            </div>
-                            <div className="space-y-3">
-                                <label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Selecciona Bancas</label>
-                                <div className="max-h-40 overflow-y-auto space-y-2 custom-scrollbar">
-                                    {banks.map(b => (
-                                        <label key={b.id} className="flex items-center gap-3 p-3 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] cursor-pointer hover:bg-[var(--bg-hover)] transition-colors">
-                                            <input 
-                                                type="checkbox" 
-                                                className="accent-[var(--accent)] w-4 h-4"
-                                                checked={newBalanceData.bankIds.includes(b.id)}
-                                                onChange={(e) => {
-                                                    const newIds = e.target.checked 
-                                                        ? [...newBalanceData.bankIds, b.id] 
-                                                        : newBalanceData.bankIds.filter(id => id !== b.id);
-                                                    setNewBalanceData({...newBalanceData, bankIds: newIds});
-                                                }}
-                                            />
-                                            <span className="text-sm font-bold text-[var(--text-main)]">{b.name}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1 flex items-center gap-1"><Lock size={12}/> Privacidad (Opcional)</label>
-                                <input type="text" placeholder="Clave para ver pendientes..." className="w-full bg-[var(--bg-card)] border border-[var(--accent-30)] focus:border-[var(--accent)] rounded-xl px-4 py-3 text-[var(--text-main)] shadow-inner outline-none transition-colors" value={newBalanceData.premiumPassword || ''} onChange={e => setNewBalanceData({...newBalanceData, premiumPassword: e.target.value})} />
-                            </div>
-                            <button onClick={confirmAddBalance} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-bold py-3.5 rounded-xl transition-all shadow-[var(--shadow-glow-md)] mt-4 disabled:opacity-50" disabled={!newBalanceData.name || newBalanceData.bankIds.length === 0}>Crear Balance Agrupado</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {statusModalData && (
-                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
-                    <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.2)] border border-[var(--accent-20)] p-8 w-full max-w-sm transition-colors"><h3 className="text-[var(--text-main)] font-extrabold text-xl mb-6 text-center tracking-tight drop-shadow-sm">Estado de la Operación</h3><div className="grid grid-cols-2 gap-4"><button onClick={() => handleQuickStatusChange('won')} className="p-4 bg-[var(--accent-10)] hover:bg-[var(--accent-20)] text-[var(--accent)] rounded-2xl font-bold border border-[var(--accent-30)] transition-all flex flex-col items-center gap-2 shadow-inner"><CheckCircle2 size={28}/> Ganada</button><button onClick={() => handleQuickStatusChange('lost')} className="p-4 bg-[var(--red-10)] hover:bg-[var(--red-20)] text-[var(--red)] rounded-2xl font-bold border border-[var(--red-30)] transition-all flex flex-col items-center gap-2 shadow-inner"><XCircle size={28}/> Perdida</button><button onClick={() => handleQuickStatusChange('void')} className="p-4 bg-[var(--bg-overlay)] hover:bg-[var(--bg-overlay-hover)] text-[var(--text-muted)] rounded-2xl font-bold border border-[var(--border-strong)] transition-all flex flex-col items-center gap-2 shadow-inner"><AlertCircle size={28}/> Nula</button><button onClick={() => handleQuickStatusChange('pending')} className="p-4 bg-yellow-500/10 hover:bg-yellow-500/20 text-[var(--yellow)] rounded-2xl font-bold border border-yellow-500/30 transition-all flex flex-col items-center gap-2 shadow-inner"><Clock size={28}/> Pendiente</button></div><button onClick={() => setStatusModalData(null)} className="mt-6 w-full py-3 text-[var(--text-muted)] font-bold hover:text-[var(--text-main)] bg-[var(--bg-card)] rounded-xl transition-colors border border-[var(--border)] hover:border-[var(--border-strong)] shadow-sm">Cancelar</button></div>
-                </div>
-            )}
-
             {/* MODAL DE COMPARTIR Y DISTRIBUCIÓN (WIDGETS) */}
             {shareModal.isOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
-                    <div className="bg-[var(--bg-card)] backdrop-blur-2xl rounded-3xl shadow-2xl border border-[var(--border-strong)] p-6 md:p-8 w-full max-w-lg transition-colors overflow-hidden relative">
+                    <div className="bg-[var(--bg-card)] backdrop-blur-2xl rounded-3xl shadow-2xl border border-[var(--accent-30)] p-6 md:p-8 w-full max-w-lg transition-colors overflow-hidden relative">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-[var(--accent)] blur-[80px] opacity-20 pointer-events-none"></div>
-                        <button onClick={() => setShareModal({ isOpen: false, link: '', iframe: '' })} className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors bg-[var(--bg-overlay)] p-1.5 rounded-full"><X size={18}/></button>
+                        <button onClick={() => setShareModal({ isOpen: false, link: '', iframe: '' })} className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"><X size={20}/></button>
                         
                         <div className="flex items-center gap-3 mb-6 relative z-10">
                             <div className="w-12 h-12 bg-[var(--accent-10)] rounded-xl flex items-center justify-center text-[var(--accent)] shadow-inner border border-[var(--accent-20)]"><Code size={24}/></div>
                             <div>
                                 <h3 className="text-[var(--text-main)] font-extrabold text-xl tracking-tight">Insertar o Compartir</h3>
-                                <p className="text-[var(--text-muted)] text-sm">Elige cómo quieres distribuir tus datos.</p>
+                                <p className="text-[var(--text-muted)] text-sm">Elige cómo quieres distribuir tu banca.</p>
                             </div>
                         </div>
 
@@ -1541,7 +1501,7 @@ export default function App() {
                             {/* Opción 1: Link Directo */}
                             <div className="bg-[var(--bg-base)] p-4 rounded-2xl border border-[var(--border)] shadow-inner">
                                 <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-main)] mb-2 flex items-center gap-2"><LinkIcon size={14} className="text-[var(--accent)]"/> Link Público (Sólo lectura)</h4>
-                                <p className="text-[10px] text-[var(--text-muted)] mb-3 leading-relaxed">Envía este enlace por Telegram o WhatsApp. Cualquiera podrá ver los resultados de esta banca o balance sin registrarse.</p>
+                                <p className="text-[10px] text-[var(--text-muted)] mb-3 leading-relaxed">Envía este enlace por Telegram o WhatsApp. Cualquiera podrá ver tu banca sin necesidad de registrarse.</p>
                                 <div className="flex gap-2">
                                     <input type="text" readOnly value={shareModal.link} className="flex-1 bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-xs text-[var(--text-muted)] outline-none" />
                                     <button onClick={() => copyToClipboard(shareModal.link, "¡Enlace público copiado!")} className="bg-[var(--accent)] text-[var(--accent-fg)] px-4 py-2.5 rounded-xl text-xs font-bold hover:opacity-90 transition-opacity">Copiar</button>
@@ -1608,6 +1568,52 @@ export default function App() {
                     </div>
                 </div>
             )}
+
+            {isAddingBalance && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+                    <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl w-full max-w-sm rounded-3xl shadow-[var(--shadow-glow-lg)] border border-[var(--accent-20)] overflow-hidden flex flex-col transition-colors">
+                        <div className="px-5 py-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-card)]">
+                            <h3 className="font-bold text-[var(--text-main)] text-lg">Nuevo Balance</h3>
+                            <button onClick={() => setIsAddingBalance(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-overlay)] p-1.5 rounded-full"><X size={18}/></button>
+                        </div>
+                        <div className="p-6 space-y-5">
+                            <div className="space-y-1.5">
+                                <label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Nombre del Balance</label>
+                                <input type="text" placeholder="Ej: General 2026" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors" value={newBalanceData.name} onChange={e => setNewBalanceData({...newBalanceData, name: e.target.value})} autoFocus />
+                            </div>
+                            <div className="space-y-3">
+                                <label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Selecciona Bancas</label>
+                                <div className="max-h-40 overflow-y-auto space-y-2 custom-scrollbar">
+                                    {banks.map(b => (
+                                        <label key={b.id} className="flex items-center gap-3 p-3 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] cursor-pointer hover:bg-[var(--bg-hover)] transition-colors">
+                                            <input 
+                                                type="checkbox" 
+                                                className="accent-[var(--accent)] w-4 h-4"
+                                                checked={newBalanceData.bankIds.includes(b.id)}
+                                                onChange={(e) => {
+                                                    const newIds = e.target.checked 
+                                                        ? [...newBalanceData.bankIds, b.id] 
+                                                        : newBalanceData.bankIds.filter(id => id !== b.id);
+                                                    setNewBalanceData({...newBalanceData, bankIds: newIds});
+                                                }}
+                                            />
+                                            <span className="text-sm font-bold text-[var(--text-main)]">{b.name}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                            <button onClick={confirmAddBalance} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-bold py-3.5 rounded-xl transition-all shadow-[var(--shadow-glow-md)] mt-4 disabled:opacity-50" disabled={!newBalanceData.name || newBalanceData.bankIds.length === 0}>Crear Balance Agrupado</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {statusModalData && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+                    <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.2)] border border-[var(--accent-20)] p-8 w-full max-w-sm transition-colors"><h3 className="text-[var(--text-main)] font-extrabold text-xl mb-6 text-center tracking-tight drop-shadow-sm">Estado de la Operación</h3><div className="grid grid-cols-2 gap-4"><button onClick={() => handleQuickStatusChange('won')} className="p-4 bg-[var(--accent-10)] hover:bg-[var(--accent-20)] text-[var(--accent)] rounded-2xl font-bold border border-[var(--accent-30)] transition-all flex flex-col items-center gap-2 shadow-inner"><CheckCircle2 size={28}/> Ganada</button><button onClick={() => handleQuickStatusChange('lost')} className="p-4 bg-[var(--red-10)] hover:bg-[var(--red-20)] text-[var(--red)] rounded-2xl font-bold border border-[var(--red-30)] transition-all flex flex-col items-center gap-2 shadow-inner"><XCircle size={28}/> Perdida</button><button onClick={() => handleQuickStatusChange('void')} className="p-4 bg-[var(--bg-overlay)] hover:bg-[var(--bg-overlay-hover)] text-[var(--text-muted)] rounded-2xl font-bold border border-[var(--border-strong)] transition-all flex flex-col items-center gap-2 shadow-inner"><AlertCircle size={28}/> Nula</button><button onClick={() => handleQuickStatusChange('pending')} className="p-4 bg-yellow-500/10 hover:bg-yellow-500/20 text-[var(--yellow)] rounded-2xl font-bold border border-yellow-500/30 transition-all flex flex-col items-center gap-2 shadow-inner"><Clock size={28}/> Pendiente</button></div><button onClick={() => setStatusModalData(null)} className="mt-6 w-full py-3 text-[var(--text-muted)] font-bold hover:text-[var(--text-main)] bg-[var(--bg-card)] rounded-xl transition-colors border border-[var(--border)] hover:border-[var(--border-strong)] shadow-sm">Cancelar</button></div>
+                </div>
+            )}
+
         </div>
         </>
     );
