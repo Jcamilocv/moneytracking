@@ -1026,15 +1026,15 @@ export default function App() {
 
     if (loading && viewMode === 'personal') return <><style>{getGlobalStyles(theme)}</style><LiquidBackground theme={theme}/><div className="min-h-screen flex items-center justify-center text-[var(--accent)] animate-pulse font-bold text-xl drop-shadow-md">Conectando con la nube...</div></>;
 
-    if (viewMode === 'visiting' && !loading && !visitingBank) {
+    if (viewMode === 'visiting' && !loading && !activeBankData) {
         return (
             <><style>{getGlobalStyles(theme)}</style>
             <LiquidBackground theme={theme}/>
             <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
                 <div className="bg-[var(--bg-card)] p-8 rounded-3xl border border-[var(--border)] shadow-[var(--shadow-glow-md)] max-w-md w-full animate-in fade-in">
                     <AlertTriangle size={48} className="text-[var(--text-muted)] mx-auto mb-4 drop-shadow-sm" />
-                    <h2 className="text-2xl font-bold text-[var(--text-main)] mb-2 tracking-tight">Banca no encontrada</h2>
-                    <p className="text-[var(--text-muted)] mb-6 text-sm leading-relaxed">El enlace es inválido o el usuario ha eliminado el acceso a esta banca.</p>
+                    <h2 className="text-2xl font-bold text-[var(--text-main)] mb-2 tracking-tight">Banca o Balance no encontrado</h2>
+                    <p className="text-[var(--text-muted)] mb-6 text-sm leading-relaxed">El enlace es inválido o el usuario ha eliminado el acceso a esta cuenta.</p>
                     <button onClick={handleExitVisiting} className="w-full bg-[var(--accent)] text-[var(--accent-fg)] px-6 py-3 rounded-xl font-bold hover:opacity-90 transition-opacity shadow-[var(--shadow-glow-sm)]">Ir al Inicio</button>
                 </div>
             </div></>
