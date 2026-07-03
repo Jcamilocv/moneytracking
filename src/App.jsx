@@ -280,6 +280,34 @@ export default function App() {
         amount: 0, stake: 0, analysis: '', commission: '', bonus: '', isLive: false, isFreebet: false, cashout: '', isEachWay: false, tipster: '', isBack: true, isHidden: false
     });
 
+    useEffect(() => {
+        if (!document.querySelector('link[rel="apple-touch-icon"]')) {
+            const appleIcon = document.createElement('link');
+            appleIcon.rel = 'apple-touch-icon';
+            appleIcon.href = '/favicon.jpg';
+            document.head.appendChild(appleIcon);
+        }
+        if (!document.querySelector('link[rel="manifest"]')) {
+            const manifest = {
+                name: "MoneyTracKING",
+                short_name: "MoneyTracKING",
+                start_url: ".",
+                display: "standalone",
+                background_color: "#081225",
+                theme_color: "#081225",
+                icons: [
+                    { src: "/favicon.jpg", sizes: "192x192", type: "image/jpeg" },
+                    { src: "/favicon.jpg", sizes: "512x512", type: "image/jpeg" }
+                ]
+            };
+            const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+            const link = document.createElement('link');
+            link.rel = 'manifest';
+            link.href = URL.createObjectURL(blob);
+            document.head.appendChild(link);
+        }
+    }, []);
+
     useEffect(() => { localStorage.setItem('moneytracking_theme', theme); }, [theme]);
 
     const escanearBoleto = async (event) => {
@@ -944,12 +972,12 @@ export default function App() {
     // =========================================================================
     if (isEmbed && activeBankData) {
         return (
-            <div className="h-screen flex flex-col bg-[var(--bg-base)] text-[var(--text-main)] font-sans overflow-hidden">
+            <div className="h-screen flex flex-col bg-[var(--bg-base)] text-[var(--text-main)] font-sans overflow-hidden w-full">
                 <style>{getGlobalStyles(theme)}</style>
                 <LiquidBackground theme={theme} />
                 
                 {/* Cabecera Minimalista para el Iframe */}
-                <header className="flex justify-between items-center px-4 py-3 border-b border-[var(--border)] bg-[var(--bg-card)]/80 backdrop-blur-xl z-20">
+                <header className="flex justify-between items-center px-4 py-3 border-b border-[var(--border)] bg-[var(--bg-card)]/80 backdrop-blur-xl z-20 w-full">
                     <div className="flex items-center gap-3">
                         <img src="/favicon.jpg" alt="Logo" className="w-7 h-7 rounded-lg shadow-sm" onerror="this.style.display='none'" />
                         <h1 className="font-bold text-base tracking-tight truncate max-w-[150px] sm:max-w-xs">{activeBankData.name}</h1>
@@ -961,14 +989,14 @@ export default function App() {
                 </header>
 
                 {/* Contenido del Widget */}
-                <main className="flex-1 overflow-y-auto custom-scrollbar p-3 md:p-5 z-10 relative">
+                <main className="flex-1 overflow-y-auto custom-scrollbar p-3 md:p-5 z-10 relative w-full">
                     {/* Caja FOMO por si tiene contraseña */}
                     {activeBankData?.premiumPassword && !unlockedBank && pendingHiddenCount > 0 && activeTab === 'bets' && (
-                        <div className="bg-[var(--bg-card)] border border-[var(--border-strong)] rounded-2xl p-5 text-center shadow-sm mb-5">
+                        <div className="bg-[var(--bg-card)] border border-[var(--border-strong)] rounded-2xl p-5 text-center shadow-sm mb-5 w-full">
                             <Lock size={24} className="text-[var(--text-muted)] mx-auto mb-2" />
                             <h4 className="text-sm font-bold text-[var(--text-main)] mb-2">Hay {pendingHiddenCount} apuestas ocultas</h4>
                             <p className="text-[var(--text-muted)] text-xs mb-4">Introduce la clave para ver las jugadas en curso.</p>
-                            <div className="flex gap-2 max-w-xs mx-auto">
+                            <div className="flex gap-2 max-w-xs mx-auto w-full">
                                 <input type="password" value={visitorPasswordInput} onChange={e=>setVisitorPasswordInput(e.target.value)} className="flex-1 bg-[var(--bg-input)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--accent)]" placeholder="Contraseña..." />
                                 <button onClick={() => { if(visitorPasswordInput === activeBankData.premiumPassword) setUnlockedBank(true); else alert('Clave incorrecta'); }} className="bg-[var(--accent)] text-[var(--accent-fg)] px-4 py-2 rounded-lg text-sm font-bold">Ver</button>
                             </div>
@@ -976,12 +1004,12 @@ export default function App() {
                     )}
 
                     {activeTab === 'dashboard' && (
-                        <div className="space-y-4">
-                            <div className="bg-[var(--bg-card)] rounded-2xl p-6 border border-[var(--border)] shadow-sm text-center">
+                        <div className="space-y-4 w-full">
+                            <div className="bg-[var(--bg-card)] rounded-2xl p-6 border border-[var(--border)] shadow-sm text-center w-full">
                                 <p className="text-[var(--accent)] text-xs font-bold mb-1 uppercase tracking-widest">Beneficio Total</p>
                                 <h2 className="text-4xl font-extrabold text-[var(--text-main)] tracking-tight">{formatCurrency(stats.totalProfit, activeBankData?.currency)}</h2>
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full">
                                 <StatCard title="Picks" value={stats.picks} />
                                 <StatCard title="Ganados" value={stats.won} colorClass="text-[var(--accent)]" />
                                 <StatCard title="Perdidos" value={stats.lost} colorClass="text-[var(--red)]" />
@@ -991,9 +1019,9 @@ export default function App() {
                     )}
 
                     {activeTab === 'bets' && (
-                        <div className="space-y-3">
+                        <div className="space-y-3 w-full">
                             {betsByMonth.map(g => (
-                                <div key={g.id} className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-sm">
+                                <div key={g.id} className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-sm w-full">
                                     <div onClick={()=>toggleMonth(g.id)} className="flex items-center justify-between p-4 bg-[var(--bg-hover)] cursor-pointer border-b border-[var(--border)]">
                                         <div className="flex items-center gap-2">
                                             {expandedMonths[g.id]?<ChevronUp size={16} className="text-[var(--accent)]"/>:<ChevronDown size={16} className="text-[var(--text-muted)]"/>}
@@ -1002,13 +1030,13 @@ export default function App() {
                                         <div className={`px-2.5 py-1 rounded-md text-xs font-bold ${g.profit>=0?'bg-[var(--accent-10)] text-[var(--accent)]':'bg-[var(--red-10)] text-[var(--red)]'}`}>{g.profit>0?'+':''}{formatCurrency(g.profit, activeBankData?.currency)}</div>
                                     </div>
                                     {expandedMonths[g.id] && (
-                                        <div className="divide-y divide-[var(--border)]">
+                                        <div className="divide-y divide-[var(--border)] w-full">
                                             {g.bets.map(b => {
                                                 const amt=b.amount?parseFloat(b.amount):parseFloat(b.stake)*10;
                                                 const mult = b.isBack === false ? -1 : 1;
                                                 const pl=b.status==='won'?((amt*b.odds)-amt)*mult:b.status==='lost'?-amt*mult:0;
                                                 return (
-                                                    <div key={b.id} className="p-3 text-sm hover:bg-[var(--bg-overlay)] transition-colors">
+                                                    <div key={b.id} className="p-3 text-sm hover:bg-[var(--bg-overlay)] transition-colors w-full">
                                                         <div className="flex justify-between items-start mb-1">
                                                             <div className="font-bold text-[var(--text-main)] truncate max-w-[60%] flex items-center gap-1">
                                                                 {b.isBack === false && <span className="text-[8px] bg-[var(--red-10)] text-[var(--red)] px-1.5 py-0.5 rounded border border-[var(--red-30)] mr-1">LAY</span>}
@@ -1016,9 +1044,9 @@ export default function App() {
                                                             </div>
                                                             <div className={`font-bold ${b.isBack === false ? 'text-[var(--red)]' : 'text-[var(--accent)]'}`}>@{b.odds.toFixed(2)}</div>
                                                         </div>
-                                                        <div className="flex justify-between items-center text-xs">
-                                                            <div className="text-[var(--text-muted)]">{typeof b.selection==='string'?b.selection:'Múltiple'}</div>
-                                                            <div className="flex items-center gap-2">
+                                                        <div className="flex justify-between items-center text-xs w-full">
+                                                            <div className="text-[var(--text-muted)] truncate max-w-[50%]">{typeof b.selection==='string'?b.selection:'Múltiple'}</div>
+                                                            <div className="flex items-center gap-2 shrink-0">
                                                                 <span className={`font-bold ${pl>0?'text-[var(--accent)]':pl<0?'text-[var(--red)]':'text-[var(--text-muted)]'}`}>{pl>0?'+':''}{formatCurrency(pl,activeBankData?.currency)}</span>
                                                                 <StatusBadge status={b.status} />
                                                             </div>
@@ -1035,8 +1063,8 @@ export default function App() {
                     )}
                 </main>
 
-                {/* Footer */}
-                <a href={window.location.origin} target="_blank" rel="noopener noreferrer" className="block text-center py-2 bg-[var(--bg-card)] border-t border-[var(--border)] text-[10px] font-bold text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors uppercase tracking-widest z-20">
+                {/* Footer "Caballo de Troya" */}
+                <a href={window.location.origin} target="_blank" rel="noopener noreferrer" className="block text-center py-2 bg-[var(--bg-card)] border-t border-[var(--border)] text-[10px] font-bold text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors uppercase tracking-widest z-20 w-full">
                     ⚡ Powered by MoneyTracKING
                 </a>
             </div>
@@ -1075,7 +1103,7 @@ export default function App() {
         return (
             <><style>{getGlobalStyles(theme)}</style>
             <LiquidBackground theme={theme}/>
-            <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
+            <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center w-full">
                 <div className="bg-[var(--bg-card)] p-8 rounded-3xl border border-[var(--border)] shadow-[var(--shadow-glow-md)] max-w-md w-full animate-in fade-in">
                     <AlertTriangle size={48} className="text-[var(--text-muted)] mx-auto mb-4 drop-shadow-sm" />
                     <h2 className="text-2xl font-bold text-[var(--text-main)] mb-2 tracking-tight">Banca o Balance no encontrado</h2>
@@ -1089,7 +1117,7 @@ export default function App() {
     if (dbError && viewMode === 'personal') return (
         <><style>{getGlobalStyles(theme)}</style>
         <LiquidBackground theme={theme}/>
-        <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
+        <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center w-full">
             <div className="bg-[var(--bg-card)] p-8 rounded-3xl border border-[var(--red-30)] shadow-[var(--shadow-red)] max-w-md w-full animate-in fade-in">
                 <AlertTriangle size={48} className="text-[var(--red)] mx-auto mb-4 drop-shadow-sm" />
                 <h2 className="text-2xl font-bold text-[var(--text-main)] mb-2 tracking-tight">Conexión Bloqueada</h2>
@@ -1103,7 +1131,7 @@ export default function App() {
         return (
             <><style>{getGlobalStyles(theme)}</style>
             <LiquidBackground theme={theme} />
-            <div className="flex flex-col md:flex-row h-screen text-[var(--text-main)] font-sans overflow-hidden">
+            <div className="flex flex-col md:flex-row h-screen text-[var(--text-main)] font-sans overflow-hidden w-full">
                 <aside className="hidden md:flex flex-col w-64 bg-[var(--bg-card)]/80 backdrop-blur-2xl border-r border-[var(--border)] transition-colors">
                     <div className="p-6 border-b border-[var(--border)] flex items-center gap-3">
                         <img src="/favicon.jpg" alt="Logo" className="w-8 h-8 rounded-lg object-cover shadow-[var(--shadow-glow-sm)]" />
@@ -1111,7 +1139,7 @@ export default function App() {
                     </div>
                     <div className="flex-1 p-4 flex flex-col justify-end"><div className="p-4 border-t border-[var(--border)]"><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center text-xs font-bold text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]">{currentUser.email?.charAt(0).toUpperCase()}</div><div className="text-sm font-medium text-[var(--text-main)] max-w-[100px] truncate">{currentUser.email?.split('@')[0]}</div></div><button onClick={handleLogout} className="text-[var(--text-muted)] hover:text-[var(--red)]"><LogOut size={16}/></button></div></div></div>
                 </aside>
-                <main className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+                <main className="flex-1 flex flex-col items-center justify-center p-6 text-center w-full">
                     <div className="bg-[var(--bg-card)] backdrop-blur-2xl p-8 rounded-3xl border border-[var(--border)] shadow-[var(--shadow-glow-md)] max-w-lg w-full transition-colors">
                         <div className="w-16 h-16 bg-[var(--bg-overlay)] border border-[var(--border)] rounded-full flex items-center justify-center mx-auto mb-6"><Plus size={32} className="text-[var(--accent)] drop-shadow-md" /></div>
                         <h2 className="text-3xl font-bold text-[var(--text-main)] mb-3">¡Bienvenido a la cima!</h2>
@@ -1121,7 +1149,7 @@ export default function App() {
                 </main>
                 
                 {isAddingBank && (
-                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in w-full">
                         <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl w-full max-w-sm rounded-3xl shadow-[var(--shadow-glow-lg)] border border-[var(--accent-20)] overflow-hidden flex flex-col transition-colors">
                             <div className="px-5 py-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-card)]"><h3 className="font-bold text-[var(--text-main)] text-lg">Nueva Banca</h3><button onClick={() => setIsAddingBank(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-overlay)] p-1.5 rounded-full"><X size={18}/></button></div>
                             <div className="p-6 space-y-5">
@@ -1136,7 +1164,7 @@ export default function App() {
 
                 {/* MODAL FEEDBACK PREMIUM (INCLUSO SI NO HAY BANCAS) */}
                 {feedbackModal.isOpen && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in w-full">
                         <div className="bg-[var(--bg-card)] backdrop-blur-2xl rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.3)] border border-[var(--border-strong)] p-8 w-full max-w-sm text-center transition-colors">
                             {feedbackModal.type === 'alert' ? (
                                 <AlertTriangle size={48} className="text-[var(--accent)] mx-auto mb-4 drop-shadow-md" />
@@ -1147,7 +1175,7 @@ export default function App() {
                                 {feedbackModal.type === 'alert' ? 'Aviso' : 'Confirmación'}
                             </h3>
                             <p className="text-[var(--text-muted)] text-sm mb-6 whitespace-pre-wrap">{feedbackModal.message}</p>
-                            <div className="flex gap-3 justify-center">
+                            <div className="flex gap-3 justify-center w-full">
                                 {feedbackModal.type === 'confirm' && (
                                     <button 
                                         onClick={closeFeedbackModal} 
@@ -1160,16 +1188,18 @@ export default function App() {
                                 <button 
                                     onClick={async () => { 
                                         if (feedbackModal.type === 'confirm' && feedbackModal.onConfirm) { 
+                                            setIsProcessing(true);
                                             await feedbackModal.onConfirm(); 
+                                            setIsProcessing(false);
                                         } else {
                                             closeFeedbackModal(); 
                                         }
                                     }} 
                                     disabled={isProcessing}
-                                    className="flex-1 py-3 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] rounded-xl font-bold shadow-[var(--shadow-glow-md)] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                    className="flex-1 py-3 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] rounded-xl font-bold shadow-[var(--shadow-glow-md)] transition-all flex justify-center items-center gap-2 disabled:opacity-50"
                                 >
                                     {isProcessing ? (
-                                        <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Procesando...</>
+                                        <><div className="w-4 h-4 border-2 border-[var(--bg-input)] border-t-[var(--accent-fg)] rounded-full animate-spin"></div> Procesando...</>
                                     ) : (
                                         'Aceptar'
                                     )}
@@ -1189,12 +1219,12 @@ export default function App() {
     return (
         <><style>{getGlobalStyles(theme)}</style>
         <LiquidBackground theme={theme} />
-        <div className="flex flex-col md:flex-row h-screen text-[var(--text-main)] font-sans overflow-hidden">
+        <div className="flex flex-col md:flex-row h-screen text-[var(--text-main)] font-sans overflow-hidden w-full">
             {isMobileMenuOpen && (
-                <div className="fixed inset-0 z-50 bg-[var(--bg-modal)] backdrop-blur-md md:hidden animate-in fade-in" onClick={() => setIsMobileMenuOpen(false)}>
+                <div className="fixed inset-0 z-50 bg-[var(--bg-modal)] backdrop-blur-md md:hidden animate-in fade-in w-full" onClick={() => setIsMobileMenuOpen(false)}>
                     <div className="absolute top-0 left-0 bottom-0 w-64 bg-[var(--bg-base-95)] backdrop-blur-2xl p-4 shadow-2xl border-r border-[var(--accent-20)] slide-in transition-colors" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between items-center mb-6"><h2 className="font-bold text-lg text-[var(--text-main)]">Menú</h2><button onClick={() => setIsMobileMenuOpen(false)} className="p-1.5 rounded-full bg-[var(--bg-overlay)] hover:bg-[var(--bg-overlay-hover)] text-[var(--text-muted)]"><X size={18}/></button></div>
-                        <nav className="space-y-2">
+                        <nav className="space-y-2 w-full">
                             <MobileMenuItem icon={LayoutDashboard} label="Dashboard" tabId="dashboard" />
                             <MobileMenuItem icon={List} label="Mis Apuestas" tabId="bets" />
                             <MobileMenuItem icon={Layers} label="Balances" tabId="balances" />
@@ -1206,31 +1236,31 @@ export default function App() {
                 </div>
             )}
 
-            <aside className={`hidden md:flex flex-col w-64 bg-[var(--bg-card)]/50 backdrop-blur-2xl border-r border-[var(--border)] transition-colors`}>
+            <aside className={`hidden md:flex flex-col w-64 bg-[var(--bg-card)]/50 backdrop-blur-2xl border-r border-[var(--border)] transition-colors shrink-0`}>
                 <div className="p-6 border-b border-[var(--border)] flex items-center gap-3">
                     <img src="/favicon.jpg" alt="Logo" className="w-8 h-8 rounded-lg object-cover shadow-[var(--shadow-glow-sm)]" />
                     <h1 className="font-bold text-lg tracking-tight text-[var(--text-main)]">MoneyTrac<span className="text-[var(--yellow)] drop-shadow-sm">KING</span></h1>
                 </div>
                 {viewMode === 'visiting' ? (
-                    <div className="flex-1 flex flex-col p-4 bg-indigo-500/5">
-                        <div className="mb-4 p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl backdrop-blur-md"><p className="text-[10px] text-indigo-500 dark:text-indigo-300 uppercase font-bold mb-1 flex items-center gap-2"><Eye size={12}/> Modo Visitante</p><p className="text-[var(--text-main)] text-sm font-bold truncate drop-shadow-sm">{activeBankData?.name}</p></div>
-                        <nav className="space-y-2"><button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'dashboard' ? 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30 shadow-lg' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay)] hover:text-[var(--text-main)]'}`}><LayoutDashboard size={18}/> Dashboard</button><button onClick={() => setActiveTab('bets')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'bets' ? 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30 shadow-lg' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay)] hover:text-[var(--text-main)]'}`}><List size={18}/> Historial</button></nav>
-                        <div className="mt-auto"><button onClick={handleExitVisiting} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-[var(--text-main)] bg-[var(--bg-overlay)] border border-[var(--border)] hover:bg-[var(--bg-overlay-hover)] transition-all backdrop-blur-md"><LogOut size={16}/> {currentUser ? 'Volver a mi Banca' : 'Ir al Inicio de Sesión'}</button></div>
+                    <div className="flex-1 flex flex-col p-4 bg-indigo-500/5 w-full">
+                        <div className="mb-4 p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl backdrop-blur-md w-full"><p className="text-[10px] text-indigo-500 dark:text-indigo-300 uppercase font-bold mb-1 flex items-center gap-2"><Eye size={12}/> Modo Visitante</p><p className="text-[var(--text-main)] text-sm font-bold truncate drop-shadow-sm">{activeBankData?.name}</p></div>
+                        <nav className="space-y-2 w-full"><button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'dashboard' ? 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30 shadow-lg' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay)] hover:text-[var(--text-main)]'}`}><LayoutDashboard size={18}/> Dashboard</button><button onClick={() => setActiveTab('bets')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'bets' ? 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30 shadow-lg' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay)] hover:text-[var(--text-main)]'}`}><List size={18}/> Historial</button></nav>
+                        <div className="mt-auto w-full"><button onClick={handleExitVisiting} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-[var(--text-main)] bg-[var(--bg-overlay)] border border-[var(--border)] hover:bg-[var(--bg-overlay-hover)] transition-all backdrop-blur-md"><LogOut size={16}/> {currentUser ? 'Volver a mi Banca' : 'Ir al Inicio de Sesión'}</button></div>
                     </div>
                 ) : (
-                    <><nav className="p-4 space-y-2 flex-1">
+                    <><nav className="p-4 space-y-2 flex-1 w-full">
                         <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'dashboard' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><LayoutDashboard size={18}/> Dashboard</button>
                         <button onClick={() => setActiveTab('bets')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'bets' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><List size={18}/> Mis Apuestas</button>
                         <button onClick={() => setActiveTab('balances')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'balances' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><Layers size={18}/> Balances</button>
                         <div className="pt-6 pb-2 px-4 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Configuración</div>
                         <button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'settings' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><Settings size={18}/> Configuración</button>
                         <button onClick={() => setActiveTab('customization')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'customization' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><Tags size={18}/> Personalización</button>
-                    </nav><div className="p-4 border-t border-[var(--border)]"><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center text-xs font-bold text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]">{currentUser.email?.charAt(0).toUpperCase()}</div><div className="text-sm font-medium text-[var(--text-main)] max-w-[100px] truncate">{currentUser.email?.split('@')[0]}</div></div><button onClick={handleLogout} className="text-[var(--text-muted)] hover:text-[var(--red)] bg-[var(--bg-overlay)] p-1.5 rounded-full"><LogOut size={16}/></button></div><div className="text-center text-[10px] text-[var(--accent-80)] mt-3 font-medium"><ShieldCheck size={10} className="inline mr-1"/> Sincronizado en la nube</div></div></>
+                    </nav><div className="p-4 border-t border-[var(--border)] w-full"><div className="flex items-center justify-between mb-2 w-full"><div className="flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center text-xs font-bold text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)] shrink-0">{currentUser.email?.charAt(0).toUpperCase()}</div><div className="text-sm font-medium text-[var(--text-main)] max-w-[100px] truncate">{currentUser.email?.split('@')[0]}</div></div><button onClick={handleLogout} className="text-[var(--text-muted)] hover:text-[var(--red)] bg-[var(--bg-overlay)] p-1.5 rounded-full shrink-0"><LogOut size={16}/></button></div><div className="text-center text-[10px] text-[var(--accent-80)] mt-3 font-medium w-full"><ShieldCheck size={10} className="inline mr-1"/> Sincronizado en la nube</div></div></>
                 )}
             </aside>
 
-            <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative mb-16 md:mb-0">
-                <header className="h-16 bg-transparent backdrop-blur-xl border-b border-[var(--border)] flex items-center justify-between px-6 sticky top-0 z-30 transition-colors">
+            <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative mb-16 md:mb-0 w-full">
+                <header className="h-16 bg-transparent backdrop-blur-xl border-b border-[var(--border)] flex items-center justify-between px-6 sticky top-0 z-30 transition-colors w-full">
                     <div className="flex items-center gap-4">
                         <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 rounded-xl bg-[var(--bg-overlay)] text-[var(--text-main)] hover:bg-[var(--bg-overlay-hover)] border border-[var(--border)]"><Menu size={20} /></button>
                         <h2 className="text-xl font-bold text-[var(--text-main)] tracking-tight">
@@ -1240,14 +1270,14 @@ export default function App() {
                         </h2>
                     </div>
                     <div className="flex items-center gap-3">
-                        <button onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} className="p-2 rounded-xl bg-[var(--bg-overlay)] text-[var(--text-main)] hover:bg-[var(--bg-overlay-hover)] border border-[var(--border)] transition-colors shadow-sm" title="Alternar Tema">
+                        <button onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} className="p-2 rounded-xl bg-[var(--bg-overlay)] text-[var(--text-main)] hover:bg-[var(--bg-overlay-hover)] border border-[var(--border)] transition-colors shadow-sm shrink-0" title="Alternar Tema">
                             {theme === 'dark' ? <Sun size={18} className="text-[var(--text-muted)] hover:text-white" /> : <Moon size={18} className="text-[var(--text-muted)] hover:text-[#0F172A]" />}
                         </button>
                         
                         {viewMode === 'personal' && (banks.length > 0 || balances.length > 0) && (
-                            <div className="relative hidden sm:block">
+                            <div className="relative hidden sm:block w-[200px] shrink-0">
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Wallet size={14} className="text-[var(--accent)] drop-shadow-sm"/></div>
-                                <select value={currentBankId || ''} onChange={handleBankChange} className="appearance-none bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-main)] pl-9 pr-9 py-2 rounded-xl text-sm focus:outline-none focus:border-[var(--accent-50)] shadow-inner font-medium transition-colors hover:bg-[var(--bg-hover)] cursor-pointer max-w-[200px] truncate">
+                                <select value={currentBankId || ''} onChange={handleBankChange} className="appearance-none bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-main)] pl-9 pr-9 py-2 rounded-xl text-sm focus:outline-none focus:border-[var(--accent-50)] shadow-inner font-medium transition-colors hover:bg-[var(--bg-hover)] cursor-pointer w-full truncate">
                                     <optgroup label="Bancas Individuales">
                                         {banks.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
                                     </optgroup>
@@ -1261,37 +1291,38 @@ export default function App() {
                             </div>
                         )}
                         {viewMode === 'visiting' && (
-                            <div className="bg-indigo-500/20 border border-indigo-500/30 px-3 py-1.5 rounded-lg text-xs text-indigo-600 dark:text-indigo-300 font-bold backdrop-blur-sm" title="Por privacidad, las apuestas pendientes están ocultas.">Modo Lectura</div>
+                            <div className="bg-indigo-500/20 border border-indigo-500/30 px-3 py-1.5 rounded-lg text-xs text-indigo-600 dark:text-indigo-300 font-bold backdrop-blur-sm shrink-0" title="Por privacidad, las apuestas pendientes están ocultas.">Modo Lectura</div>
                         )}
                     </div>
                 </header>
 
-                <div className="flex-1 overflow-auto p-4 md:p-5 space-y-4 md:space-y-5 custom-scrollbar relative z-10">
+                <div className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-6 custom-scrollbar relative z-10 w-full max-w-full">
                 {activeTab === 'dashboard' && activeBankData && (
-                    <><div className="relative overflow-hidden bg-[var(--bg-card)] rounded-3xl p-6 md:p-8 border border-[var(--border)] shadow-md transition-colors">
+                    <><div className="relative overflow-hidden bg-[var(--bg-card)] rounded-3xl p-6 md:p-8 lg:p-10 border border-[var(--border)] shadow-md transition-colors w-full">
                         <div className="absolute inset-0 bg-gradient-to-br from-[var(--bg-card)] to-[var(--bg-base)]"></div>
                         <div className="absolute inset-0 bg-gradient-to-r from-[var(--accent-5)] to-transparent"></div>
-                        <div className="relative z-10 flex justify-between items-start">
-                            <div><h3 className="text-[var(--accent)] text-sm font-bold mb-2 uppercase tracking-widest drop-shadow-sm">Beneficio Total ({activeBankData?.name})</h3><h1 className="text-4xl md:text-5xl font-extrabold text-[var(--text-main)] tracking-tight drop-shadow-lg">{formatCurrency(stats.totalProfit, activeBankData?.currency)}</h1></div>
+                        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 w-full">
+                            <div><h3 className="text-[var(--accent)] text-sm font-bold mb-2 uppercase tracking-widest drop-shadow-sm">Beneficio Total ({activeBankData?.name})</h3><h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-[var(--text-main)] tracking-tight drop-shadow-lg">{formatCurrency(stats.totalProfit, activeBankData?.currency)}</h1></div>
                             {viewMode === 'personal' && !activeBankData.isBalance && (
                                 <div className="flex gap-2">
-                                    <button onClick={openShareModal} className="bg-[var(--bg-card)] hover:bg-[var(--bg-hover)] text-[var(--text-main)] px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all border border-[var(--border)] shadow-sm hover:border-[var(--accent-50)]"><Code size={16} className="text-[var(--accent)]"/> Compartir Banca</button>
+                                    <button onClick={openShareModal} className="bg-[var(--bg-card)] hover:bg-[var(--bg-hover)] text-[var(--text-main)] px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all border border-[var(--border)] shadow-sm hover:border-[var(--accent-50)] whitespace-nowrap"><Code size={16} className="text-[var(--accent)]"/> Compartir Banca</button>
                                 </div>
                             )}
                         </div>
-                        <div className="absolute right-0 bottom-0 opacity-5 transform translate-y-1/4 translate-x-1/4 pointer-events-none blur-sm"><Wallet size={160} /></div>
+                        <div className="absolute right-0 bottom-0 opacity-5 transform translate-y-1/4 translate-x-1/4 pointer-events-none blur-sm"><Wallet size={200} /></div>
                     </div>
                     
-                    <div className="bg-transparent"><div className="grid grid-cols-2 md:grid-cols-5 gap-3"><StatCard title="Picks" value={stats.picks} subValue="Total" /><StatCard title="Ganados" value={stats.won} colorClass="text-[var(--accent)]" /><StatCard title="U. APOSTADAS" value={formatUnits(stats.stakedUnits)} /><StatCard title="Beneficio/Día" value={formatCurrency(stats.profitDay, activeBankData?.currency)} colorClass={stats.profitDay >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /><StatCard title="Factor de Beneficio" value={stats.profitFactor.toFixed(2)} /><StatCard title="Tasa de Acierto" value={`${stats.winRate.toFixed(2)}%`} /><StatCard title="Perdidos" value={stats.lost} colorClass="text-[var(--red)]" /><StatCard title="U. GANADAS (NETO)" value={formatUnits(stats.profitUnits)} colorClass={stats.profitUnits >= 0 ? "text-[var(--accent)]" : "text(--red)"} /><StatCard title="Beneficio/Pick" value={formatCurrency(stats.profitPerPick, activeBankData?.currency)} colorClass={stats.profitPerPick >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /><StatCard title="Yield" value={`${stats.yield.toFixed(2)}%`} colorClass={stats.yield >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /></div></div>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5"><div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 h-60 md:h-[260px] flex flex-col relative shadow-sm transition-colors"><div className="flex justify-between items-center mb-4"><h4 className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider">Evolución del Beneficio</h4><div className="flex bg-[var(--bg-input)] rounded-lg p-1 border border-[var(--border)] backdrop-blur-sm"><button onClick={() => setChartViewMode('detailed')} className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${chartViewMode==='detailed'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><TrendingUp size={14}/></button><button onClick={() => setChartViewMode('weekly')} className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${chartViewMode==='weekly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><LineChart size={14}/></button></div></div><ResponsiveContainer width="100%" height="100%">{chartViewMode === 'detailed' ? (<AreaChart data={stats.detailedChart}><defs><linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={theme === 'dark' ? '#5EE6B1' : '#2563EB'} stopOpacity={0.4}/><stop offset="95%" stopColor={theme === 'dark' ? '#5EE6B1' : '#2563EB'} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} itemStyle={{color: theme === 'dark' ? '#5EE6B1' : '#2563EB', fontWeight:'bold'}} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']} /><Area type="monotone" dataKey="profit" stroke={theme === 'dark' ? '#5EE6B1' : '#2563EB'} strokeWidth={3} fill="url(#colorProfit)"/></AreaChart>) : (<ReLineChart data={stats.weeklyChart}><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} itemStyle={{color: theme === 'dark' ? '#5EE6B1' : '#2563EB', fontWeight:'bold'}} labelFormatter={(l, p) => p[0]?.payload?.fullLabel || l} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']} /><Line type="linear" dataKey="profit" stroke={theme === 'dark' ? '#5EE6B1' : '#2563EB'} strokeWidth={3} dot={{r: 4, fill: theme === 'dark' ? '#5EE6B1' : '#2563EB', strokeWidth: 0}} activeDot={{r: 6, stroke: theme === 'dark' ? '#fff' : '#0F172A', strokeWidth: 2}}/></ReLineChart>)}</ResponsiveContainer></div><div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 h-60 md:h-[260px] flex flex-col relative shadow-sm transition-colors"><div className="flex justify-between items-center mb-4"><h4 className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider">Rendimiento Temporal</h4><div className="flex bg-[var(--bg-input)] rounded-lg p-1 border border-[var(--border)] backdrop-blur-sm"><button onClick={() => setBarChartViewMode('weekly')} className={`px-3 py-1 text-xs rounded-md font-medium flex items-center gap-1 transition-colors ${barChartViewMode==='weekly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><CalendarDays size={12}/> Semana</button><button onClick={() => setBarChartViewMode('monthly')} className={`px-3 py-1 text-xs rounded-md font-medium flex items-center gap-1 transition-colors ${barChartViewMode==='monthly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><Calendar size={12}/> Mes</button></div></div><ResponsiveContainer width="100%" height="100%"><BarChart data={barChartViewMode === 'weekly' ? stats.weeklyBarChart : stats.monthlyBarChart}><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} cursor={{fill: theme === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)'}} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']}/><Bar dataKey="profit" radius={[6,6,0,0]}>{(barChartViewMode === 'weekly' ? stats.weeklyBarChart : stats.monthlyBarChart).map((e,i)=><Cell key={`c-${i}`} fill={e.profit>=0?(theme === 'dark' ? '#5EE6B1' : '#2563EB'):(theme === 'dark' ? '#FF5A5F' : '#EF4444')}/>)}</Bar></BarChart></ResponsiveContainer></div></div></>
+                    <div className="bg-transparent w-full"><div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 w-full"><StatCard title="Picks" value={stats.picks} subValue="Total" /><StatCard title="Ganados" value={stats.won} colorClass="text-[var(--accent)]" /><StatCard title="U. APOSTADAS" value={formatUnits(stats.stakedUnits)} /><StatCard title="Beneficio/Día" value={formatCurrency(stats.profitDay, activeBankData?.currency)} colorClass={stats.profitDay >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /><StatCard title="Factor de Beneficio" value={stats.profitFactor.toFixed(2)} /><StatCard title="Tasa de Acierto" value={`${stats.winRate.toFixed(2)}%`} /><StatCard title="Perdidos" value={stats.lost} colorClass="text-[var(--red)]" /><StatCard title="U. GANADAS (NETO)" value={formatUnits(stats.profitUnits)} colorClass={stats.profitUnits >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /><StatCard title="Beneficio/Pick" value={formatCurrency(stats.profitPerPick, activeBankData?.currency)} colorClass={stats.profitPerPick >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /><StatCard title="Yield" value={`${stats.yield.toFixed(2)}%`} colorClass={stats.yield >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /></div></div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full"><div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 h-60 md:h-[260px] flex flex-col relative shadow-sm transition-colors w-full"><div className="flex justify-between items-center mb-4"><h4 className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider">Evolución del Beneficio</h4><div className="flex bg-[var(--bg-input)] rounded-lg p-1 border border-[var(--border)] backdrop-blur-sm"><button onClick={() => setChartViewMode('detailed')} className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${chartViewMode==='detailed'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><TrendingUp size={14}/></button><button onClick={() => setChartViewMode('weekly')} className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${chartViewMode==='weekly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><LineChart size={14}/></button></div></div><ResponsiveContainer width="100%" height="100%">{chartViewMode === 'detailed' ? (<AreaChart data={stats.detailedChart}><defs><linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={theme === 'dark' ? '#5EE6B1' : '#2563EB'} stopOpacity={0.4}/><stop offset="95%" stopColor={theme === 'dark' ? '#5EE6B1' : '#2563EB'} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} itemStyle={{color: theme === 'dark' ? '#5EE6B1' : '#2563EB', fontWeight:'bold'}} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']} /><Area type="monotone" dataKey="profit" stroke={theme === 'dark' ? '#5EE6B1' : '#2563EB'} strokeWidth={3} fill="url(#colorProfit)"/></AreaChart>) : (<ReLineChart data={stats.weeklyChart}><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} itemStyle={{color: theme === 'dark' ? '#5EE6B1' : '#2563EB', fontWeight:'bold'}} labelFormatter={(l, p) => p[0]?.payload?.fullLabel || l} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']} /><Line type="linear" dataKey="profit" stroke={theme === 'dark' ? '#5EE6B1' : '#2563EB'} strokeWidth={3} dot={{r: 4, fill: theme === 'dark' ? '#5EE6B1' : '#2563EB', strokeWidth: 0}} activeDot={{r: 6, stroke: theme === 'dark' ? '#fff' : '#0F172A', strokeWidth: 2}}/></ReLineChart>)}</ResponsiveContainer></div><div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 h-60 md:h-[260px] flex flex-col relative shadow-sm transition-colors w-full"><div className="flex justify-between items-center mb-4"><h4 className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider">Rendimiento Temporal</h4><div className="flex bg-[var(--bg-input)] rounded-lg p-1 border border-[var(--border)] backdrop-blur-sm"><button onClick={() => setBarChartViewMode('weekly')} className={`px-3 py-1 text-xs rounded-md font-medium flex items-center gap-1 transition-colors ${barChartViewMode==='weekly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><CalendarDays size={12}/> Semana</button><button onClick={() => setBarChartViewMode('monthly')} className={`px-3 py-1 text-xs rounded-md font-medium flex items-center gap-1 transition-colors ${barChartViewMode==='monthly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><Calendar size={12}/> Mes</button></div></div><ResponsiveContainer width="100%" height="100%"><BarChart data={barChartViewMode === 'weekly' ? stats.weeklyBarChart : stats.monthlyBarChart}><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} cursor={{fill: theme === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)'}} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']}/><Bar dataKey="profit" radius={[6,6,0,0]}>{(barChartViewMode === 'weekly' ? stats.weeklyBarChart : stats.monthlyBarChart).map((e,i)=><Cell key={`c-${i}`} fill={e.profit>=0?(theme === 'dark' ? '#5EE6B1' : '#2563EB'):(theme === 'dark' ? '#FF5A5F' : '#EF4444')}/>)}</Bar></BarChart></ResponsiveContainer></div></div></>
                 )}
 
                 {activeTab === 'bets' && (
-                    <div className="space-y-6">
+                    <div className="space-y-6 w-full">
                     <div className="flex justify-between items-center"><h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight drop-shadow-sm">{viewMode === 'visiting' ? 'Historial Público' : 'Mis Apuestas'}</h3>{viewMode === 'personal' && activeBankData && !activeBankData.isBalance && (<button onClick={() => { setEditingBetId(null); setShowBetForm(true); setFormErrors({}); setIsCustomBookmaker(false); setAiMessage(''); setNewBet({ date: new Date().toISOString().split('T')[0], time: '00:00', bookmaker: 'Bet365', betMode: 'simple', title: '', selections: [{ id: Date.now(), title: '', selection: '', sport: customOptions.sports?.[0] || 'Fútbol', status: 'pending', category: '', odds: 1.50, isOpen: true }], amount: 0, stake: 0, analysis: '', isBack: true, isHidden: false, tipster: '' }); }} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] px-5 py-2.5 rounded-xl flex items-center gap-2 font-bold text-sm transition-all shadow-[var(--shadow-glow-md)]"><Plus size={18}/> Añadir Apuesta</button>)}</div>
                     
+                    {/* --- CAJA FOMO PARA VISITANTES --- */}
                     {viewMode === 'visiting' && pendingHiddenCount > 0 && !unlockedBank && (
-                        <div className="bg-[var(--bg-card)] border border-[var(--border-strong)] rounded-3xl p-6 text-center shadow-sm transition-colors animate-in fade-in">
+                        <div className="bg-[var(--bg-card)] border border-[var(--border-strong)] rounded-3xl p-6 text-center shadow-sm transition-colors animate-in fade-in w-full">
                             <Lock size={32} className="text-[var(--text-muted)] mx-auto mb-3" />
                             <h4 className="text-lg font-extrabold text-[var(--text-main)] mb-2">
                                 Hay {pendingHiddenCount} apuestas en curso bloqueadas
@@ -1299,9 +1330,9 @@ export default function App() {
                             {activeBankData?.premiumPassword ? (
                                 <>
                                     <p className="text-[var(--text-muted)] text-sm mb-5">El autor ha protegido estas jugadas con contraseña. Introdúcela para poder verlas.</p>
-                                    <div className="flex flex-col sm:flex-row gap-3 max-w-sm mx-auto">
-                                        <input type="password" value={visitorPasswordInput} onChange={e=>setVisitorPasswordInput(e.target.value)} className="flex-1 bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--text-main)] outline-none focus:border-[var(--accent)] shadow-inner transition-colors" placeholder="Contraseña..." />
-                                        <button onClick={() => { if(visitorPasswordInput === activeBankData.premiumPassword) { setUnlockedBank(true); showAlert('✅ Acceso Concedido'); } else { showAlert('Contraseña incorrecta'); } }} className="bg-[var(--accent)] text-[var(--accent-fg)] px-6 py-3 rounded-xl font-bold hover:bg-[var(--accent-hover)] transition-all shadow-md">Desbloquear</button>
+                                    <div className="flex flex-col sm:flex-row gap-3 max-w-sm mx-auto w-full">
+                                        <input type="password" value={visitorPasswordInput} onChange={e=>setVisitorPasswordInput(e.target.value)} className="flex-1 bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--text-main)] outline-none focus:border-[var(--accent)] shadow-inner transition-colors w-full" placeholder="Contraseña..." />
+                                        <button onClick={() => { if(visitorPasswordInput === activeBankData.premiumPassword) { setUnlockedBank(true); showAlert('✅ Acceso Concedido'); } else { showAlert('Contraseña incorrecta'); } }} className="bg-[var(--accent)] text-[var(--accent-fg)] px-6 py-3 rounded-xl font-bold hover:bg-[var(--accent-hover)] transition-all shadow-md w-full sm:w-auto">Desbloquear</button>
                                     </div>
                                 </>
                             ) : (
@@ -1310,15 +1341,15 @@ export default function App() {
                         </div>
                     )}
 
-                    {activeBetsData.length===0?<div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-12 text-center text-[var(--text-muted)] text-sm shadow-sm transition-colors">El historial está vacío. {viewMode === 'personal' && !activeBankData?.isBalance ? 'Escanea un boleto o añade una apuesta para empezar a ver datos.' : ''}</div>:
-                    <div className="space-y-5">
+                    {activeBetsData.length===0?<div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-12 text-center text-[var(--text-muted)] text-sm shadow-sm transition-colors w-full">El historial está vacío. {viewMode === 'personal' && !activeBankData?.isBalance ? 'Escanea un boleto o añade una apuesta para empezar a ver datos.' : ''}</div>:
+                    <div className="space-y-5 w-full">
                         {betsByMonth.map(g=>(
-                        <div key={g.id} className="border border-[var(--border)] rounded-2xl overflow-hidden bg-[var(--bg-card)] shadow-sm transition-colors">
-                            <div onClick={()=>toggleMonth(g.id)} className="flex items-center justify-between p-5 bg-[var(--bg-hover)] cursor-pointer hover:bg-[var(--bg-overlay)] transition-all border-b border-[var(--border)]"><div className="flex items-center gap-3">{expandedMonths[g.id]?<ChevronUp size={20} className="text-[var(--accent)]"/>:<ChevronDown size={20} className="text-[var(--text-muted)]"/>}<span className="font-bold text-[var(--text-main)] text-base tracking-wide drop-shadow-sm">{g.label}</span></div><div className={`px-4 py-1.5 rounded-lg text-sm font-bold ${g.profit>=0?'bg-[var(--accent-10)] text-[var(--accent)] border border-[var(--accent-20)]':'bg-[var(--red-10)] text-[var(--red)] border border-[var(--red-20)]'}`}>{g.profit>0?'+':''}{formatCurrency(g.profit, activeBankData?.currency)}</div></div>
+                        <div key={g.id} className="border border-[var(--border)] rounded-2xl overflow-hidden bg-[var(--bg-card)] shadow-sm transition-colors w-full">
+                            <div onClick={()=>toggleMonth(g.id)} className="flex items-center justify-between p-5 bg-[var(--bg-hover)] cursor-pointer hover:bg-[var(--bg-overlay)] transition-all border-b border-[var(--border)] w-full"><div className="flex items-center gap-3">{expandedMonths[g.id]?<ChevronUp size={20} className="text-[var(--accent)]"/>:<ChevronDown size={20} className="text-[var(--text-muted)]"/>}<span className="font-bold text-[var(--text-main)] text-base tracking-wide drop-shadow-sm">{g.label}</span></div><div className={`px-4 py-1.5 rounded-lg text-sm font-bold ${g.profit>=0?'bg-[var(--accent-10)] text-[var(--accent)] border border-[var(--accent-20)]':'bg-[var(--red-10)] text-[var(--red)] border border-[var(--red-20)]'}`}>{g.profit>0?'+':''}{formatCurrency(g.profit, activeBankData?.currency)}</div></div>
                             {expandedMonths[g.id]&&(
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left text-sm whitespace-nowrap">
-                                        <thead className="bg-[var(--bg-base)]/50 text-[var(--text-muted)] text-xs uppercase tracking-widest font-semibold border-b border-[var(--border)]"><tr><th className="px-5 py-4">Fecha</th><th className="px-5 py-4">Evento</th><th className="px-5 py-4 text-center">Stake</th><th className="px-5 py-4 text-center">Cuota</th><th className="px-5 py-4 text-center">P/L</th><th className="px-5 py-4 text-center">Estado</th>{viewMode === 'personal' && <th className="px-5 py-4 text-center">Acciones</th>}</tr></thead>
+                                <div className="overflow-x-auto w-full">
+                                    <table className="w-full text-left text-sm whitespace-nowrap min-w-full">
+                                        <thead className="bg-[var(--bg-base)]/50 text-[var(--text-muted)] text-xs uppercase tracking-widest font-semibold border-b border-[var(--border)]"><tr><th className="px-5 py-4">Fecha</th><th className="px-5 py-4 w-full">Evento</th><th className="px-5 py-4 text-center">Stake</th><th className="px-5 py-4 text-center">Cuota</th><th className="px-5 py-4 text-center">P/L</th><th className="px-5 py-4 text-center">Estado</th>{viewMode === 'personal' && <th className="px-5 py-4 text-center">Acciones</th>}</tr></thead>
                                         <tbody className="divide-y divide-[var(--border)]">
                                             {g.bets.map(b=>{
                                                 const amt=b.amount?parseFloat(b.amount):parseFloat(b.stake)*10;
@@ -1327,10 +1358,10 @@ export default function App() {
                                                 const isExp=expandedBetId===b.id;
                                                 return(
                                                     <React.Fragment key={b.id}>
-                                                        <tr className={`hover:bg-[var(--bg-overlay)] cursor-pointer transition-colors ${isExp?'bg-[var(--bg-overlay-hover)]':''}`} onClick={()=>setExpandedBetId(isExp?null:b.id)}><td className="px-5 py-4 text-[var(--text-muted)] text-xs font-medium">{formatDate(b.date)}</td><td className="px-5 py-4"><div className="font-bold text-[var(--text-main)] max-w-[150px] md:max-w-xs truncate flex items-center gap-1.5">{b.isBack === false && <span className="text-[8px] bg-[var(--red-10)] text-[var(--red)] px-1.5 py-0.5 rounded border border-[var(--red-30)]">LAY</span>}{b.title}</div><div className="text-xs text-[var(--text-muted)] max-w-[150px] md:max-w-xs truncate mt-0.5">{typeof b.selection==='string'?b.selection:'Múltiple'}</div></td><td className="px-5 py-4 text-center text-[var(--text-muted)] font-medium">{b.stake}%</td><td className={`px-5 py-4 text-center font-bold ${b.isBack === false ? 'text-[var(--red)]' : 'text-[var(--accent)]'}`}>@{b.odds.toFixed(2)}</td><td className={`px-5 py-4 text-center font-bold ${pl>0?'text-[var(--accent)]':pl<0?'text-[var(--red)]':'text-[var(--text-muted)]'}`}>{pl>0?'+':''}{formatCurrency(pl,activeBankData?.currency)}</td><td className="px-5 py-4 text-center"><div onClick={(e)=>{if(viewMode==='personal'){e.stopPropagation();setStatusModalData({id:b.id,currentStatus:b.status});}}} className={viewMode==='personal'?'cursor-pointer':''}><StatusBadge status={b.status}/></div></td>
+                                                        <tr className={`hover:bg-[var(--bg-overlay)] cursor-pointer transition-colors ${isExp?'bg-[var(--bg-overlay-hover)]':''}`} onClick={()=>setExpandedBetId(isExp?null:b.id)}><td className="px-5 py-4 text-[var(--text-muted)] text-xs font-medium">{formatDate(b.date)}</td><td className="px-5 py-4 w-full"><div className="font-bold text-[var(--text-main)] truncate max-w-[200px] md:max-w-md flex items-center gap-1.5">{b.isBack === false && <span className="text-[8px] bg-[var(--red-10)] text-[var(--red)] px-1.5 py-0.5 rounded border border-[var(--red-30)]">LAY</span>}{b.title}</div><div className="text-xs text-[var(--text-muted)] truncate max-w-[200px] md:max-w-md mt-0.5">{typeof b.selection==='string'?b.selection:'Múltiple'}</div></td><td className="px-5 py-4 text-center text-[var(--text-muted)] font-medium">{b.stake}%</td><td className={`px-5 py-4 text-center font-bold ${b.isBack === false ? 'text-[var(--red)]' : 'text-[var(--accent)]'}`}>@{b.odds.toFixed(2)}</td><td className={`px-5 py-4 text-center font-bold ${pl>0?'text-[var(--accent)]':pl<0?'text-[var(--red)]':'text-[var(--text-muted)]'}`}>{pl>0?'+':''}{formatCurrency(pl,activeBankData?.currency)}</td><td className="px-5 py-4 text-center"><div onClick={(e)=>{if(viewMode==='personal'){e.stopPropagation();setStatusModalData({id:b.id,currentStatus:b.status});}}} className={viewMode==='personal'?'cursor-pointer':''}><StatusBadge status={b.status}/></div></td>
                                                         {viewMode === 'personal' && <td className="px-5 py-4 text-center"><div className="flex items-center justify-center gap-2"><button onClick={(e)=>{e.stopPropagation();handleEditClick(b);}} className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-2 rounded-lg bg-[var(--bg-overlay)] hover:bg-[var(--bg-overlay-hover)] transition-colors border border-transparent hover:border-[var(--border-strong)]"><Edit2 size={14}/></button><button onClick={(e)=>{e.stopPropagation();handleDeleteBet(b.id);}} className="text-[var(--text-muted)] hover:text-[var(--red)] p-2 rounded-lg bg-[var(--bg-overlay)] hover:bg-[var(--red-10)] transition-colors border border-transparent hover:border-[var(--red-20)]"><Trash2 size={14}/></button></div></td>}
                                                         </tr>
-                                                        {isExp&&(<tr className="bg-[var(--bg-input)]/50"><td colSpan={viewMode==='personal'?7:6} className="p-5 border-b border-[var(--border)]"><div className="space-y-4"><div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs"><div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm"><span className="block text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1 font-bold">Casa</span><span className="text-[var(--text-main)] font-bold">{b.bookmaker}</span></div><div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm"><span className="block text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1 font-bold">Hora</span><span className="text-[var(--text-main)] font-bold">{b.time}</span></div>{b.commission&&<div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm"><span className="block text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1 font-bold">Comisión</span><span className="text-[var(--text-main)] font-bold">{b.commission}%</span></div>}</div>{b.selections&&b.selections.map((s,i)=>(<div className="bg-[var(--bg-card)] p-4 rounded-xl border border-[var(--border)] shadow-sm flex justify-between items-center hover:bg-[var(--bg-hover)] transition-colors" key={i}><div><div className="text-[var(--text-main)] text-sm font-bold tracking-wide">{s.title}</div><div className="text-[var(--accent)] text-xs font-medium mt-1">{s.selection}</div><div className="text-[10px] text-[var(--text-muted)] mt-1 uppercase tracking-wider">{s.competition} • {s.category}</div></div><div className="text-right"><div className="text-[var(--accent)] font-extrabold text-lg">@{parseFloat(s.odds).toFixed(2)}</div><div className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider font-bold mt-1">{s.bookmaker}</div></div></div>))}{b.analysis&&(<div className="bg-[var(--accent-5)] p-4 rounded-xl border border-[var(--accent-20)]"><h4 className="text-[var(--accent)] font-bold mb-2 flex items-center gap-2 text-xs uppercase tracking-wider"><FileText size={14}/> Análisis</h4><p className="text-[var(--text-muted)] text-sm leading-relaxed whitespace-pre-wrap">{b.analysis}</p></div>)}</div></td></tr>)}
+                                                        {isExp&&(<tr className="bg-[var(--bg-input)]/50 w-full"><td colSpan={viewMode==='personal'?7:6} className="p-5 border-b border-[var(--border)] w-full"><div className="space-y-4 w-full"><div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs w-full"><div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm w-full"><span className="block text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1 font-bold">Casa</span><span className="text-[var(--text-main)] font-bold">{b.bookmaker}</span></div><div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm w-full"><span className="block text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1 font-bold">Hora</span><span className="text-[var(--text-main)] font-bold">{b.time}</span></div>{b.commission&&<div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm w-full"><span className="block text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1 font-bold">Comisión</span><span className="text-[var(--text-main)] font-bold">{b.commission}%</span></div>}</div>{b.selections&&b.selections.map((s,i)=>(<div className="bg-[var(--bg-card)] p-4 rounded-xl border border-[var(--border)] shadow-sm flex justify-between items-center hover:bg-[var(--bg-hover)] transition-colors w-full" key={i}><div className="flex-1 min-w-0 pr-4"><div className="text-[var(--text-main)] text-sm font-bold tracking-wide truncate">{s.title}</div><div className="text-[var(--accent)] text-xs font-medium mt-1 truncate">{s.selection}</div><div className="text-[10px] text-[var(--text-muted)] mt-1 uppercase tracking-wider truncate">{s.competition} • {s.category}</div></div><div className="text-right shrink-0"><div className="text-[var(--accent)] font-extrabold text-lg">@{parseFloat(s.odds).toFixed(2)}</div><div className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider font-bold mt-1">{s.bookmaker}</div></div></div>))}{b.analysis&&(<div className="bg-[var(--accent-5)] p-4 rounded-xl border border-[var(--accent-20)] w-full"><h4 className="text-[var(--accent)] font-bold mb-2 flex items-center gap-2 text-xs uppercase tracking-wider"><FileText size={14}/> Análisis</h4><p className="text-[var(--text-muted)] text-sm leading-relaxed whitespace-pre-wrap">{b.analysis}</p></div>)}</div></td></tr>)}
                                                     </React.Fragment>
                                                 );
                                             })}
@@ -1345,7 +1376,7 @@ export default function App() {
                 )}
 
                 {activeTab === 'balances' && viewMode === 'personal' && (
-                    <div className="max-w-4xl mx-auto space-y-6 pb-20 md:pb-0">
+                    <div className="w-full space-y-6 pb-20 md:pb-0">
                         <div className="flex justify-between items-center mb-2">
                             <div>
                                 <h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">Balances Agrupados</h3>
@@ -1357,11 +1388,11 @@ export default function App() {
                         </div>
 
                         {balances.length === 0 ? (
-                            <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-12 text-center text-[var(--text-muted)] text-sm shadow-sm transition-colors">
+                            <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-12 text-center text-[var(--text-muted)] text-sm shadow-sm transition-colors w-full">
                                 No tienes balances agrupados. Crea uno para combinar las estadísticas de múltiples bancas.
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 gap-6">
+                            <div className="grid grid-cols-1 gap-6 w-full">
                                 {balances.map(balance => {
                                     const includedBanks = banks.filter(b => balance.bankIds.includes(b.id));
                                     const totalInitialCapital = includedBanks.reduce((sum, b) => sum + (parseFloat(b.initialCapital) || 0), 0);
@@ -1369,8 +1400,8 @@ export default function App() {
                                     const bStats = getStatsForBets(balanceBets, totalInitialCapital);
                                     
                                     return (
-                                        <div key={balance.id} className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-6 shadow-sm transition-all hover:border-[var(--accent-50)] group">
-                                            <div className="flex justify-between items-start mb-6">
+                                        <div key={balance.id} className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-6 shadow-sm transition-all hover:border-[var(--accent-50)] group w-full">
+                                            <div className="flex justify-between items-start mb-6 w-full">
                                                 <div>
                                                     <h3 className="text-xl font-bold text-[var(--text-main)]">{balance.name}</h3>
                                                     <p className="text-sm text-[var(--text-muted)]">{balance.bankIds.length} Bankrolls</p>
@@ -1385,20 +1416,20 @@ export default function App() {
                                                 </div>
                                             </div>
 
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                                <div className="bg-[var(--bg-input)] rounded-2xl p-4 text-center border border-[var(--border)]">
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
+                                                <div className="bg-[var(--bg-input)] rounded-2xl p-4 text-center border border-[var(--border)] w-full">
                                                     <p className="text-[10px] uppercase font-bold text-[var(--text-muted)] tracking-wider mb-1">BETS</p>
                                                     <p className="text-xl font-bold text-[var(--accent)]">{bStats.picks}</p>
                                                 </div>
-                                                <div className="bg-[var(--bg-input)] rounded-2xl p-4 text-center border border-[var(--border)]">
+                                                <div className="bg-[var(--bg-input)] rounded-2xl p-4 text-center border border-[var(--border)] w-full">
                                                     <p className="text-[10px] uppercase font-bold text-[var(--text-muted)] tracking-wider mb-1">PROFITS</p>
                                                     <p className={`text-xl font-bold ${bStats.profit >= 0 ? 'text-[var(--accent)]' : 'text-[var(--red)]'}`}>{formatCurrency(bStats.profit, includedBanks[0]?.currency)}</p>
                                                 </div>
-                                                <div className="bg-[var(--bg-input)] rounded-2xl p-4 text-center border border-[var(--border)]">
+                                                <div className="bg-[var(--bg-input)] rounded-2xl p-4 text-center border border-[var(--border)] w-full">
                                                     <p className="text-[10px] uppercase font-bold text-[var(--text-muted)] tracking-wider mb-1">ROI / YIELD</p>
                                                     <p className={`text-xl font-bold ${bStats.yieldPerc >= 0 ? 'text-[var(--accent)]' : 'text-[var(--red)]'}`}>{bStats.yieldPerc.toFixed(2)}%</p>
                                                 </div>
-                                                <div className="bg-[var(--bg-input)] rounded-2xl p-4 text-center border border-[var(--border)]">
+                                                <div className="bg-[var(--bg-input)] rounded-2xl p-4 text-center border border-[var(--border)] w-full">
                                                     <p className="text-[10px] uppercase font-bold text-[var(--text-muted)] tracking-wider mb-1">PROGRESSION</p>
                                                     <p className={`text-xl font-bold ${bStats.progression >= 0 ? 'text-[var(--accent)]' : 'text-[var(--red)]'}`}>{bStats.progression.toFixed(2)}%</p>
                                                 </div>
@@ -1412,31 +1443,54 @@ export default function App() {
                 )}
 
                 {activeTab === 'settings' && viewMode === 'personal' && (
-                    <div className="max-w-2xl mx-auto space-y-6 pb-20 md:pb-0">
-                        <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-8 shadow-sm transition-colors">
+                    <div className="w-full space-y-6 pb-20 md:pb-0">
+                        <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-6 lg:p-8 shadow-sm transition-colors">
                             <div className="flex justify-between items-center mb-8 border-b border-[var(--border)] pb-5"><div><h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">Gestión de Bancas</h3><p className="text-[var(--text-muted)] text-sm mt-1">Sube de nivel controlando hasta 5 bancas independientes.</p></div>{banks.length < LIMITS.MAX_BANKS && (<button onClick={openAddBankModal} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold transition-all shadow-[var(--shadow-glow-md)]"><Plus size={16} /> Nueva Banca</button>)}</div>
-                            <div className="space-y-4">{banks.map((bank) => (<div key={bank.id} className={`relative p-6 rounded-2xl border transition-all duration-300 ${bank.id === currentBankId ? 'bg-[var(--bg-hover)] border-[var(--accent-40)] shadow-[var(--shadow-glow-sm)]' : 'bg-[var(--bg-overlay)] border-[var(--border)] hover:border-[var(--border-strong)]'}`}>{bank.id === currentBankId && (<div className="absolute -top-3 -right-3 bg-[var(--accent)] text-[var(--accent-fg)] text-[10px] font-extrabold px-3 py-1 rounded-full shadow-[var(--shadow-glow-sm)] border border-[var(--accent)] uppercase tracking-widest">Activa</div>)}<div className="flex flex-col sm:flex-row justify-between gap-6"><div className="flex-1 space-y-5"><div className="space-y-1"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Nombre</label><input type="text" defaultValue={bank.name} onBlur={(e) => { if (e.target.value !== bank.name) handleUpdateBank(bank.id, 'name', e.target.value); }} className="w-full bg-transparent border-b border-[var(--border-strong)] focus:border-[var(--accent)] text-xl font-bold text-[var(--text-main)] outline-none py-1.5 transition-colors placeholder-[var(--text-muted)]" /></div><div className="flex flex-wrap gap-4"><div className="flex-1 min-w-[100px] space-y-1"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1 flex items-center gap-1">Capital <Lock size={10}/></label><input type="number" value={bank.initialCapital} disabled className="w-full bg-[var(--bg-base)] border border-[var(--border)] rounded-xl px-4 py-2.5 text-[var(--text-muted)] font-bold outline-none transition-colors text-sm cursor-not-allowed" /></div><div className="w-24 space-y-1"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Divisa</label><select value={bank.currency || 'EUR'} onChange={(e) => { handleUpdateBank(bank.id, 'currency', e.target.value); }} className="w-full bg-[var(--bg-base)] border border-[var(--border)] rounded-xl px-2 py-2.5 text-[var(--text-main)] text-sm outline-none appearance-none"><option value="EUR">EUR (€)</option><option value="USD">USD ($)</option><option value="GBP">GBP (£)</option><option value="MXN">MXN ($)</option></select></div><div className="flex-1 min-w-[130px] space-y-1"><label className="text-xs text-[var(--accent)] uppercase font-bold tracking-wider ml-1 flex items-center gap-1 drop-shadow-sm"><Lock size={12}/> Privacidad</label><input type="text" defaultValue={bank.premiumPassword || ''} onBlur={(e) => { handleUpdateBank(bank.id, 'premiumPassword', e.target.value); }} placeholder="Clave para ver pendientes..." className="w-full bg-[var(--bg-base)] border border-[var(--accent-30)] focus:border-[var(--accent)] rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none transition-colors shadow-inner" /></div></div></div><div className="flex flex-row sm:flex-col justify-between items-end gap-3 border-t sm:border-t-0 sm:border-l border-[var(--border)] pt-5 sm:pt-0 sm:pl-6 min-w-[140px]"><button onClick={() => handleBankChange({target: {value: bank.id}})} disabled={bank.id === currentBankId} className={`w-full px-4 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${bank.id === currentBankId ? 'bg-[var(--accent-10)] text-[var(--accent)] cursor-default border border-[var(--accent-30)]' : 'bg-[var(--bg-overlay)] border-[var(--border)] text-[var(--text-main)] hover:bg-[var(--accent)] hover:text-[var(--accent-fg)] hover:border-transparent'}`}>{bank.id === currentBankId ? 'Operando' : 'Seleccionar'}</button><button onClick={() => handleDeleteBank(bank.id)} className="w-full px-4 py-3 text-xs font-bold text-[var(--text-muted)] hover:text-[var(--red)] hover:bg-[var(--red-10)] rounded-xl transition-all flex items-center justify-center gap-2 border border-transparent"><Trash2 size={16}/> Eliminar</button></div></div></div>))}</div>
+                            <div className="space-y-4 lg:grid lg:grid-cols-2 lg:gap-6 lg:space-y-0">
+                                {banks.map((bank) => (
+                                    <div key={bank.id} className={`relative p-6 rounded-2xl border transition-all duration-300 ${bank.id === currentBankId ? 'bg-[var(--bg-hover)] border-[var(--accent-40)] shadow-[var(--shadow-glow-sm)]' : 'bg-[var(--bg-overlay)] border-[var(--border)] hover:border-[var(--border-strong)]'}`}>
+                                        {bank.id === currentBankId && (<div className="absolute -top-3 -right-3 bg-[var(--accent)] text-[var(--accent-fg)] text-[10px] font-extrabold px-3 py-1 rounded-full shadow-[var(--shadow-glow-sm)] border border-[var(--accent)] uppercase tracking-widest">Activa</div>)}
+                                        <div className="flex flex-col sm:flex-row justify-between gap-6">
+                                            <div className="flex-1 space-y-5">
+                                                <div className="space-y-1"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Nombre</label><input type="text" defaultValue={bank.name} onBlur={(e) => { if (e.target.value !== bank.name) handleUpdateBank(bank.id, 'name', e.target.value); }} className="w-full bg-transparent border-b border-[var(--border-strong)] focus:border-[var(--accent)] text-xl font-bold text-[var(--text-main)] outline-none py-1.5 transition-colors placeholder-[var(--text-muted)]" /></div>
+                                                <div className="flex flex-wrap gap-4">
+                                                    <div className="flex-1 min-w-[100px] space-y-1"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1 flex items-center gap-1">Capital <Lock size={10}/></label><input type="number" value={bank.initialCapital} disabled className="w-full bg-[var(--bg-base)] border border-[var(--border)] rounded-xl px-4 py-2.5 text-[var(--text-muted)] font-bold outline-none transition-colors text-sm cursor-not-allowed" /></div>
+                                                    <div className="w-24 space-y-1"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Divisa</label><select value={bank.currency || 'EUR'} onChange={(e) => { handleUpdateBank(bank.id, 'currency', e.target.value); }} className="w-full bg-[var(--bg-base)] border border-[var(--border)] rounded-xl px-2 py-2.5 text-[var(--text-main)] text-sm outline-none appearance-none"><option value="EUR">EUR (€)</option><option value="USD">USD ($)</option><option value="GBP">GBP (£)</option><option value="MXN">MXN ($)</option></select></div>
+                                                    <div className="flex-1 min-w-[130px] space-y-1"><label className="text-xs text-[var(--accent)] uppercase font-bold tracking-wider ml-1 flex items-center gap-1 drop-shadow-sm"><Lock size={12}/> Privacidad</label><input type="text" defaultValue={bank.premiumPassword || ''} onBlur={(e) => { handleUpdateBank(bank.id, 'premiumPassword', e.target.value); }} placeholder="Clave para ver pendientes..." className="w-full bg-[var(--bg-base)] border border-[var(--accent-30)] focus:border-[var(--accent)] rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none transition-colors shadow-inner" /></div>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-row sm:flex-col justify-between items-end gap-3 border-t sm:border-t-0 sm:border-l border-[var(--border)] pt-5 sm:pt-0 sm:pl-6 min-w-[140px]">
+                                                <button onClick={() => handleBankChange({target: {value: bank.id}})} disabled={bank.id === currentBankId} className={`w-full px-4 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${bank.id === currentBankId ? 'bg-[var(--accent-10)] text-[var(--accent)] cursor-default border border-[var(--accent-30)]' : 'bg-[var(--bg-overlay)] border border-[var(--border)] text-[var(--text-main)] hover:bg-[var(--accent)] hover:text-[var(--accent-fg)] hover:border-transparent'}`}>{bank.id === currentBankId ? 'Operando' : 'Seleccionar'}</button>
+                                                <button onClick={() => handleDeleteBank(bank.id)} className="w-full px-4 py-3 text-xs font-bold text-[var(--text-muted)] hover:text-[var(--red)] hover:bg-[var(--red-10)] rounded-xl transition-all flex items-center justify-center gap-2 border border-transparent"><Trash2 size={16}/> Eliminar</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                        <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-8 shadow-sm transition-colors">
+                        <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-6 lg:p-8 shadow-sm transition-colors">
                             <div className="mb-6"><h3 className="text-xl font-bold text-[var(--text-main)] flex items-center gap-2"><Database size={22} className="text-[var(--accent)]" /> Respaldo y Migración</h3><p className="text-[var(--text-muted)] text-sm mt-1">Exporta tus joyas o importa tu viejo Excel/Bet-Analytix.</p></div>
-                            <div className="flex gap-4"><button onClick={handleExportCSV} className="flex-1 bg-[var(--bg-base)] hover:bg-[var(--bg-hover)] border border-[var(--border)] hover:border-[var(--accent-30)] text-[var(--text-main)] p-6 rounded-2xl transition-all group flex flex-col items-center gap-3 shadow-inner"><div className="p-4 bg-[var(--bg-overlay)] rounded-2xl group-hover:bg-[var(--accent-10)] transition-colors"><Download size={28} className="text-[var(--text-muted)] group-hover:text-[var(--accent)]" /></div><span className="text-sm font-bold tracking-wide">Descargar CSV</span></button><div className="flex-1 relative"><input type="file" accept=".csv" ref={fileInputRef} onChange={handleImportCSV} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" /><div className="bg-[var(--bg-base)] hover:bg-[var(--bg-hover)] border border-[var(--border)] hover:border-[var(--accent-30)] text-[var(--text-main)] p-6 rounded-2xl transition-all group flex flex-col items-center gap-3 h-full shadow-inner"><div className="p-4 bg-[var(--bg-overlay)] rounded-2xl group-hover:bg-[var(--accent-10)] transition-colors"><Upload size={28} className="text-[var(--text-muted)] group-hover:text-[var(--accent)]" /></div><span className="text-sm font-bold tracking-wide">Importar Datos</span></div></div></div>
+                            <div className="flex flex-col sm:flex-row gap-4">
+                                <button onClick={handleExportCSV} className="flex-1 bg-[var(--bg-base)] hover:bg-[var(--bg-hover)] border border-[var(--border)] hover:border-[var(--accent-30)] text-[var(--text-main)] p-6 rounded-2xl transition-all group flex flex-col items-center gap-3 shadow-inner w-full"><div className="p-4 bg-[var(--bg-overlay)] rounded-2xl group-hover:bg-[var(--accent-10)] transition-colors"><Download size={28} className="text-[var(--text-muted)] group-hover:text-[var(--accent)]" /></div><span className="text-sm font-bold tracking-wide">Descargar CSV</span></button>
+                                <div className="flex-1 relative w-full"><input type="file" accept=".csv" ref={fileInputRef} onChange={handleImportCSV} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" /><div className="bg-[var(--bg-base)] hover:bg-[var(--bg-hover)] border border-[var(--border)] hover:border-[var(--accent-30)] text-[var(--text-main)] p-6 rounded-2xl transition-all group flex flex-col items-center gap-3 h-full shadow-inner w-full"><div className="p-4 bg-[var(--bg-overlay)] rounded-2xl group-hover:bg-[var(--accent-10)] transition-colors"><Upload size={28} className="text-[var(--text-muted)] group-hover:text-[var(--accent)]" /></div><span className="text-sm font-bold tracking-wide">Importar Datos</span></div></div>
+                            </div>
                         </div>
                     </div>
                 )}
 
                 {activeTab === 'customization' && viewMode === 'personal' && (
-                    <div className="max-w-2xl mx-auto space-y-6 pb-20 md:pb-0">
-                        <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-8 shadow-sm transition-colors">
+                    <div className="w-full space-y-6 pb-20 md:pb-0">
+                        <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-6 lg:p-8 shadow-sm transition-colors">
                             <div className="mb-8"><h3 className="text-2xl font-bold text-[var(--text-main)] flex items-center gap-2 tracking-tight"><Tags size={24} className="text-[var(--accent)]" /> Etiquetas Personalizadas</h3><p className="text-[var(--text-muted)] text-sm mt-2">Añade deportes de nicho o categorías para medir tu rentabilidad al milímetro.</p></div>
-                            <div className="space-y-8">
+                            <div className="space-y-8 lg:grid lg:grid-cols-2 lg:gap-8 lg:space-y-0">
                                 <div className="bg-[var(--bg-base)] p-6 rounded-2xl border border-[var(--border)] shadow-inner transition-colors">
                                     <h4 className="text-sm font-extrabold text-[var(--text-main)] mb-4 uppercase tracking-widest">Mis Deportes</h4>
-                                    <div className="flex gap-3 mb-5"><input type="text" value={newCustomSport} onChange={e => setNewCustomSport(e.target.value)} placeholder="Ej: Ping Pong, Dardos..." className="flex-1 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)]"/><button onClick={() => handleAddOption('sports', newCustomSport)} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] p-3 rounded-xl font-bold shadow-[var(--shadow-glow-sm)] transition-all"><Plus size={20}/></button></div>
+                                    <div className="flex gap-3 mb-5"><input type="text" value={newCustomSport} onChange={e => setNewCustomSport(e.target.value)} placeholder="Ej: Ping Pong, Dardos..." className="flex-1 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] w-full"/><button onClick={() => handleAddOption('sports', newCustomSport)} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] p-3 rounded-xl font-bold shadow-[var(--shadow-glow-sm)] transition-all shrink-0"><Plus size={20}/></button></div>
                                     <div className="flex flex-wrap gap-2">{(customOptions.sports || []).map(sport => (<span key={sport} className="px-4 py-1.5 bg-[var(--bg-card)] text-[var(--text-main)] rounded-full text-xs font-bold flex items-center gap-2 border border-[var(--border)]">{sport} <button onClick={() => handleDeleteOption('sports', sport)} className="text-[var(--text-muted)] hover:text-[var(--red)] transition-colors"><X size={14}/></button></span>))}{(!customOptions.sports || customOptions.sports.length === 0) && <span className="text-sm text-[var(--text-muted)] italic bg-[var(--bg-overlay)] px-4 py-2 rounded-lg border border-dashed border-[var(--border-strong)]">No hay deportes extra definidos.</span>}</div>
                                 </div>
                                 <div className="bg-[var(--bg-base)] p-6 rounded-2xl border border-[var(--border)] shadow-inner transition-colors">
                                     <h4 className="text-sm font-extrabold text-[var(--text-main)] mb-4 uppercase tracking-widest">Categorías / Estrategias</h4>
-                                    <div className="flex gap-3 mb-5"><input type="text" value={newCustomCategory} onChange={e => setNewCustomCategory(e.target.value)} placeholder="Ej: Reto Escalera, Stake 10..." className="flex-1 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)]"/><button onClick={() => handleAddOption('categories', newCustomCategory)} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] p-3 rounded-xl font-bold shadow-[var(--shadow-glow-sm)] transition-all"><Plus size={20}/></button></div>
+                                    <div className="flex gap-3 mb-5"><input type="text" value={newCustomCategory} onChange={e => setNewCustomCategory(e.target.value)} placeholder="Ej: Reto Escalera, Stake 10..." className="flex-1 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] w-full"/><button onClick={() => handleAddOption('categories', newCustomCategory)} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] p-3 rounded-xl font-bold shadow-[var(--shadow-glow-sm)] transition-all shrink-0"><Plus size={20}/></button></div>
                                     <div className="flex flex-wrap gap-2">{(customOptions.categories || []).map(cat => (<span key={cat} className="px-4 py-1.5 bg-[var(--bg-card)] text-[var(--text-main)] rounded-full text-xs font-bold flex items-center gap-2 border border-[var(--border)]">{cat} <button onClick={() => handleDeleteOption('categories', cat)} className="text-[var(--text-muted)] hover:text-[var(--red)] transition-colors"><X size={14}/></button></span>))}{(!customOptions.categories || customOptions.categories.length === 0) && <span className="text-sm text-[var(--text-muted)] italic bg-[var(--bg-overlay)] px-4 py-2 rounded-lg border border-dashed border-[var(--border-strong)]">No hay estrategias personalizadas.</span>}</div>
                                 </div>
                             </div>
@@ -1447,13 +1501,13 @@ export default function App() {
             </main>
 
             {showBetForm && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 md:p-6 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 md:p-6 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in w-full">
                 <div className="bg-[var(--bg-base-95)] backdrop-blur-3xl w-full max-w-lg rounded-3xl shadow-[var(--shadow-glow-lg)] border border-[var(--accent-30)] overflow-hidden flex flex-col max-h-[95vh] transition-colors">
                     <div className="px-6 py-5 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-card)]"><h3 className="font-extrabold text-[var(--text-main)] text-xl tracking-tight">{editingBetId ? 'Editar Apuesta' : 'Nueva Operación'}</h3><button onClick={() => setShowBetForm(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-overlay)] p-2 rounded-full transition-colors"><X size={20}/></button></div>
-                    <div className="p-6 overflow-y-auto space-y-5 custom-scrollbar bg-transparent">
+                    <div className="p-6 overflow-y-auto space-y-5 custom-scrollbar bg-transparent w-full">
                         
                         {/* --- BOTÓN DE IA PREMIUM --- */}
-                        <div className="bg-[var(--bg-card)] border border-[var(--border)] p-5 rounded-2xl text-center relative overflow-hidden shadow-inner">
+                        <div className="bg-[var(--bg-card)] border border-[var(--border)] p-5 rounded-2xl text-center relative overflow-hidden shadow-inner w-full">
                             <div className="absolute top-0 right-0 p-2 opacity-[0.03] dark:opacity-5 pointer-events-none"><Crown size={60}/></div>
                             <p className="text-xs text-[var(--accent)] mb-3 font-bold uppercase tracking-widest flex items-center justify-center gap-2">
                                 <Crown size={14}/> Análisis IA Premium
@@ -1473,17 +1527,17 @@ export default function App() {
                         </div>
                         {/* ------------------------ */}
 
-                        <div className="grid grid-cols-2 gap-4"><div className="bg-[var(--bg-card)] border border-transparent rounded-xl p-2.5 flex items-center justify-between shadow-inner"><input type="date" className="bg-transparent text-[var(--text-main)] text-sm outline-none w-full font-medium" value={newBet.date} onChange={e => setNewBet({...newBet, date: e.target.value})} /> <Calendar size={16} className="text-[var(--text-muted)]" /></div><div className="bg-[var(--bg-card)] border border-transparent rounded-xl p-2.5 flex items-center justify-between shadow-inner"><input type="time" className="bg-transparent text-[var(--text-main)] text-sm outline-none w-full font-medium" value={newBet.time} onChange={e => setNewBet({...newBet, time: e.target.value})} /> <Clock size={16} className="text-[var(--text-muted)]" /></div></div>
-                        <div className="space-y-1.5"><label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Bookie</label>{isCustomBookmaker ? (<div className="flex gap-2"><input type="text" placeholder="Escribe el nombre..." className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" autoFocus value={newBet.bookmaker} onChange={(e) => setNewBet(prev => ({ ...prev, bookmaker: e.target.value }))} /><button onClick={() => { setIsCustomBookmaker(false); setNewBet(prev => ({ ...prev, bookmaker: 'Bet365' })); }} className="text-xs font-bold text-[var(--red)] hover:opacity-80 bg-[var(--red-10)] px-3 rounded-xl">Cancelar</button></div>) : (<select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner appearance-none" value={newBet.bookmaker} onChange={handleBookieChange}>{COMMON_BOOKMAKERS.map(b => <option key={b}>{b}</option>)}<option value="Otra">Otra...</option></select>)}</div>
+                        <div className="grid grid-cols-2 gap-4 w-full"><div className="bg-[var(--bg-card)] border border-transparent rounded-xl p-2.5 flex items-center justify-between shadow-inner w-full"><input type="date" className="bg-transparent text-[var(--text-main)] text-sm outline-none w-full font-medium" value={newBet.date} onChange={e => setNewBet({...newBet, date: e.target.value})} /> <Calendar size={16} className="text-[var(--text-muted)] shrink-0" /></div><div className="bg-[var(--bg-card)] border border-transparent rounded-xl p-2.5 flex items-center justify-between shadow-inner w-full"><input type="time" className="bg-transparent text-[var(--text-main)] text-sm outline-none w-full font-medium" value={newBet.time} onChange={e => setNewBet({...newBet, time: e.target.value})} /> <Clock size={16} className="text-[var(--text-muted)] shrink-0" /></div></div>
+                        <div className="space-y-1.5 w-full"><label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Bookie</label>{isCustomBookmaker ? (<div className="flex gap-2"><input type="text" placeholder="Escribe el nombre..." className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" autoFocus value={newBet.bookmaker} onChange={(e) => setNewBet(prev => ({ ...prev, bookmaker: e.target.value }))} /><button onClick={() => { setIsCustomBookmaker(false); setNewBet(prev => ({ ...prev, bookmaker: 'Bet365' })); }} className="text-xs font-bold text-[var(--red)] hover:opacity-80 bg-[var(--red-10)] px-3 rounded-xl shrink-0">Cancelar</button></div>) : (<select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner appearance-none" value={newBet.bookmaker} onChange={handleBookieChange}>{COMMON_BOOKMAKERS.map(b => <option key={b}>{b}</option>)}<option value="Otra">Otra...</option></select>)}</div>
                         
                         {newBet.selections.map((sel, index) => (
-                            <div key={sel.id} className="border border-[var(--border)] rounded-2xl bg-[var(--bg-card)] overflow-hidden shadow-sm transition-colors">
-                                <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors border-b border-[var(--border)]" onClick={() => toggleSelection(sel.id)}><div className="flex items-center gap-2 text-sm text-[var(--accent)] font-bold tracking-wide"><ChevronDown size={16} className={`transform transition-transform ${sel.isOpen ? 'rotate-180' : ''}`} /> Selección {index + 1}</div>{newBet.selections.length > 1 && (<button onClick={(e) => { e.stopPropagation(); handleRemoveSelection(sel.id); }} className="text-[var(--text-muted)] hover:text-[var(--red)] bg-[var(--bg-overlay)] p-1.5 rounded-lg"><X size={14}/></button>)}</div>
+                            <div key={sel.id} className="border border-[var(--border)] rounded-2xl bg-[var(--bg-card)] overflow-hidden shadow-sm transition-colors w-full">
+                                <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors border-b border-[var(--border)] w-full" onClick={() => toggleSelection(sel.id)}><div className="flex items-center gap-2 text-sm text-[var(--accent)] font-bold tracking-wide"><ChevronDown size={16} className={`transform transition-transform ${sel.isOpen ? 'rotate-180' : ''}`} /> Selección {index + 1}</div>{newBet.selections.length > 1 && (<button onClick={(e) => { e.stopPropagation(); handleRemoveSelection(sel.id); }} className="text-[var(--text-muted)] hover:text-[var(--red)] bg-[var(--bg-overlay)] p-1.5 rounded-lg"><X size={14}/></button>)}</div>
                                 {sel.isOpen && (
-                                    <div className="p-5 space-y-4 animate-in slide-in-from-top-2 bg-[var(--bg-base)]">
-                                        <div className="grid grid-cols-3 gap-4"><div className="col-span-2 space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Evento</label><input type="text" placeholder="Ej: RM - FCB" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" value={sel.title} onChange={e => handleUpdateSelection(sel.id, 'title', e.target.value)} /></div><div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Cuota</label><input type="number" step="0.01" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--accent)] font-extrabold text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" value={sel.odds} onChange={e => handleUpdateSelection(sel.id, 'odds', e.target.value)} /></div></div>
-                                        <div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Pronóstico</label><input type="text" placeholder="Ej: Más de 2.5 Goles..." className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" value={sel.selection} onChange={e => handleUpdateSelection(sel.id, 'selection', e.target.value)} /></div>
-                                        <div className="grid grid-cols-2 gap-4">
+                                    <div className="p-5 space-y-4 animate-in slide-in-from-top-2 bg-[var(--bg-base)] w-full">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full"><div className="md:col-span-2 space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Evento</label><input type="text" placeholder="Ej: RM - FCB" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" value={sel.title} onChange={e => handleUpdateSelection(sel.id, 'title', e.target.value)} /></div><div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Cuota</label><input type="number" step="0.01" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--accent)] font-extrabold text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" value={sel.odds} onChange={e => handleUpdateSelection(sel.id, 'odds', e.target.value)} /></div></div>
+                                        <div className="space-y-1.5 w-full"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Pronóstico</label><input type="text" placeholder="Ej: Más de 2.5 Goles..." className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" value={sel.selection} onChange={e => handleUpdateSelection(sel.id, 'selection', e.target.value)} /></div>
+                                        <div className="grid grid-cols-2 gap-4 w-full">
                                             <div className="space-y-1.5">
                                                 <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Deporte</label>
                                                 <select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none shadow-inner appearance-none" value={sel.sport} onChange={e => handleUpdateSelection(sel.id, 'sport', e.target.value)}>{(customOptions.sports || []).map(s => <option key={s} value={s}>{s}</option>)}{(!customOptions.sports || customOptions.sports.length === 0) && <option value="">Sin deportes definidos</option>}</select>
@@ -1501,25 +1555,25 @@ export default function App() {
                                                 </select>
                                             </div>
                                         </div>
-                                        <div className="flex justify-center pt-3 border-t border-[var(--border)]"><button className="text-xs font-bold text-[var(--text-muted)] flex items-center gap-1 hover:text-[var(--text-main)] transition-colors" onClick={(e) => { e.stopPropagation(); toggleSelection(sel.id); }}><ChevronUp size={14}/></button></div>
+                                        <div className="flex justify-center pt-3 border-t border-[var(--border)] w-full"><button className="text-xs font-bold text-[var(--text-muted)] flex items-center gap-1 hover:text-[var(--text-main)] transition-colors" onClick={(e) => { e.stopPropagation(); toggleSelection(sel.id); }}><ChevronUp size={14}/> Ocultar detalles</button></div>
                                     </div>
                                 )}
                             </div>
                         ))}
                         <button onClick={handleAddSelection} className="w-full py-3 border border-dashed border-[var(--border-strong)] rounded-2xl text-[var(--text-muted)] font-bold hover:text-[var(--accent)] hover:border-[var(--accent-50)] hover:bg-[var(--accent-5)] flex items-center justify-center gap-2 text-sm transition-all shadow-sm"><Plus size={18} /> Convertir en Combinada</button>
                         
-                        {newBet.selections.length > 1 && (<div className="space-y-1.5 pt-2"><label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Nombre de la Combi</label><input type="text" placeholder="Ej: Combi Locura Fin de Semana" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] text-sm font-bold outline-none focus:border-[var(--accent-50)] shadow-inner" value={newBet.title} onChange={e => setNewBet(prev => ({ ...prev, title: e.target.value }))} /></div>)}
+                        {newBet.selections.length > 1 && (<div className="space-y-1.5 pt-2 w-full"><label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Nombre de la Combi</label><input type="text" placeholder="Ej: Combi Locura Fin de Semana" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] text-sm font-bold outline-none focus:border-[var(--accent-50)] shadow-inner" value={newBet.title} onChange={e => setNewBet(prev => ({ ...prev, title: e.target.value }))} /></div>)}
                         
-                        <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-5 space-y-5 shadow-inner transition-colors">
+                        <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-5 space-y-5 shadow-inner transition-colors w-full">
                             {/* --- TOGGLE BACK/LAY --- */}
-                            <div className="flex bg-[var(--bg-base)] p-1 rounded-xl border border-[var(--border)]">
+                            <div className="flex bg-[var(--bg-base)] p-1 rounded-xl border border-[var(--border)] w-full">
                                 <button onClick={() => setNewBet({...newBet, isBack: true})} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${newBet.isBack !== false ? 'bg-[var(--accent)] text-[var(--accent-fg)] shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>A Favor (Back)</button>
                                 <button onClick={() => setNewBet({...newBet, isBack: false})} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${newBet.isBack === false ? 'bg-[var(--red)] text-white shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>En Contra (Lay)</button>
                             </div>
 
-                            <div className="space-y-3">
+                            <div className="space-y-3 w-full">
                                 <label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1 flex justify-between">Inversión {formErrors.amount && <span className="text-[var(--red)] text-[10px] flex items-center gap-1"><AlertTriangle size={10}/> {formErrors.amount}</span>}</label>
-                                <div className="flex gap-4">
+                                <div className="flex gap-4 w-full">
                                     <div className={`flex-1 bg-[var(--bg-base)] border ${formErrors.amount ? 'border-[var(--red-50)]' : 'border-transparent'} rounded-xl p-3 relative group focus-within:border-[var(--accent-50)] transition-colors shadow-inner`}>
                                         <span className="text-[10px] text-[var(--text-muted)] font-bold block uppercase tracking-widest mb-1">Importe ({currencySymbol})</span>
                                         <input type="number" className="bg-transparent text-[var(--text-main)] w-full outline-none font-extrabold text-2xl" value={newBet.amount || ''} onChange={e => handleAmountChange(e.target.value, 'amount')} placeholder="0" />
@@ -1529,7 +1583,7 @@ export default function App() {
                                         <input type="number" className="bg-transparent text-[var(--text-main)] w-full outline-none font-extrabold text-2xl" value={newBet.stake || ''} onChange={e => handleAmountChange(e.target.value, 'stake')} placeholder="0" />
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-4 gap-2 mt-3">
+                                <div className="grid grid-cols-4 gap-2 mt-3 w-full">
                                     {quickStakes.map(perc => {
                                         const val = (bankCapForButtons * (perc/100)).toFixed(0);
                                         return <button key={perc} onClick={() => handleAmountChange(val, 'amount')} className="bg-[var(--bg-overlay)] hover:bg-[var(--bg-overlay-hover)] border border-transparent rounded-lg py-2 text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors shadow-sm">{val}{currencySymbol}</button>
@@ -1540,71 +1594,71 @@ export default function App() {
                             <button onClick={() => setShowMoreOptions(!showMoreOptions)} className="w-full text-center text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-main)] flex items-center justify-center gap-2 mt-2 transition-colors border-t border-[var(--border)] pt-4">{showMoreOptions ? <ChevronUp size={14}/> : <ChevronDown size={14}/>} {showMoreOptions ? 'Cerrar Avanzado' : 'Más opciones'}</button>
                             
                             {showMoreOptions && (
-                                <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-2">
-                                    <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-2 w-full">
+                                    <div className="grid grid-cols-2 gap-4 w-full">
                                         <div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1 flex items-center gap-1"><User size={10}/> Tipster</label><input type="text" className="w-full bg-[var(--bg-base)] border border-transparent rounded-xl px-3 py-2 text-[var(--text-main)] text-sm outline-none shadow-inner" value={newBet.tipster || ''} onChange={e => setNewBet({...newBet, tipster: e.target.value})} placeholder="Nombre..."/></div>
                                         <div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Estrategia</label><select className="w-full bg-[var(--bg-base)] border border-transparent rounded-xl px-3 py-2 text-[var(--text-main)] text-sm outline-none shadow-inner appearance-none" value={newBet.selections[0]?.category || ''} onChange={e => handleUpdateSelection(newBet.selections[0]?.id, 'category', e.target.value)}><option value="">Sin categoría</option>{(customOptions.categories || []).map(c => <option key={c} value={c}>{c}</option>)}</select></div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-2 gap-4 w-full">
                                         <div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Comisión %</label><input type="number" className="w-full bg-[var(--bg-base)] border border-transparent rounded-xl px-3 py-2 text-[var(--text-main)] text-sm outline-none shadow-inner" value={newBet.commission} onChange={e => setNewBet({...newBet, commission: e.target.value})} placeholder="0"/></div>
                                         <div className="space-y-1.5"><label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Cashout (€)</label><input type="number" className="w-full bg-[var(--bg-base)] border border-transparent rounded-xl px-3 py-2 text-[var(--text-main)] text-sm outline-none shadow-inner" value={newBet.cashout || ''} onChange={e => setNewBet({...newBet, cashout: e.target.value})} placeholder="0.00"/></div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div className="flex items-center gap-3 bg-[var(--bg-base)] px-3 py-2.5 rounded-xl shadow-inner"><input type="checkbox" checked={newBet.isLive} onChange={e => setNewBet({...newBet, isLive: e.target.checked})} className="accent-[var(--accent)] w-4 h-4"/><label className="text-xs font-bold text-[var(--text-main)]">En Vivo</label></div>
-                                        <div className="flex items-center gap-3 bg-[var(--bg-base)] px-3 py-2.5 rounded-xl shadow-inner"><input type="checkbox" checked={newBet.isFreebet} onChange={e => setNewBet({...newBet, isFreebet: e.target.checked})} className="accent-pink-500 w-4 h-4"/><label className="text-xs font-bold text-[var(--text-main)]">Freebet</label></div>
-                                        <div className="flex items-center gap-3 bg-[var(--bg-base)] px-3 py-2.5 rounded-xl shadow-inner"><input type="checkbox" checked={newBet.isEachWay || false} onChange={e => setNewBet({...newBet, isEachWay: e.target.checked})} className="accent-[var(--accent)] w-4 h-4"/><label className="text-xs font-bold text-[var(--text-main)]">Each-Way</label></div>
-                                        <div className="flex items-center gap-3 bg-[var(--bg-base)] px-3 py-2.5 rounded-xl shadow-inner"><input type="checkbox" checked={newBet.bonus ? true : false} onChange={e => setNewBet({...newBet, bonus: e.target.checked ? '1' : ''})} className="accent-yellow-500 w-4 h-4"/><label className="text-xs font-bold text-[var(--text-main)]">Bono</label></div>
+                                    <div className="grid grid-cols-2 gap-3 w-full">
+                                        <div className="flex items-center gap-3 bg-[var(--bg-base)] px-3 py-2.5 rounded-xl shadow-inner w-full"><input type="checkbox" checked={newBet.isLive} onChange={e => setNewBet({...newBet, isLive: e.target.checked})} className="accent-[var(--accent)] w-4 h-4 shrink-0"/><label className="text-xs font-bold text-[var(--text-main)] truncate">En Vivo</label></div>
+                                        <div className="flex items-center gap-3 bg-[var(--bg-base)] px-3 py-2.5 rounded-xl shadow-inner w-full"><input type="checkbox" checked={newBet.isFreebet} onChange={e => setNewBet({...newBet, isFreebet: e.target.checked})} className="accent-pink-500 w-4 h-4 shrink-0"/><label className="text-xs font-bold text-[var(--text-main)] truncate">Freebet</label></div>
+                                        <div className="flex items-center gap-3 bg-[var(--bg-base)] px-3 py-2.5 rounded-xl shadow-inner w-full"><input type="checkbox" checked={newBet.isEachWay || false} onChange={e => setNewBet({...newBet, isEachWay: e.target.checked})} className="accent-[var(--accent)] w-4 h-4 shrink-0"/><label className="text-xs font-bold text-[var(--text-main)] truncate">Each-Way</label></div>
+                                        <div className="flex items-center gap-3 bg-[var(--bg-base)] px-3 py-2.5 rounded-xl shadow-inner w-full"><input type="checkbox" checked={newBet.bonus ? true : false} onChange={e => setNewBet({...newBet, bonus: e.target.checked ? '1' : ''})} className="accent-yellow-500 w-4 h-4 shrink-0"/><label className="text-xs font-bold text-[var(--text-main)] truncate">Bono</label></div>
                                     </div>
                                     
-                                    <div className="flex items-start gap-3 bg-[var(--bg-base)] px-3 py-3 rounded-xl shadow-inner border border-transparent hover:border-[var(--accent-20)] transition-colors">
+                                    <div className="flex items-start gap-3 bg-[var(--bg-base)] px-3 py-3 rounded-xl shadow-inner border border-transparent hover:border-[var(--accent-20)] transition-colors w-full">
                                         <input type="checkbox" checked={newBet.isHidden || false} onChange={e => setNewBet({...newBet, isHidden: e.target.checked})} className="accent-[var(--accent)] w-4 h-4 mt-0.5 shrink-0"/>
                                         <div>
-                                            <label className="text-xs font-bold text-[var(--text-main)] block">Ocultar del balance temporalmente</label>
-                                            <p className="text-[10px] text-[var(--text-muted)] mt-1 leading-snug">Se oculta durante las primeras 48h en estado "Pendiente". Útil para no mezclar saldo con apuestas de largo plazo.</p>
+                                            <label className="text-xs font-bold text-[var(--text-main)] block">Ocultar temporalmente</label>
+                                            <p className="text-[10px] text-[var(--text-muted)] mt-1 leading-snug">Se oculta en el enlace público durante 48h si está "Pendiente".</p>
                                         </div>
                                     </div>
                                 </div>
                             )}
                         </div>
                         
-                        <div className="space-y-1.5 border-t border-[var(--border)] pt-4"><label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1 flex justify-between"><span>Notas / Análisis</span><span className={`${newBet.analysis?.length > 1100 ? 'text-[var(--red)]' : 'text-[var(--text-muted)]'}`}>{newBet.analysis?.length || 0}/1200</span></label><textarea className="w-full bg-[var(--bg-card)] border border-transparent rounded-2xl p-4 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] min-h-[100px] resize-none shadow-inner" placeholder="Escribe tu razonamiento aquí..." maxLength={1200} value={newBet.analysis} onChange={e => setNewBet({...newBet, analysis: e.target.value})} /></div>
+                        <div className="space-y-1.5 border-t border-[var(--border)] pt-4 w-full"><label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1 flex justify-between"><span>Notas</span><span className={`${newBet.analysis?.length > 1100 ? 'text-[var(--red)]' : 'text-[var(--text-muted)]'}`}>{newBet.analysis?.length || 0}/1200</span></label><textarea className="w-full bg-[var(--bg-card)] border border-transparent rounded-2xl p-4 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] min-h-[100px] resize-none shadow-inner" placeholder="Escribe tu razonamiento aquí..." maxLength={1200} value={newBet.analysis} onChange={e => setNewBet({...newBet, analysis: e.target.value})} /></div>
                     </div>
-                    <div className="p-6 border-t border-[var(--border)] bg-[var(--bg-card)]"><button onClick={handleSaveBet} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-extrabold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-[var(--shadow-glow-md)] hover:shadow-[var(--shadow-glow-lg)] text-lg tracking-wide"><CheckCircle2 size={22} /> {editingBetId ? 'Actualizar Operación' : 'Registrar Operación'}</button></div>
+                    <div className="p-6 border-t border-[var(--border)] bg-[var(--bg-card)] w-full"><button onClick={handleSaveBet} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-extrabold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-[var(--shadow-glow-md)] hover:shadow-[var(--shadow-glow-lg)] text-lg tracking-wide"><CheckCircle2 size={22} /> {editingBetId ? 'Actualizar Operación' : 'Registrar Operación'}</button></div>
                 </div>
             </div>
             )}
 
             {/* MODAL DE COMPARTIR Y DISTRIBUCIÓN (WIDGETS) */}
             {shareModal.isOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in w-full">
                     <div className="bg-[var(--bg-card)] backdrop-blur-2xl rounded-3xl shadow-2xl border border-[var(--accent-30)] p-6 md:p-8 w-full max-w-lg transition-colors overflow-hidden relative">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-[var(--accent)] blur-[80px] opacity-20 pointer-events-none"></div>
                         <button onClick={() => setShareModal({ isOpen: false, link: '', iframe: '' })} className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"><X size={20}/></button>
                         
-                        <div className="flex items-center gap-3 mb-6 relative z-10">
-                            <div className="w-12 h-12 bg-[var(--accent-10)] rounded-xl flex items-center justify-center text-[var(--accent)] shadow-inner border border-[var(--accent-20)]"><Code size={24}/></div>
-                            <div>
-                                <h3 className="text-[var(--text-main)] font-extrabold text-xl tracking-tight">Insertar o Compartir</h3>
-                                <p className="text-[var(--text-muted)] text-sm">Elige cómo quieres distribuir tu banca.</p>
+                        <div className="flex items-center gap-3 mb-6 relative z-10 w-full">
+                            <div className="w-12 h-12 bg-[var(--accent-10)] rounded-xl flex items-center justify-center text-[var(--accent)] shadow-inner border border-[var(--accent-20)] shrink-0"><Code size={24}/></div>
+                            <div className="flex-1 min-w-0">
+                                <h3 className="text-[var(--text-main)] font-extrabold text-xl tracking-tight truncate">Insertar o Compartir</h3>
+                                <p className="text-[var(--text-muted)] text-sm truncate">Elige cómo quieres distribuir tu banca.</p>
                             </div>
                         </div>
 
-                        <div className="space-y-6 relative z-10">
+                        <div className="space-y-6 relative z-10 w-full">
                             {/* Opción 1: Link Directo */}
-                            <div className="bg-[var(--bg-base)] p-4 rounded-2xl border border-[var(--border)] shadow-inner">
+                            <div className="bg-[var(--bg-base)] p-4 rounded-2xl border border-[var(--border)] shadow-inner w-full">
                                 <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-main)] mb-2 flex items-center gap-2"><LinkIcon size={14} className="text-[var(--accent)]"/> Link Público (Sólo lectura)</h4>
                                 <p className="text-[10px] text-[var(--text-muted)] mb-3 leading-relaxed">Envía este enlace por Telegram o WhatsApp. Cualquiera podrá ver tu banca sin necesidad de registrarse.</p>
-                                <div className="flex gap-2">
-                                    <input type="text" readOnly value={shareModal.link} className="flex-1 bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-xs text-[var(--text-muted)] outline-none" />
-                                    <button onClick={() => copyToClipboard(shareModal.link, "¡Enlace público copiado!")} className="bg-[var(--accent)] text-[var(--accent-fg)] px-4 py-2.5 rounded-xl text-xs font-bold hover:opacity-90 transition-opacity">Copiar</button>
+                                <div className="flex gap-2 w-full">
+                                    <input type="text" readOnly value={shareModal.link} className="flex-1 min-w-0 bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-xs text-[var(--text-muted)] outline-none" />
+                                    <button onClick={() => copyToClipboard(shareModal.link, "¡Enlace público copiado!")} className="bg-[var(--accent)] text-[var(--accent-fg)] px-4 py-2.5 rounded-xl text-xs font-bold hover:opacity-90 transition-opacity shrink-0">Copiar</button>
                                 </div>
                             </div>
 
                             {/* Opción 2: Widget Embebido */}
-                            <div className="bg-[var(--bg-base)] p-4 rounded-2xl border border-[var(--border)] shadow-inner relative overflow-hidden">
+                            <div className="bg-[var(--bg-base)] p-4 rounded-2xl border border-[var(--border)] shadow-inner relative overflow-hidden w-full">
                                 <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-main)] mb-2 flex items-center gap-2"><Layers size={14} className="text-[var(--accent)]"/> Insertar Widget en tu Web</h4>
                                 <p className="text-[10px] text-[var(--text-muted)] mb-3 leading-relaxed">Copia este código HTML y pégalo en tu web (WordPress, Shopify, etc.). Se mostrará un Widget premium adaptado y sin menús laterales.</p>
-                                <div className="relative group">
+                                <div className="relative group w-full">
                                     <textarea readOnly value={shareModal.iframe} className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-3 text-[10px] font-mono text-[var(--text-muted)] outline-none resize-none h-20 custom-scrollbar"></textarea>
                                     <button onClick={() => copyToClipboard(shareModal.iframe, "¡Código HTML del Widget copiado!")} className="absolute right-2 bottom-2 bg-[var(--accent)] text-[var(--accent-fg)] px-3 py-1.5 rounded-lg text-xs font-bold hover:opacity-90 transition-opacity shadow-md">Copiar Código</button>
                                 </div>
@@ -1614,41 +1668,9 @@ export default function App() {
                 </div>
             )}
 
-            {/* MODAL PARA CREAR NUEVA BANCA DESDE AJUSTES O LAYOUT PRINCIPAL */}
-            {isAddingBank && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
-                    <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl w-full max-w-sm rounded-3xl shadow-[var(--shadow-glow-lg)] border border-[var(--accent-20)] overflow-hidden flex flex-col transition-colors">
-                        <div className="px-5 py-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-card)]">
-                            <h3 className="font-bold text-[var(--text-main)] text-lg">Nueva Banca</h3>
-                            <button onClick={() => setIsAddingBank(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-overlay)] p-1.5 rounded-full"><X size={18}/></button>
-                        </div>
-                        <div className="p-6 space-y-5">
-                            <div className="space-y-1.5">
-                                <label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Nombre</label>
-                                <input type="text" placeholder="Ej: Bet365 Principal" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors" value={newBankData.name} onChange={e => setNewBankData({...newBankData, name: e.target.value})} autoFocus />
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1 flex items-center gap-2">Capital Inicial</label>
-                                <input type="number" placeholder="1000" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors" value={newBankData.initialCapital} onChange={e => setNewBankData({...newBankData, initialCapital: e.target.value})} />
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Divisa</label>
-                                <select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors appearance-none" value={newBankData.currency} onChange={e => setNewBankData({...newBankData, currency: e.target.value})}>
-                                    <option value="EUR">EUR (€)</option>
-                                    <option value="USD">USD ($)</option>
-                                    <option value="GBP">GBP (£)</option>
-                                    <option value="MXN">MXN ($)</option>
-                                </select>
-                            </div>
-                            <button onClick={confirmAddBank} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-bold py-3.5 rounded-xl transition-all shadow-[var(--shadow-glow-md)] mt-4">Crear Banca</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* MODAL DE CONFIRMACIÓN / AVISO */}
             {feedbackModal.isOpen && (
-                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in w-full">
                     <div className="bg-[var(--bg-card)] backdrop-blur-2xl rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.3)] border border-[var(--border-strong)] p-8 w-full max-w-sm text-center transition-colors">
                         {feedbackModal.type === 'alert' ? (
                             <AlertTriangle size={48} className="text-[var(--accent)] mx-auto mb-4 drop-shadow-md" />
@@ -1659,7 +1681,7 @@ export default function App() {
                             {feedbackModal.type === 'alert' ? 'Aviso' : 'Confirmación'}
                         </h3>
                         <p className="text-[var(--text-muted)] text-sm mb-6 whitespace-pre-wrap">{feedbackModal.message}</p>
-                        <div className="flex gap-3 justify-center">
+                        <div className="flex gap-3 justify-center w-full">
                             {feedbackModal.type === 'confirm' && (
                                 <button 
                                     onClick={closeFeedbackModal} 
@@ -1693,27 +1715,26 @@ export default function App() {
                 </div>
             )}
 
-            {/* MODAL CREAR NUEVO BALANCE AGRUPADO */}
             {isAddingBalance && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in w-full">
                     <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl w-full max-w-sm rounded-3xl shadow-[var(--shadow-glow-lg)] border border-[var(--accent-20)] overflow-hidden flex flex-col transition-colors">
-                        <div className="px-5 py-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-card)]">
+                        <div className="px-5 py-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-card)] w-full">
                             <h3 className="font-bold text-[var(--text-main)] text-lg">Nuevo Balance</h3>
                             <button onClick={() => setIsAddingBalance(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-overlay)] p-1.5 rounded-full"><X size={18}/></button>
                         </div>
-                        <div className="p-6 space-y-5">
-                            <div className="space-y-1.5">
+                        <div className="p-6 space-y-5 w-full">
+                            <div className="space-y-1.5 w-full">
                                 <label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Nombre del Balance</label>
                                 <input type="text" placeholder="Ej: General 2026" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors" value={newBalanceData.name} onChange={e => setNewBalanceData({...newBalanceData, name: e.target.value})} autoFocus />
                             </div>
-                            <div className="space-y-3">
+                            <div className="space-y-3 w-full">
                                 <label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Selecciona Bancas</label>
-                                <div className="max-h-40 overflow-y-auto space-y-2 custom-scrollbar">
+                                <div className="max-h-40 overflow-y-auto space-y-2 custom-scrollbar pr-2 w-full">
                                     {banks.map(b => (
-                                        <label key={b.id} className="flex items-center gap-3 p-3 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] cursor-pointer hover:bg-[var(--bg-hover)] transition-colors">
+                                        <label key={b.id} className="flex items-center gap-3 p-3 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] cursor-pointer hover:bg-[var(--bg-hover)] transition-colors w-full">
                                             <input 
                                                 type="checkbox" 
-                                                className="accent-[var(--accent)] w-4 h-4"
+                                                className="accent-[var(--accent)] w-4 h-4 shrink-0"
                                                 checked={newBalanceData.bankIds.includes(b.id)}
                                                 onChange={(e) => {
                                                     const newIds = e.target.checked 
@@ -1722,7 +1743,7 @@ export default function App() {
                                                     setNewBalanceData({...newBalanceData, bankIds: newIds});
                                                 }}
                                             />
-                                            <span className="text-sm font-bold text-[var(--text-main)]">{b.name}</span>
+                                            <span className="text-sm font-bold text-[var(--text-main)] truncate">{b.name}</span>
                                         </label>
                                     ))}
                                 </div>
@@ -1734,20 +1755,20 @@ export default function App() {
             )}
 
             {statusModalData && (
-                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in">
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in w-full">
                     <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.2)] border border-[var(--accent-20)] p-6 md:p-8 w-full max-w-sm transition-colors">
                         <h3 className="text-[var(--text-main)] font-extrabold text-xl mb-6 text-center tracking-tight drop-shadow-sm">Estado de la Operación</h3>
-                        <div className="grid grid-cols-2 gap-3 md:gap-4 mb-4">
-                            <button onClick={() => handleQuickStatusChange('won')} className="p-3 md:p-4 bg-[var(--accent-10)] hover:bg-[var(--accent-20)] text-[var(--accent)] rounded-2xl font-bold border border-[var(--accent-30)] transition-all flex flex-col items-center gap-2 shadow-inner"><CheckCircle2 size={24}/> Ganada</button>
-                            <button onClick={() => handleQuickStatusChange('lost')} className="p-3 md:p-4 bg-[var(--red-10)] hover:bg-[var(--red-20)] text-[var(--red)] rounded-2xl font-bold border border-[var(--red-30)] transition-all flex flex-col items-center gap-2 shadow-inner"><XCircle size={24}/> Perdida</button>
+                        <div className="grid grid-cols-2 gap-3 md:gap-4 mb-4 w-full">
+                            <button onClick={() => handleQuickStatusChange('won')} className="p-3 md:p-4 bg-[var(--accent-10)] hover:bg-[var(--accent-20)] text-[var(--accent)] rounded-2xl font-bold border border-[var(--accent-30)] transition-all flex flex-col items-center gap-2 shadow-inner w-full"><CheckCircle2 size={24}/> Ganada</button>
+                            <button onClick={() => handleQuickStatusChange('lost')} className="p-3 md:p-4 bg-[var(--red-10)] hover:bg-[var(--red-20)] text-[var(--red)] rounded-2xl font-bold border border-[var(--red-30)] transition-all flex flex-col items-center gap-2 shadow-inner w-full"><XCircle size={24}/> Perdida</button>
                         </div>
-                        <div className="grid grid-cols-2 gap-2 mb-4">
-                            <button onClick={() => handleQuickStatusChange('half-won')} className="py-2 text-[10px] bg-[var(--accent-10)] hover:bg-[var(--accent-20)] text-[var(--accent)] rounded-lg font-bold border border-[var(--accent-30)] transition-all">Mitad Ganada</button>
-                            <button onClick={() => handleQuickStatusChange('half-lost')} className="py-2 text-[10px] bg-[var(--red-10)] hover:bg-[var(--red-20)] text-[var(--red)] rounded-lg font-bold border border-[var(--red-30)] transition-all">Mitad Perdida</button>
+                        <div className="grid grid-cols-2 gap-2 mb-4 w-full">
+                            <button onClick={() => handleQuickStatusChange('half-won')} className="py-2 text-[10px] bg-[var(--accent-10)] hover:bg-[var(--accent-20)] text-[var(--accent)] rounded-lg font-bold border border-[var(--accent-30)] transition-all w-full">Mitad Ganada</button>
+                            <button onClick={() => handleQuickStatusChange('half-lost')} className="py-2 text-[10px] bg-[var(--red-10)] hover:bg-[var(--red-20)] text-[var(--red)] rounded-lg font-bold border border-[var(--red-30)] transition-all w-full">Mitad Perdida</button>
                         </div>
-                        <div className="grid grid-cols-2 gap-3 md:gap-4">
-                            <button onClick={() => handleQuickStatusChange('void')} className="p-3 bg-[var(--bg-overlay)] hover:bg-[var(--bg-overlay-hover)] text-[var(--text-muted)] rounded-2xl font-bold border border-[var(--border-strong)] transition-all flex flex-col items-center gap-1 shadow-inner"><AlertCircle size={20}/> <span className="text-[10px] uppercase">Reembolsada</span></button>
-                            <button onClick={() => handleQuickStatusChange('pending')} className="p-3 bg-yellow-500/10 hover:bg-yellow-500/20 text-[var(--yellow)] rounded-2xl font-bold border border-yellow-500/30 transition-all flex flex-col items-center gap-1 shadow-inner"><Clock size={20}/> <span className="text-[10px] uppercase">Pendiente</span></button>
+                        <div className="grid grid-cols-2 gap-3 md:gap-4 w-full">
+                            <button onClick={() => handleQuickStatusChange('void')} className="p-3 bg-[var(--bg-overlay)] hover:bg-[var(--bg-overlay-hover)] text-[var(--text-muted)] rounded-2xl font-bold border border-[var(--border-strong)] transition-all flex flex-col items-center gap-1 shadow-inner w-full"><AlertCircle size={20}/> <span className="text-[10px] uppercase">Reembolsada</span></button>
+                            <button onClick={() => handleQuickStatusChange('pending')} className="p-3 bg-yellow-500/10 hover:bg-yellow-500/20 text-[var(--yellow)] rounded-2xl font-bold border border-yellow-500/30 transition-all flex flex-col items-center gap-1 shadow-inner w-full"><Clock size={20}/> <span className="text-[10px] uppercase">Pendiente</span></button>
                         </div>
                         <button onClick={() => setStatusModalData(null)} className="mt-6 w-full py-3 text-[var(--text-muted)] font-bold hover:text-[var(--text-main)] bg-[var(--bg-card)] rounded-xl transition-colors border border-[var(--border)] hover:border-[var(--border-strong)] shadow-sm">Cancelar</button>
                     </div>
