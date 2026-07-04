@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     }
 
     const prompt = `Analiza esta captura de pantalla de un boleto de apuestas deportivas. Extrae la siguiente información y devuélvela ÚNICAMENTE en formato JSON válido, sin texto adicional y sin formato markdown (no uses \`\`\`json).
-    Además, genera un campo "mensaje_ia" con un mensaje conversacional, directo y amable. Si lograste extraer todo bien, dile que todo está listo. Si falta algo, menciónalo educadamente.
+    Además, genera un campo "mensaje_ia" con un mensaje conversacional, directo y amable (como un asistente). Si lograste extraer todo bien, dile al usuario que todo está listo. Si notas que falta algo, menciónalo educadamente y pídele que lo rellene a mano.
     
     Estructura del JSON:
     {
@@ -22,7 +22,9 @@ export default async function handler(req, res) {
       "cuota": "Número decimal (ejemplo: 1.85)",
       "mercado": "Tipo de apuesta (ejemplo: Ganador, Más de 2.5 goles)",
       "importe": "Cantidad apostada (ejemplo: 10.50)",
-      "mensaje_ia": "Mensaje."
+      "fecha": "Fecha del evento en formato YYYY-MM-DD (ejemplo: 2026-07-04). Si no se ve, devuelve vacio.",
+      "hora": "Hora del evento en formato HH:MM (ejemplo: 20:45). Si no se ve, devuelve vacio.",
+      "mensaje_ia": "Mensaje personalizado explicando qué has encontrado y si falta algo."
     }`;
 
     try {
