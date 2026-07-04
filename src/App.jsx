@@ -18,7 +18,6 @@ import { initializeApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 import { getFirestore, collection, onSnapshot, addDoc, doc, deleteDoc, updateDoc, setDoc, writeBatch } from "firebase/firestore";
 
-// --- CONFIGURACIÓN DE FIREBASE ---
 const firebaseConfig = {
     apiKey: "AIzaSyDdhFhK2leqXczuBU-inLBLi9PfMt7NbkY",
     authDomain: "money-tracking-d908b.firebaseapp.com",
@@ -32,7 +31,6 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// --- ESTILOS GLOBALES & THEME ---
 const getGlobalStyles = (theme) => {
     const isDark = theme === 'dark';
     return `
@@ -136,23 +134,6 @@ const parseComplexCSV = (text) => {
     return rows;
 };
 
-const fetchWithRetry = async (url, options, retries = 5) => {
-    const delays = [1000, 2000, 4000, 8000, 16000];
-    for (let i = 0; i < retries; i++) {
-        try {
-            const response = await fetch(url, options);
-            if (response.ok) return response;
-        } catch (e) {
-            if (i === retries - 1) throw e;
-        }
-        if (i < retries - 1) {
-            await new Promise(r => setTimeout(r, delays[i]));
-        }
-    }
-    throw new Error("Failed after retries");
-};
-
-// --- HELPER ESTADÍSTICAS BÁSICAS ---
 const getStatsForBets = (betList, initialCap) => {
     let staked=0, returned=0, runningProfit=0;
     betList.forEach(bet => {
@@ -176,17 +157,17 @@ const getStatsForBets = (betList, initialCap) => {
     return { picks: betList.filter(b => b.status !== 'pending').length, profit: runningProfit, yieldPerc, progression };
 };
 
-// --- COMPONENTES UI ---
 const StatCard = ({ title, value, subValue, isCurrency = false, currency = 'EUR', colorClass = "text-[var(--text-main)]" }) => (
-    <div className="p-3 md:p-3 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl hover:bg-[var(--bg-hover)] transition-all flex flex-col justify-between min-h-[76px] shadow-sm">
-        <p className="text-[var(--text-muted)] text-[9px] uppercase tracking-wider font-bold mb-0.5 truncate" title={title}>{title}</p>
+    <div className="p-4 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl hover:bg-[var(--bg-hover)] transition-all flex flex-col justify-between min-h-[85px] shadow-sm">
+        <p className="text-[var(--text-muted)] text-[9px] uppercase tracking-wider font-bold mb-1 truncate" title={title}>{title}</p>
         <div className="flex-1 flex flex-col justify-end">
-            <h3 className={`text-base md:text-xl font-bold ${colorClass} truncate drop-shadow-sm leading-tight`}>{isCurrency ? formatCurrency(value, currency) : value}</h3>
-            {subValue && <p className="text-[9px] text-[var(--text-muted)] opacity-80 mt-0.5 truncate">{String(subValue)}</p>}
+            <h3 className={`text-xl font-bold ${colorClass} truncate drop-shadow-sm leading-tight`}>{isCurrency ? formatCurrency(value, currency) : value}</h3>
+            {subValue && <p className="text-[9px] text-[var(--text-muted)] opacity-80 mt-1 truncate">{String(subValue)}</p>}
         </div>
     </div>
 );
 
+// Fallback legacy badge just in case
 const StatusBadge = ({ status }) => {
     const styles = {
         won: 'bg-[var(--accent-10)] text-[var(--accent)] border-[var(--accent-30)] shadow-[var(--shadow-glow-sm)]', 
@@ -201,13 +182,24 @@ const StatusBadge = ({ status }) => {
     return <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide border backdrop-blur-md ${styles[status] || styles.pending}`}>{labels[status] || status}</span>;
 };
 
-// --- APP PRINCIPAL ---
+// NUEVO: Componente Compacto de Iconos de Estado para la Tabla Rediseñada
+const RenderCompactStatus = ({ status }) => {
+    if (status === 'won') return <CheckCircle2 size={18} className="text-[var(--accent)] mx-auto" title="Ganada" />;
+    if (status === 'lost') return <XCircle size={18} className="text-[var(--red)] mx-auto" title="Perdida" />;
+    if (status === 'pending') return <Clock size={18} className="text-[var(--yellow)] mx-auto" title="Pendiente" />;
+    if (status === 'void') return <AlertCircle size={18} className="text-[var(--text-muted)] mx-auto" title="Reembolsada" />;
+    if (status === 'half-won') return <span className="text-[var(--accent)] font-extrabold text-xs block text-center" title="Mitad Ganada">HW</span>;
+    if (status === 'half-lost') return <span className="text-[var(--red)] font-extrabold text-xs block text-center" title="Mitad Perdida">HL</span>;
+    if (status === 'cancelled') return <span className="text-[var(--text-muted)] line-through font-extrabold text-xs block text-center" title="Cancelada">CX</span>;
+    return <span className="text-[var(--text-muted)] font-extrabold text-xs block text-center uppercase">{status}</span>;
+};
+
 export default function App() {
     const [initialShare] = useState(() => {
         if (typeof window === 'undefined') return { mode: 'personal', uid: null, bid: null, isEmbed: false };
         const params = new URLSearchParams(window.location.search);
         const sData = params.get('s');
-        const isEmbed = params.get('embed') === 'true'; // Detección de iFrame
+        const isEmbed = params.get('embed') === 'true'; 
         if (sData) {
             try {
                 const decoded = atob(sData);
@@ -221,6 +213,10 @@ export default function App() {
     const [isEmbed] = useState(initialShare.isEmbed);
     const [theme, setTheme] = useState(() => localStorage.getItem('moneytracking_theme') || 'dark');
     const [currentUser, setCurrentUser] = useState(null);
+    
+    // NUEVO: Estado del Avatar de Usuario
+    const [userAvatar, setUserAvatar] = useState(null);
+
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isRegistering, setIsRegistering] = useState(false);
@@ -247,6 +243,7 @@ export default function App() {
     
     const [feedbackModal, setFeedbackModal] = useState({ isOpen: false, type: 'alert', message: '', onConfirm: null });
     const [shareModal, setShareModal] = useState({ isOpen: false, link: '', iframe: '' }); 
+    const [paywallModal, setPaywallModal] = useState({ isOpen: false, feature: '' });
     
     const [isProcessing, setIsProcessing] = useState(false);
     const [expandedMonths, setExpandedMonths] = useState({});
@@ -273,46 +270,55 @@ export default function App() {
     const [isScanning, setIsScanning] = useState(false);
     const [aiMessage, setAiMessage] = useState(''); 
 
-    // STATE: Soporte nativo para Back/Lay, Tipster, Cashout, EachWay, Hidden
+    // LIMITES DE NEGOCIO FREEMIUM
+    const isPro = false; 
+    const MAX_SCANS_PER_DAY = 10;
+    const [scanCount, setScanCount] = useState(0);
+
     const [newBet, setNewBet] = useState({
         date: new Date().toISOString().split('T')[0], time: '00:00', bookmaker: 'Bet365', betMode: 'simple', title: '', 
         selections: [{ id: Date.now(), title: '', selection: '', sport: 'Fútbol', status: 'pending', category: '', odds: 1.50, isOpen: true }],
         amount: 0, stake: 0, analysis: '', commission: '', bonus: '', isLive: false, isFreebet: false, cashout: '', isEachWay: false, tipster: '', isBack: true, isHidden: false
     });
 
+    // CARGAR AVATAR AL INICIAR
     useEffect(() => {
-        if (!document.querySelector('link[rel="apple-touch-icon"]')) {
-            const appleIcon = document.createElement('link');
-            appleIcon.rel = 'apple-touch-icon';
-            appleIcon.href = '/favicon.jpg';
-            document.head.appendChild(appleIcon);
+        if (currentUser) {
+            const savedAvatar = localStorage.getItem(`avatar_${currentUser.uid}`);
+            if (savedAvatar) setUserAvatar(savedAvatar);
         }
-        if (!document.querySelector('link[rel="manifest"]')) {
-            const manifest = {
-                name: "MoneyTracKING",
-                short_name: "MoneyTracKING",
-                start_url: ".",
-                display: "standalone",
-                background_color: "#081225",
-                theme_color: "#081225",
-                icons: [
-                    { src: "/favicon.jpg", sizes: "192x192", type: "image/jpeg" },
-                    { src: "/favicon.jpg", sizes: "512x512", type: "image/jpeg" }
-                ]
-            };
-            const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
-            const link = document.createElement('link');
-            link.rel = 'manifest';
-            link.href = URL.createObjectURL(blob);
-            document.head.appendChild(link);
+    }, [currentUser]);
+
+    const handleAvatarChange = (avatarData) => {
+        setUserAvatar(avatarData);
+        if (currentUser) localStorage.setItem(`avatar_${currentUser.uid}`, avatarData);
+    };
+
+    const handleAvatarUpload = (event) => {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => handleAvatarChange(reader.result);
+            reader.readAsDataURL(file);
         }
-    }, []);
+    };
+
+    // AVATARES PREDETERMINADOS (Si los subes a public/avatars/ funcionarán perfecto. Si no, renderizan un fallback)
+    const predefinedAvatars = [
+        '/avatars/avatar1.png', '/avatars/avatar2.png', '/avatars/avatar3.png', 
+        '/avatars/avatar4.png', '/avatars/avatar5.png', '/avatars/avatar6.png'
+    ];
 
     useEffect(() => { localStorage.setItem('moneytracking_theme', theme); }, [theme]);
 
     const escanearBoleto = async (event) => {
         const file = event.target.files[0];
         if (!file) return;
+
+        if (!isPro && scanCount >= MAX_SCANS_PER_DAY) {
+            setPaywallModal({ isOpen: true, feature: 'Límite de Escaneos Inteligentes Alcanzado' });
+            return;
+        }
 
         setIsScanning(true);
         setAiMessage(''); 
@@ -321,46 +327,19 @@ export default function App() {
             reader.onloadend = async () => {
                 const base64Data = reader.result.split(',')[1];
                 
-                const prompt = `Analiza esta captura de pantalla de un boleto de apuestas deportivas. Extrae la siguiente información y devuélvela ÚNICAMENTE en formato JSON válido, sin texto adicional y sin formato markdown (no uses \`\`\`json).
-                Además, genera un campo "mensaje_ia" con un mensaje conversacional, directo y amable (como un asistente). Si lograste extraer todo bien (cuota, importe, mercado), dile al usuario que todo está listo. Si notas que falta algo (por ejemplo, si la imagen corta el importe o la cuota), menciónalo educadamente y pídele que lo rellene a mano.
-                
-                Estructura del JSON:
-                {
-                  "equipo": "Nombre del equipo o selección",
-                  "cuota": "Número decimal (ejemplo: 1.85)",
-                  "mercado": "Tipo de apuesta (ejemplo: Ganador, Más de 2.5 goles)",
-                  "importe": "Cantidad apostada (ejemplo: 10.50)",
-                  "mensaje_ia": "Mensaje personalizado explicando qué has encontrado y si falta algo."
-                }`;
-
-                const apiKey = ""; 
-                const payload = {
-                    contents: [{
-                        role: "user",
-                        parts: [
-                            { text: prompt },
-                            { inlineData: { mimeType: file.type, data: base64Data } }
-                        ]
-                    }]
-                };
-
-                const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                const response = await fetch('/api/scan', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({ imageBase64: base64Data, mimeType: file.type })
                 });
 
                 const result = await response.json();
-                let responseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
                 
-                if (!responseText) throw new Error("No text returned from API.");
+                if (!response.ok) {
+                    throw new Error(result.error || "Fallo en la conexión segura con la IA");
+                }
 
-                responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-
-                const datosExtraidos = JSON.parse(responseText);
-                console.log("Datos extraídos:", datosExtraidos);
-
-                const parsedAmount = parseFloat(datosExtraidos.importe);
+                const parsedAmount = parseFloat(result.importe);
                 let calculatedStake = newBet.stake;
                 let finalAmount = newBet.amount;
                 
@@ -374,25 +353,33 @@ export default function App() {
                     ...prev,
                     amount: finalAmount,
                     stake: calculatedStake,
-                    // AQUÍ ESTÁ LA CORRECCIÓN: Actualizamos date y time
-                    date: datosExtraidos.fecha && datosExtraidos.fecha !== "" ? datosExtraidos.fecha : prev.date,
-                    time: datosExtraidos.hora && datosExtraidos.hora !== "" ? datosExtraidos.hora : prev.time,
+                    date: result.fecha && result.fecha !== "" ? result.fecha : prev.date,
+                    time: result.hora && result.hora !== "" ? result.hora : prev.time,
                     selections: [
                         {
                             ...prev.selections[0],
-                            title: datosExtraidos.equipo || prev.selections[0].title,
-                            selection: datosExtraidos.mercado || prev.selections[0].selection,
-                            odds: parseFloat(datosExtraidos.cuota) || prev.selections[0].odds
+                            title: result.equipo || prev.selections[0].title,
+                            selection: result.mercado || prev.selections[0].selection,
+                            odds: parseFloat(result.cuota) || prev.selections[0].odds
                         },
                         ...prev.selections.slice(1)
                     ]
                 }));
                 
+                // ACTUALIZAR CONTADOR DE ESCANEOS EN FIREBASE
+                if (!isPro) {
+                    const hoy = new Date().toISOString().split('T')[0];
+                    const prefsRef = doc(db, 'users', currentUser.uid, 'preferences', 'usageLimits');
+                    const newCount = scanCount + 1;
+                    await setDoc(prefsRef, { date: hoy, scanCount: newCount }, { merge: true });
+                    setScanCount(newCount);
+                }
+
                 setIsScanning(false);
-                if (datosExtraidos.mensaje_ia) {
-                    setAiMessage(datosExtraidos.mensaje_ia);
+                if (result.mensaje_ia) {
+                    setAiMessage(result.mensaje_ia);
                 } else {
-                    setAiMessage("✅ ¡Boleto analizado! Revisa los datos auto-rellenados.");
+                    setAiMessage("✅ ¡Boleto analizado con éxito por nuestro Backend!");
                 }
             };
             
@@ -401,7 +388,7 @@ export default function App() {
         } catch (error) {
             console.error("Error al leer el boleto:", error);
             setIsScanning(false);
-            setAiMessage("Hubo un error analizando la imagen. Comprueba que sea legible.");
+            setAiMessage("Hubo un error de conexión con nuestros servidores seguros.");
         }
     };
 
@@ -474,6 +461,24 @@ export default function App() {
             }
         }, (error) => console.error("Error preferencias:", error));
 
+        // LEER LOS LIMITES DIARIOS
+        if (viewMode === 'personal' && currentUser) {
+            const usageRef = doc(db, 'users', currentUser.uid, 'preferences', 'usageLimits');
+            onSnapshot(usageRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    const hoy = new Date().toISOString().split('T')[0];
+                    if (data.date === hoy) {
+                        setScanCount(data.scanCount || 0);
+                    } else {
+                        setScanCount(0); // Nuevo dia, reset
+                    }
+                } else {
+                    setScanCount(0);
+                }
+            });
+        }
+
         return () => { unsubBanks(); unsubBets(); unsubPrefs(); unsubBalances(); };
     }, [currentUser, viewMode, visitingUserId, visitingBankId]);
 
@@ -541,13 +546,12 @@ export default function App() {
 
         rawBets = rawBets.sort((a, b) => new Date(`${b.date}T${b.time || '00:00'}`) - new Date(`${a.date}T${a.time || '00:00'}`));
 
-        // LÓGICA DE OCULTACIÓN (isHidden + pending)
         rawBets = rawBets.filter(b => {
             if (b.isHidden && b.status === 'pending') {
                 const betDate = new Date(`${b.date}T${b.time || '00:00'}`);
                 const now = new Date();
                 const diffHours = Math.abs(now - betDate) / 36e5;
-                if (diffHours < 48) return false; // Se oculta si han pasado menos de 48h
+                if (diffHours < 48) return false; 
             }
             return true;
         });
@@ -586,7 +590,7 @@ export default function App() {
             }
             groups[key].bets.push(bet); 
             const amt = bet.amount || 0; let pl = 0;
-            const mult = bet.isBack === false ? -1 : 1; // Back/Lay multiplier
+            const mult = bet.isBack === false ? -1 : 1; 
             
             if (bet.status === 'won') pl = ((amt * bet.odds) - amt) * mult;
             else if (bet.status === 'lost') pl = -amt * mult;
@@ -723,8 +727,12 @@ export default function App() {
         e.preventDefault(); if (viewMode === 'visiting') return; 
         if (!newBet.amount) return showAlert("Introduce un importe válido."); if (!currentBankId) return showAlert("Crea una banca primero.");
         if (activeBankData?.isBalance) return showAlert("No puedes añadir apuestas en una vista de Balance Agrupado. Selecciona una banca individual.");
-        if (!editingBetId && currentBets.length >= LIMITS.MAX_BETS_PER_BANK) { return showAlert(`Límite de ${LIMITS.MAX_BETS_PER_BANK} apuestas por banca alcanzado.`); }
         
+        if (!isPro && !editingBetId && currentBets.length >= 1000) {
+            setPaywallModal({ isOpen: true, feature: 'Límite de 1.000 Apuestas por Banca Alcanzado' });
+            return;
+        }
+
         const totalOdds = newBet.selections.reduce((acc, s) => acc * (parseFloat(s.odds)||1), 1);
         const betData = { ...newBet, odds: parseFloat(totalOdds.toFixed(2)), amount: parseFloat(newBet.amount), bankId: currentBankId, createdAt: new Date().toISOString() };
         
@@ -735,7 +743,7 @@ export default function App() {
                 await addDoc(collection(db, 'users', currentUser.uid, 'bets'), betData);
             }
             setShowBetForm(false); setEditingBetId(null); setIsCustomBookmaker(false); setAiMessage('');
-            setNewBet({ date: new Date().toISOString().split('T')[0], time: '00:00', bookmaker: 'Bet365', betMode: 'simple', title: '', selections: [{ id: Date.now(), title: '', selection: '', sport: customOptions.sports?.[0] || 'Fútbol', status: 'pending', category: '', odds: 1.50, isOpen: true }], amount: 0, stake: 0, analysis: '', isBack: true, isHidden: false, tipster: '' });
+            setNewBet({ date: new Date().toISOString().split('T')[0], time: '00:00', bookmaker: 'Bet365', betMode: 'simple', title: '', selections: [{ id: Date.now(), title: '', selection: '', sport: customOptions.sports?.[0] || 'Fútbol', status: 'pending', category: '', odds: 1.50, isOpen: true }], amount: 0, stake: 0, analysis: '', commission: '', bonus: '', isLive: false, isFreebet: false, cashout: '', isEachWay: false, tipster: '', isBack: true, isHidden: false });
         } catch (error) {
             console.error("Error guardando apuesta:", error);
             showAlert("Error guardando apuesta.");
@@ -766,6 +774,10 @@ export default function App() {
             });
             if (currentBet) newBets.push(currentBet);
             
+            if (!isPro && (currentBets.length + newBets.length) > 1000) {
+                return setPaywallModal({ isOpen: true, feature: 'Límite de 1.000 Apuestas Superado con esta Importación' });
+            }
+
             try {
                 setIsProcessing(true);
                 newBets.forEach(b => {
@@ -902,7 +914,10 @@ export default function App() {
     };
     
     const openAddBankModal = () => {
-        if(banks.length >= LIMITS.MAX_BANKS) return showAlert(`Límite de ${LIMITS.MAX_BANKS} bancas individuales alcanzado.`);
+        if (!isPro && banks.length >= 5) {
+            setPaywallModal({ isOpen: true, feature: 'Límite de 5 Bancas Individuales Alcanzado' });
+            return;
+        }
         setNewBankData({ name: `Nueva Banca ${banks.length+1}`, initialCapital: 1000, currency: 'EUR', premiumPassword: '' }); setIsAddingBank(true);
     };
 
@@ -979,10 +994,9 @@ export default function App() {
                 <style>{getGlobalStyles(theme)}</style>
                 <LiquidBackground theme={theme} />
                 
-                {/* Cabecera Minimalista para el Iframe */}
                 <header className="flex justify-between items-center px-4 py-3 border-b border-[var(--border)] bg-[var(--bg-card)]/80 backdrop-blur-xl z-20 w-full">
                     <div className="flex items-center gap-3">
-                        <img src="/favicon.jpg" alt="Logo" className="w-7 h-7 rounded-lg shadow-sm" onerror="this.style.display='none'" />
+                        <img src="/favicon.jpg" alt="Logo" className="w-7 h-7 rounded-lg shadow-sm" onError={(e)=>{e.target.style.display='none'}} />
                         <h1 className="font-bold text-base tracking-tight truncate max-w-[150px] sm:max-w-xs">{activeBankData.name}</h1>
                     </div>
                     <div className="flex gap-2 bg-[var(--bg-input)] p-1 rounded-lg border border-[var(--border)]">
@@ -991,9 +1005,7 @@ export default function App() {
                     </div>
                 </header>
 
-                {/* Contenido del Widget */}
                 <main className="flex-1 overflow-y-auto custom-scrollbar p-3 md:p-5 z-10 relative w-full">
-                    {/* Caja FOMO por si tiene contraseña */}
                     {activeBankData?.premiumPassword && !unlockedBank && pendingHiddenCount > 0 && activeTab === 'bets' && (
                         <div className="bg-[var(--bg-card)] border border-[var(--border-strong)] rounded-2xl p-5 text-center shadow-sm mb-5 w-full">
                             <Lock size={24} className="text-[var(--text-muted)] mx-auto mb-2" />
@@ -1001,7 +1013,7 @@ export default function App() {
                             <p className="text-[var(--text-muted)] text-xs mb-4">Introduce la clave para ver las jugadas en curso.</p>
                             <div className="flex gap-2 max-w-xs mx-auto w-full">
                                 <input type="password" value={visitorPasswordInput} onChange={e=>setVisitorPasswordInput(e.target.value)} className="flex-1 bg-[var(--bg-input)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm outline-none focus:border-[var(--accent)]" placeholder="Contraseña..." />
-                                <button onClick={() => { if(visitorPasswordInput === activeBankData.premiumPassword) setUnlockedBank(true); else alert('Clave incorrecta'); }} className="bg-[var(--accent)] text-[var(--accent-fg)] px-4 py-2 rounded-lg text-sm font-bold">Ver</button>
+                                <button onClick={() => { if(visitorPasswordInput === activeBankData.premiumPassword) setUnlockedBank(true); else showAlert('Clave incorrecta'); }} className="bg-[var(--accent)] text-[var(--accent-fg)] px-4 py-2 rounded-lg text-sm font-bold">Ver</button>
                             </div>
                         </div>
                     )}
@@ -1066,7 +1078,6 @@ export default function App() {
                     )}
                 </main>
 
-                {/* Footer "Caballo de Troya" */}
                 <a href={window.location.origin} target="_blank" rel="noopener noreferrer" className="block text-center py-2 bg-[var(--bg-card)] border-t border-[var(--border)] text-[10px] font-bold text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors uppercase tracking-widest z-20 w-full">
                     ⚡ Powered by MoneyTracKING
                 </a>
@@ -1164,60 +1175,12 @@ export default function App() {
                         </div>
                     </div>
                 )}
-
-                {/* MODAL FEEDBACK PREMIUM (INCLUSO SI NO HAY BANCAS) */}
-                {feedbackModal.isOpen && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in w-full">
-                        <div className="bg-[var(--bg-card)] backdrop-blur-2xl rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.3)] border border-[var(--border-strong)] p-8 w-full max-w-sm text-center transition-colors">
-                            {feedbackModal.type === 'alert' ? (
-                                <AlertTriangle size={48} className="text-[var(--accent)] mx-auto mb-4 drop-shadow-md" />
-                            ) : (
-                                <AlertTriangle size={48} className="text-[var(--yellow)] mx-auto mb-4 drop-shadow-md" />
-                            )}
-                            <h3 className="text-[var(--text-main)] font-extrabold text-xl mb-2 tracking-tight">
-                                {feedbackModal.type === 'alert' ? 'Aviso' : 'Confirmación'}
-                            </h3>
-                            <p className="text-[var(--text-muted)] text-sm mb-6 whitespace-pre-wrap">{feedbackModal.message}</p>
-                            <div className="flex gap-3 justify-center w-full">
-                                {feedbackModal.type === 'confirm' && (
-                                    <button 
-                                        onClick={closeFeedbackModal} 
-                                        disabled={isProcessing}
-                                        className="flex-1 py-3 bg-[var(--bg-input)] text-[var(--text-main)] border border-[var(--border)] rounded-xl font-bold hover:bg-[var(--bg-hover)] transition-all disabled:opacity-50"
-                                    >
-                                        Cancelar
-                                    </button>
-                                )}
-                                <button 
-                                    onClick={async () => { 
-                                        if (feedbackModal.type === 'confirm' && feedbackModal.onConfirm) { 
-                                            setIsProcessing(true);
-                                            await feedbackModal.onConfirm(); 
-                                            setIsProcessing(false);
-                                        } else {
-                                            closeFeedbackModal(); 
-                                        }
-                                    }} 
-                                    disabled={isProcessing}
-                                    className="flex-1 py-3 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] rounded-xl font-bold shadow-[var(--shadow-glow-md)] transition-all flex justify-center items-center gap-2 disabled:opacity-50"
-                                >
-                                    {isProcessing ? (
-                                        <><div className="w-4 h-4 border-2 border-[var(--bg-input)] border-t-[var(--accent-fg)] rounded-full animate-spin"></div> Procesando...</>
-                                    ) : (
-                                        'Aceptar'
-                                    )}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
             </div></>
         );
     }
 
-    // PORCENTAJES PARA LOS BOTONES RÁPIDOS DE IMPORTE
     const bankCapForButtons = parseFloat(activeBankData?.initialCapital || 1000);
-    const quickStakes = [1, 2, 5, 10]; // Porcentajes de la banca (1%, 2%, 5%, 10%)
+    const quickStakes = [1, 2, 5, 10]; 
 
     return (
         <><style>{getGlobalStyles(theme)}</style>
@@ -1258,7 +1221,18 @@ export default function App() {
                         <div className="pt-6 pb-2 px-4 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Configuración</div>
                         <button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'settings' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><Settings size={18}/> Configuración</button>
                         <button onClick={() => setActiveTab('customization')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'customization' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><Tags size={18}/> Personalización</button>
-                    </nav><div className="p-4 border-t border-[var(--border)] w-full"><div className="flex items-center justify-between mb-2 w-full"><div className="flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center text-xs font-bold text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)] shrink-0">{currentUser.email?.charAt(0).toUpperCase()}</div><div className="text-sm font-medium text-[var(--text-main)] max-w-[100px] truncate">{currentUser.email?.split('@')[0]}</div></div><button onClick={handleLogout} className="text-[var(--text-muted)] hover:text-[var(--red)] bg-[var(--bg-overlay)] p-1.5 rounded-full shrink-0"><LogOut size={16}/></button></div><div className="text-center text-[10px] text-[var(--accent-80)] mt-3 font-medium w-full"><ShieldCheck size={10} className="inline mr-1"/> Sincronizado en la nube</div></div></>
+                    </nav><div className="p-4 border-t border-[var(--border)] w-full"><div className="flex items-center justify-between mb-2 w-full">
+                        <div className="flex items-center gap-2">
+                            {userAvatar ? (
+                                <img src={userAvatar} alt="Avatar" className="w-8 h-8 rounded-full object-cover shadow-[var(--shadow-glow-sm)] shrink-0 border border-[var(--border)]" />
+                            ) : (
+                                <div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center text-xs font-bold text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)] shrink-0">
+                                    {currentUser.email?.charAt(0).toUpperCase()}
+                                </div>
+                            )}
+                            <div className="text-sm font-medium text-[var(--text-main)] max-w-[100px] truncate">{currentUser.email?.split('@')[0]}</div>
+                        </div>
+                        <button onClick={handleLogout} className="text-[var(--text-muted)] hover:text-[var(--red)] bg-[var(--bg-overlay)] p-1.5 rounded-full shrink-0"><LogOut size={16}/></button></div><div className="text-center text-[10px] text-[var(--accent-80)] mt-3 font-medium w-full"><ShieldCheck size={10} className="inline mr-1"/> Sincronizado en la nube</div></div></>
                 )}
             </aside>
 
@@ -1319,11 +1293,11 @@ export default function App() {
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full"><div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 h-60 md:h-[260px] flex flex-col relative shadow-sm transition-colors w-full"><div className="flex justify-between items-center mb-4"><h4 className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider">Evolución del Beneficio</h4><div className="flex bg-[var(--bg-input)] rounded-lg p-1 border border-[var(--border)] backdrop-blur-sm"><button onClick={() => setChartViewMode('detailed')} className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${chartViewMode==='detailed'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><TrendingUp size={14}/></button><button onClick={() => setChartViewMode('weekly')} className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${chartViewMode==='weekly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><LineChart size={14}/></button></div></div><ResponsiveContainer width="100%" height="100%">{chartViewMode === 'detailed' ? (<AreaChart data={stats.detailedChart}><defs><linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={theme === 'dark' ? '#5EE6B1' : '#2563EB'} stopOpacity={0.4}/><stop offset="95%" stopColor={theme === 'dark' ? '#5EE6B1' : '#2563EB'} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} itemStyle={{color: theme === 'dark' ? '#5EE6B1' : '#2563EB', fontWeight:'bold'}} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']} /><Area type="monotone" dataKey="profit" stroke={theme === 'dark' ? '#5EE6B1' : '#2563EB'} strokeWidth={3} fill="url(#colorProfit)"/></AreaChart>) : (<ReLineChart data={stats.weeklyChart}><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} itemStyle={{color: theme === 'dark' ? '#5EE6B1' : '#2563EB', fontWeight:'bold'}} labelFormatter={(l, p) => p[0]?.payload?.fullLabel || l} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']} /><Line type="linear" dataKey="profit" stroke={theme === 'dark' ? '#5EE6B1' : '#2563EB'} strokeWidth={3} dot={{r: 4, fill: theme === 'dark' ? '#5EE6B1' : '#2563EB', strokeWidth: 0}} activeDot={{r: 6, stroke: theme === 'dark' ? '#fff' : '#0F172A', strokeWidth: 2}}/></ReLineChart>)}</ResponsiveContainer></div><div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 h-60 md:h-[260px] flex flex-col relative shadow-sm transition-colors w-full"><div className="flex justify-between items-center mb-4"><h4 className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider">Rendimiento Temporal</h4><div className="flex bg-[var(--bg-input)] rounded-lg p-1 border border-[var(--border)] backdrop-blur-sm"><button onClick={() => setBarChartViewMode('weekly')} className={`px-3 py-1 text-xs rounded-md font-medium flex items-center gap-1 transition-colors ${barChartViewMode==='weekly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><CalendarDays size={12}/> Semana</button><button onClick={() => setBarChartViewMode('monthly')} className={`px-3 py-1 text-xs rounded-md font-medium flex items-center gap-1 transition-colors ${barChartViewMode==='monthly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><Calendar size={12}/> Mes</button></div></div><ResponsiveContainer width="100%" height="100%"><BarChart data={barChartViewMode === 'weekly' ? stats.weeklyBarChart : stats.monthlyBarChart}><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} cursor={{fill: theme === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)'}} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']}/><Bar dataKey="profit" radius={[6,6,0,0]}>{(barChartViewMode === 'weekly' ? stats.weeklyBarChart : stats.monthlyBarChart).map((e,i)=><Cell key={`c-${i}`} fill={e.profit>=0?(theme === 'dark' ? '#5EE6B1' : '#2563EB'):(theme === 'dark' ? '#FF5A5F' : '#EF4444')}/>)}</Bar></BarChart></ResponsiveContainer></div></div></>
                 )}
 
+                {}
                 {activeTab === 'bets' && (
                     <div className="space-y-6 w-full">
                     <div className="flex justify-between items-center"><h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight drop-shadow-sm">{viewMode === 'visiting' ? 'Historial Público' : 'Mis Apuestas'}</h3>{viewMode === 'personal' && activeBankData && !activeBankData.isBalance && (<button onClick={() => { setEditingBetId(null); setShowBetForm(true); setFormErrors({}); setIsCustomBookmaker(false); setAiMessage(''); setNewBet({ date: new Date().toISOString().split('T')[0], time: '00:00', bookmaker: 'Bet365', betMode: 'simple', title: '', selections: [{ id: Date.now(), title: '', selection: '', sport: customOptions.sports?.[0] || 'Fútbol', status: 'pending', category: '', odds: 1.50, isOpen: true }], amount: 0, stake: 0, analysis: '', isBack: true, isHidden: false, tipster: '' }); }} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] px-5 py-2.5 rounded-xl flex items-center gap-2 font-bold text-sm transition-all shadow-[var(--shadow-glow-md)]"><Plus size={18}/> Añadir Apuesta</button>)}</div>
                     
-                    {/* --- CAJA FOMO PARA VISITANTES --- */}
                     {viewMode === 'visiting' && pendingHiddenCount > 0 && !unlockedBank && (
                         <div className="bg-[var(--bg-card)] border border-[var(--border-strong)] rounded-3xl p-6 text-center shadow-sm transition-colors animate-in fade-in w-full">
                             <Lock size={32} className="text-[var(--text-muted)] mx-auto mb-3" />
@@ -1351,8 +1325,19 @@ export default function App() {
                             <div onClick={()=>toggleMonth(g.id)} className="flex items-center justify-between p-5 bg-[var(--bg-hover)] cursor-pointer hover:bg-[var(--bg-overlay)] transition-all border-b border-[var(--border)] w-full"><div className="flex items-center gap-3">{expandedMonths[g.id]?<ChevronUp size={20} className="text-[var(--accent)]"/>:<ChevronDown size={20} className="text-[var(--text-muted)]"/>}<span className="font-bold text-[var(--text-main)] text-base tracking-wide drop-shadow-sm">{g.label}</span></div><div className={`px-4 py-1.5 rounded-lg text-sm font-bold ${g.profit>=0?'bg-[var(--accent-10)] text-[var(--accent)] border border-[var(--accent-20)]':'bg-[var(--red-10)] text-[var(--red)] border border-[var(--red-20)]'}`}>{g.profit>0?'+':''}{formatCurrency(g.profit, activeBankData?.currency)}</div></div>
                             {expandedMonths[g.id]&&(
                                 <div className="overflow-x-auto w-full">
-                                    <table className="w-full text-left text-sm whitespace-nowrap min-w-full">
-                                        <thead className="bg-[var(--bg-base)]/50 text-[var(--text-muted)] text-xs uppercase tracking-widest font-semibold border-b border-[var(--border)]"><tr><th className="px-5 py-4">Fecha</th><th className="px-5 py-4 w-full">Evento</th><th className="px-5 py-4 text-center">Stake</th><th className="px-5 py-4 text-center">Cuota</th><th className="px-5 py-4 text-center">P/L</th><th className="px-5 py-4 text-center">Estado</th>{viewMode === 'personal' && <th className="px-5 py-4 text-center">Acciones</th>}</tr></thead>
+                                    {/* NUEVA TABLA COMPACTA */}
+                                    <table className="w-full text-left text-sm min-w-[700px]">
+                                        <thead className="bg-[var(--bg-base)]/50 text-[var(--text-muted)] text-xs uppercase tracking-widest font-semibold border-b border-[var(--border)]">
+                                            <tr>
+                                                <th className="px-4 py-3">Fecha</th>
+                                                <th className="px-4 py-3 w-1/3">Evento</th>
+                                                <th className="px-2 py-3 text-center">Stake</th>
+                                                <th className="px-2 py-3 text-center">Cuota</th>
+                                                <th className="px-4 py-3 text-center">P/L</th>
+                                                <th className="px-2 py-3 text-center">Estado</th>
+                                                {viewMode === 'personal' && <th className="px-4 py-3 text-center">Acciones</th>}
+                                            </tr>
+                                        </thead>
                                         <tbody className="divide-y divide-[var(--border)]">
                                             {g.bets.map(b=>{
                                                 const amt=b.amount?parseFloat(b.amount):parseFloat(b.stake)*10;
@@ -1361,8 +1346,49 @@ export default function App() {
                                                 const isExp=expandedBetId===b.id;
                                                 return(
                                                     <React.Fragment key={b.id}>
-                                                        <tr className={`hover:bg-[var(--bg-overlay)] cursor-pointer transition-colors ${isExp?'bg-[var(--bg-overlay-hover)]':''}`} onClick={()=>setExpandedBetId(isExp?null:b.id)}><td className="px-5 py-4 text-[var(--text-muted)] text-xs font-medium">{formatDate(b.date)}</td><td className="px-5 py-4 w-full"><div className="font-bold text-[var(--text-main)] truncate max-w-[200px] md:max-w-md flex items-center gap-1.5">{b.isBack === false && <span className="text-[8px] bg-[var(--red-10)] text-[var(--red)] px-1.5 py-0.5 rounded border border-[var(--red-30)]">LAY</span>}{b.title}</div><div className="text-xs text-[var(--text-muted)] truncate max-w-[200px] md:max-w-md mt-0.5">{typeof b.selection==='string'?b.selection:'Múltiple'}</div></td><td className="px-5 py-4 text-center text-[var(--text-muted)] font-medium">{b.stake}%</td><td className={`px-5 py-4 text-center font-bold ${b.isBack === false ? 'text-[var(--red)]' : 'text-[var(--accent)]'}`}>@{b.odds.toFixed(2)}</td><td className={`px-5 py-4 text-center font-bold ${pl>0?'text-[var(--accent)]':pl<0?'text-[var(--red)]':'text-[var(--text-muted)]'}`}>{pl>0?'+':''}{formatCurrency(pl,activeBankData?.currency)}</td><td className="px-5 py-4 text-center"><div onClick={(e)=>{if(viewMode==='personal'){e.stopPropagation();setStatusModalData({id:b.id,currentStatus:b.status});}}} className={viewMode==='personal'?'cursor-pointer':''}><StatusBadge status={b.status}/></div></td>
-                                                        {viewMode === 'personal' && <td className="px-5 py-4 text-center"><div className="flex items-center justify-center gap-2"><button onClick={(e)=>{e.stopPropagation();handleEditClick(b);}} className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-2 rounded-lg bg-[var(--bg-overlay)] hover:bg-[var(--bg-overlay-hover)] transition-colors border border-transparent hover:border-[var(--border-strong)]"><Edit2 size={14}/></button><button onClick={(e)=>{e.stopPropagation();handleDeleteBet(b.id);}} className="text-[var(--text-muted)] hover:text-[var(--red)] p-2 rounded-lg bg-[var(--bg-overlay)] hover:bg-[var(--red-10)] transition-colors border border-transparent hover:border-[var(--red-20)]"><Trash2 size={14}/></button></div></td>}
+                                                        <tr className={`hover:bg-[var(--bg-overlay)] cursor-pointer transition-colors ${isExp?'bg-[var(--bg-overlay-hover)]':''}`} onClick={()=>setExpandedBetId(isExp?null:b.id)}>
+                                                            
+                                                            {/* Fecha compacta */}
+                                                            <td className="px-4 py-3 text-[var(--text-muted)] text-xs font-medium">
+                                                                <div className="font-bold text-[var(--text-main)]">{formatDate(b.date)}</div>
+                                                                <div className="text-[10px] mt-0.5">{b.time}</div>
+                                                            </td>
+                                                            
+                                                            {/* Evento y Mercado integrados sin overflow */}
+                                                            <td className="px-4 py-3">
+                                                                <div className="font-bold text-[var(--text-main)] text-sm leading-tight flex items-start gap-1.5 line-clamp-2">
+                                                                    {b.isBack === false && <span className="text-[8px] bg-[var(--red-10)] text-[var(--red)] px-1.5 py-0.5 rounded border border-[var(--red-30)] shrink-0 mt-0.5">LAY</span>}
+                                                                    <span>{b.title}</span>
+                                                                </div>
+                                                                <div className="text-xs text-[var(--text-muted)] mt-1 line-clamp-1">
+                                                                    {typeof b.selection==='string'?b.selection:'Múltiple'}
+                                                                </div>
+                                                            </td>
+                                                            
+                                                            <td className="px-2 py-3 text-center text-[var(--text-muted)] font-medium">{b.stake}%</td>
+                                                            <td className={`px-2 py-3 text-center font-bold ${b.isBack === false ? 'text-[var(--red)]' : 'text-[var(--accent)]'}`}>@{b.odds.toFixed(2)}</td>
+                                                            <td className={`px-4 py-3 text-center font-bold ${pl>0?'text-[var(--accent)]':pl<0?'text-[var(--red)]':'text-[var(--text-muted)]'}`}>{pl>0?'+':''}{formatCurrency(pl,activeBankData?.currency)}</td>
+                                                            
+                                                            {/* Estado Iconográfico */}
+                                                            <td className="px-2 py-3 text-center">
+                                                                <div onClick={(e)=>{if(viewMode==='personal'){e.stopPropagation();setStatusModalData({id:b.id,currentStatus:b.status});}}} className={viewMode==='personal'?'cursor-pointer hover:opacity-80 transition-opacity':''}>
+                                                                    <RenderCompactStatus status={b.status}/>
+                                                                </div>
+                                                            </td>
+                                                            
+                                                            {/* Acciones de Iconos minimalistas */}
+                                                            {viewMode === 'personal' && (
+                                                                <td className="px-4 py-3 text-center">
+                                                                    <div className="flex items-center justify-center gap-3">
+                                                                        <button onClick={(e)=>{e.stopPropagation();handleEditClick(b);}} className="text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors" title="Editar">
+                                                                            <Edit2 size={16}/>
+                                                                        </button>
+                                                                        <button onClick={(e)=>{e.stopPropagation();handleDeleteBet(b.id);}} className="text-[var(--text-muted)] hover:text-[var(--red)] transition-colors" title="Eliminar">
+                                                                            <Trash2 size={16}/>
+                                                                        </button>
+                                                                    </div>
+                                                                </td>
+                                                            )}
                                                         </tr>
                                                         {isExp&&(<tr className="bg-[var(--bg-input)]/50 w-full"><td colSpan={viewMode==='personal'?7:6} className="p-5 border-b border-[var(--border)] w-full"><div className="space-y-4 w-full"><div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs w-full"><div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm w-full"><span className="block text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1 font-bold">Casa</span><span className="text-[var(--text-main)] font-bold">{b.bookmaker}</span></div><div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm w-full"><span className="block text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1 font-bold">Hora</span><span className="text-[var(--text-main)] font-bold">{b.time}</span></div>{b.commission&&<div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm w-full"><span className="block text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1 font-bold">Comisión</span><span className="text-[var(--text-main)] font-bold">{b.commission}%</span></div>}</div>{b.selections&&b.selections.map((s,i)=>(<div className="bg-[var(--bg-card)] p-4 rounded-xl border border-[var(--border)] shadow-sm flex justify-between items-center hover:bg-[var(--bg-hover)] transition-colors w-full" key={i}><div className="flex-1 min-w-0 pr-4"><div className="text-[var(--text-main)] text-sm font-bold tracking-wide truncate">{s.title}</div><div className="text-[var(--accent)] text-xs font-medium mt-1 truncate">{s.selection}</div><div className="text-[10px] text-[var(--text-muted)] mt-1 uppercase tracking-wider truncate">{s.competition} • {s.category}</div></div><div className="text-right shrink-0"><div className="text-[var(--accent)] font-extrabold text-lg">@{parseFloat(s.odds).toFixed(2)}</div><div className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider font-bold mt-1">{s.bookmaker}</div></div></div>))}{b.analysis&&(<div className="bg-[var(--accent-5)] p-4 rounded-xl border border-[var(--accent-20)] w-full"><h4 className="text-[var(--accent)] font-bold mb-2 flex items-center gap-2 text-xs uppercase tracking-wider"><FileText size={14}/> Análisis</h4><p className="text-[var(--text-muted)] text-sm leading-relaxed whitespace-pre-wrap">{b.analysis}</p></div>)}</div></td></tr>)}
                                                     </React.Fragment>
@@ -1378,6 +1404,7 @@ export default function App() {
                     </div>
                 )}
 
+                {}
                 {activeTab === 'balances' && viewMode === 'personal' && (
                     <div className="w-full space-y-6 pb-20 md:pb-0">
                         <div className="flex justify-between items-center mb-2">
@@ -1481,8 +1508,54 @@ export default function App() {
                     </div>
                 )}
 
+                {}
                 {activeTab === 'customization' && viewMode === 'personal' && (
                     <div className="w-full space-y-6 pb-20 md:pb-0">
+                        
+                        {/* SECCIÓN AVATAR */}
+                        <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-6 lg:p-8 shadow-sm transition-colors">
+                            <div className="mb-8">
+                                <h3 className="text-2xl font-bold text-[var(--text-main)] flex items-center gap-2 tracking-tight">
+                                    <User size={24} className="text-[var(--accent)]" /> Mi Perfil
+                                </h3>
+                                <p className="text-[var(--text-muted)] text-sm mt-2">Personaliza tu avatar público. Tus seguidores lo verán cuando compartas tu banca.</p>
+                            </div>
+                            
+                            <div className="space-y-6">
+                                <div className="grid grid-cols-3 sm:grid-cols-6 gap-4 mb-6">
+                                    {predefinedAvatars.map((avatar, index) => (
+                                        <div key={index} className="relative aspect-square">
+                                            <img
+                                                src={avatar}
+                                                alt={`Avatar ${index + 1}`}
+                                                // Si el usuario no ha subido "avatar1.png", etc., dibuja un círculo por defecto para no romper el diseño
+                                                onError={(e) => { 
+                                                    e.target.onerror = null; 
+                                                    e.target.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="%231E293B"/><text x="50" y="55" font-family="Arial" font-weight="bold" font-size="30" fill="%2394A3B8" text-anchor="middle" dominant-baseline="middle">A${index+1}</text></svg>` 
+                                                }}
+                                                className={`w-full h-full rounded-full cursor-pointer border-4 transition-all object-cover ${
+                                                    userAvatar === avatar ? 'border-[var(--accent)] scale-110 shadow-[var(--shadow-glow-md)]' : 'border-transparent hover:border-[var(--border-strong)]'
+                                                }`}
+                                                onClick={() => handleAvatarChange(avatar)}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="flex flex-col sm:flex-row items-center gap-4">
+                                    <label className="cursor-pointer bg-[var(--bg-overlay)] hover:bg-[var(--bg-overlay-hover)] text-[var(--text-main)] font-bold py-3 px-6 rounded-xl flex items-center justify-center gap-2 transition-colors border border-[var(--border)] w-full sm:w-auto">
+                                        <Upload size={18} className="text-[var(--accent)]"/> Subir mi propia foto
+                                        <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+                                    </label>
+                                    {userAvatar && !predefinedAvatars.includes(userAvatar) && (
+                                        <div className="text-xs text-[var(--accent)] font-bold flex items-center gap-1 bg-[var(--accent-10)] px-3 py-1.5 rounded-lg border border-[var(--accent-20)]">
+                                            <CheckCircle2 size={14}/> Foto personalizada activa
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* SECCIÓN ETIQUETAS */}
                         <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-6 lg:p-8 shadow-sm transition-colors">
                             <div className="mb-8"><h3 className="text-2xl font-bold text-[var(--text-main)] flex items-center gap-2 tracking-tight"><Tags size={24} className="text-[var(--accent)]" /> Etiquetas Personalizadas</h3><p className="text-[var(--text-muted)] text-sm mt-2">Añade deportes de nicho o categorías para medir tu rentabilidad al milímetro.</p></div>
                             <div className="space-y-8 lg:grid lg:grid-cols-2 lg:gap-8 lg:space-y-0">
@@ -1503,13 +1576,13 @@ export default function App() {
             </div>
             </main>
 
+            {}
             {showBetForm && (
             <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 md:p-6 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in w-full">
                 <div className="bg-[var(--bg-base-95)] backdrop-blur-3xl w-full max-w-lg rounded-3xl shadow-[var(--shadow-glow-lg)] border border-[var(--accent-30)] overflow-hidden flex flex-col max-h-[95vh] transition-colors">
                     <div className="px-6 py-5 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-card)]"><h3 className="font-extrabold text-[var(--text-main)] text-xl tracking-tight">{editingBetId ? 'Editar Apuesta' : 'Nueva Operación'}</h3><button onClick={() => setShowBetForm(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-overlay)] p-2 rounded-full transition-colors"><X size={20}/></button></div>
                     <div className="p-6 overflow-y-auto space-y-5 custom-scrollbar bg-transparent w-full">
                         
-                        {/* --- BOTÓN DE IA PREMIUM --- */}
                         <div className="bg-[var(--bg-card)] border border-[var(--border)] p-5 rounded-2xl text-center relative overflow-hidden shadow-inner w-full">
                             <div className="absolute top-0 right-0 p-2 opacity-[0.03] dark:opacity-5 pointer-events-none"><Crown size={60}/></div>
                             <p className="text-xs text-[var(--accent)] mb-3 font-bold uppercase tracking-widest flex items-center justify-center gap-2">
@@ -1520,7 +1593,6 @@ export default function App() {
                                 <input type="file" accept="image/*" onChange={escanearBoleto} className="hidden" disabled={isScanning} />
                             </label>
                             
-                            {/* Burbuja de respuesta de la IA */}
                             {aiMessage && (
                                 <div className="mt-4 p-4 bg-[var(--accent-10)] border border-[var(--accent-30)] rounded-2xl flex items-start gap-3 text-left animate-in fade-in slide-in-from-bottom-2">
                                     <div className="bg-[var(--accent)] text-[var(--accent-fg)] p-1.5 rounded-full mt-0.5 shadow-sm shrink-0"><Crown size={14}/></div>
@@ -1528,7 +1600,6 @@ export default function App() {
                                 </div>
                             )}
                         </div>
-                        {/* ------------------------ */}
 
                         <div className="grid grid-cols-2 gap-4 w-full"><div className="bg-[var(--bg-card)] border border-transparent rounded-xl p-2.5 flex items-center justify-between shadow-inner w-full"><input type="date" className="bg-transparent text-[var(--text-main)] text-sm outline-none w-full font-medium" value={newBet.date} onChange={e => setNewBet({...newBet, date: e.target.value})} /> <Calendar size={16} className="text-[var(--text-muted)] shrink-0" /></div><div className="bg-[var(--bg-card)] border border-transparent rounded-xl p-2.5 flex items-center justify-between shadow-inner w-full"><input type="time" className="bg-transparent text-[var(--text-main)] text-sm outline-none w-full font-medium" value={newBet.time} onChange={e => setNewBet({...newBet, time: e.target.value})} /> <Clock size={16} className="text-[var(--text-muted)] shrink-0" /></div></div>
                         <div className="space-y-1.5 w-full"><label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Bookie</label>{isCustomBookmaker ? (<div className="flex gap-2"><input type="text" placeholder="Escribe el nombre..." className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" autoFocus value={newBet.bookmaker} onChange={(e) => setNewBet(prev => ({ ...prev, bookmaker: e.target.value }))} /><button onClick={() => { setIsCustomBookmaker(false); setNewBet(prev => ({ ...prev, bookmaker: 'Bet365' })); }} className="text-xs font-bold text-[var(--red)] hover:opacity-80 bg-[var(--red-10)] px-3 rounded-xl shrink-0">Cancelar</button></div>) : (<select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner appearance-none" value={newBet.bookmaker} onChange={handleBookieChange}>{COMMON_BOOKMAKERS.map(b => <option key={b}>{b}</option>)}<option value="Otra">Otra...</option></select>)}</div>
@@ -1568,7 +1639,6 @@ export default function App() {
                         {newBet.selections.length > 1 && (<div className="space-y-1.5 pt-2 w-full"><label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Nombre de la Combi</label><input type="text" placeholder="Ej: Combi Locura Fin de Semana" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] text-sm font-bold outline-none focus:border-[var(--accent-50)] shadow-inner" value={newBet.title} onChange={e => setNewBet(prev => ({ ...prev, title: e.target.value }))} /></div>)}
                         
                         <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-5 space-y-5 shadow-inner transition-colors w-full">
-                            {/* --- TOGGLE BACK/LAY --- */}
                             <div className="flex bg-[var(--bg-base)] p-1 rounded-xl border border-[var(--border)] w-full">
                                 <button onClick={() => setNewBet({...newBet, isBack: true})} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${newBet.isBack !== false ? 'bg-[var(--accent)] text-[var(--accent-fg)] shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>A Favor (Back)</button>
                                 <button onClick={() => setNewBet({...newBet, isBack: false})} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${newBet.isBack === false ? 'bg-[var(--red)] text-white shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>En Contra (Lay)</button>
@@ -1624,14 +1694,13 @@ export default function App() {
                             )}
                         </div>
                         
-                        <div className="space-y-1.5 border-t border-[var(--border)] pt-4 w-full"><label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1 flex justify-between"><span>Notas</span><span className={`${newBet.analysis?.length > 1100 ? 'text-[var(--red)]' : 'text-[var(--text-muted)]'}`}>{newBet.analysis?.length || 0}/1200</span></label><textarea className="w-full bg-[var(--bg-card)] border border-transparent rounded-2xl p-4 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] min-h-[100px] resize-none shadow-inner" placeholder="Escribe tu razonamiento aquí..." maxLength={1200} value={newBet.analysis} onChange={e => setNewBet({...newBet, analysis: e.target.value})} /></div>
+                        <div className="space-y-1.5 border-t border-[var(--border)] pt-4 w-full"><label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1 flex justify-between"><span>Notas / Análisis</span><span className={`${newBet.analysis?.length > 1100 ? 'text-[var(--red)]' : 'text-[var(--text-muted)]'}`}>{newBet.analysis?.length || 0}/1200</span></label><textarea className="w-full bg-[var(--bg-card)] border border-transparent rounded-2xl p-4 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] min-h-[100px] resize-none shadow-inner" placeholder="Escribe tu razonamiento aquí..." maxLength={1200} value={newBet.analysis} onChange={e => setNewBet({...newBet, analysis: e.target.value})} /></div>
                     </div>
                     <div className="p-6 border-t border-[var(--border)] bg-[var(--bg-card)] w-full"><button onClick={handleSaveBet} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-extrabold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-[var(--shadow-glow-md)] hover:shadow-[var(--shadow-glow-lg)] text-lg tracking-wide"><CheckCircle2 size={22} /> {editingBetId ? 'Actualizar Operación' : 'Registrar Operación'}</button></div>
                 </div>
             </div>
             )}
 
-            {/* MODAL DE COMPARTIR Y DISTRIBUCIÓN (WIDGETS) */}
             {shareModal.isOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in w-full">
                     <div className="bg-[var(--bg-card)] backdrop-blur-2xl rounded-3xl shadow-2xl border border-[var(--accent-30)] p-6 md:p-8 w-full max-w-lg transition-colors overflow-hidden relative">
@@ -1647,7 +1716,6 @@ export default function App() {
                         </div>
 
                         <div className="space-y-6 relative z-10 w-full">
-                            {/* Opción 1: Link Directo */}
                             <div className="bg-[var(--bg-base)] p-4 rounded-2xl border border-[var(--border)] shadow-inner w-full">
                                 <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-main)] mb-2 flex items-center gap-2"><LinkIcon size={14} className="text-[var(--accent)]"/> Link Público (Sólo lectura)</h4>
                                 <p className="text-[10px] text-[var(--text-muted)] mb-3 leading-relaxed">Envía este enlace por Telegram o WhatsApp. Cualquiera podrá ver tu banca sin necesidad de registrarse.</p>
@@ -1657,7 +1725,6 @@ export default function App() {
                                 </div>
                             </div>
 
-                            {/* Opción 2: Widget Embebido */}
                             <div className="bg-[var(--bg-base)] p-4 rounded-2xl border border-[var(--border)] shadow-inner relative overflow-hidden w-full">
                                 <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-main)] mb-2 flex items-center gap-2"><Layers size={14} className="text-[var(--accent)]"/> Insertar Widget en tu Web</h4>
                                 <p className="text-[10px] text-[var(--text-muted)] mb-3 leading-relaxed">Copia este código HTML y pégalo en tu web (WordPress, Shopify, etc.). Se mostrará un Widget premium adaptado y sin menús laterales.</p>
@@ -1671,7 +1738,6 @@ export default function App() {
                 </div>
             )}
 
-            {/* MODAL DE CONFIRMACIÓN / AVISO */}
             {feedbackModal.isOpen && (
                 <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in w-full">
                     <div className="bg-[var(--bg-card)] backdrop-blur-2xl rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.3)] border border-[var(--border-strong)] p-8 w-full max-w-sm text-center transition-colors">
@@ -1757,6 +1823,23 @@ export default function App() {
                 </div>
             )}
 
+            {isAddingBank && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in w-full">
+                    <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl w-full max-w-sm rounded-3xl shadow-[var(--shadow-glow-lg)] border border-[var(--accent-20)] overflow-hidden flex flex-col transition-colors">
+                        <div className="px-5 py-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-card)] w-full">
+                            <h3 className="font-bold text-[var(--text-main)] text-lg">Nueva Banca</h3>
+                            <button onClick={() => setIsAddingBank(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-overlay)] p-1.5 rounded-full"><X size={18}/></button>
+                        </div>
+                        <div className="p-6 space-y-5 w-full">
+                            <div className="space-y-1.5 w-full"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Nombre</label><input type="text" placeholder="Ej: Bet365 Principal" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors w-full" value={newBankData.name} onChange={e => setNewBankData({...newBankData, name: e.target.value})} autoFocus /></div>
+                            <div className="space-y-1.5 w-full"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Capital Inicial</label><input type="number" placeholder="1000" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors w-full" value={newBankData.initialCapital} onChange={e => setNewBankData({...newBankData, initialCapital: e.target.value})} /></div>
+                            <div className="space-y-1.5 w-full"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Divisa</label><select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors appearance-none w-full" value={newBankData.currency} onChange={e => setNewBankData({...newBankData, currency: e.target.value})}><option value="EUR">EUR (€)</option><option value="USD">USD ($)</option><option value="GBP">GBP (£)</option><option value="MXN">MXN ($)</option></select></div>
+                            <button onClick={confirmAddBank} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-bold py-3.5 rounded-xl transition-all shadow-[var(--shadow-glow-md)] mt-4">Crear Banca</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {statusModalData && (
                 <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in w-full">
                     <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.2)] border border-[var(--accent-20)] p-6 md:p-8 w-full max-w-sm transition-colors">
@@ -1773,7 +1856,40 @@ export default function App() {
                             <button onClick={() => handleQuickStatusChange('void')} className="p-3 bg-[var(--bg-overlay)] hover:bg-[var(--bg-overlay-hover)] text-[var(--text-muted)] rounded-2xl font-bold border border-[var(--border-strong)] transition-all flex flex-col items-center gap-1 shadow-inner w-full"><AlertCircle size={20}/> <span className="text-[10px] uppercase">Reembolsada</span></button>
                             <button onClick={() => handleQuickStatusChange('pending')} className="p-3 bg-yellow-500/10 hover:bg-yellow-500/20 text-[var(--yellow)] rounded-2xl font-bold border border-yellow-500/30 transition-all flex flex-col items-center gap-1 shadow-inner w-full"><Clock size={20}/> <span className="text-[10px] uppercase">Pendiente</span></button>
                         </div>
-                        <button onClick={() => setStatusModalData(null)} className="mt-6 w-full py-3 text-[var(--text-muted)] font-bold hover:text-[var(--text-main)] bg-[var(--bg-card)] rounded-xl transition-colors border border-[var(--border)] hover:border-[var(--border-strong)] shadow-sm">Cancelar</button>
+                        <div className="mt-2 mb-4 w-full">
+                            <button onClick={() => handleQuickStatusChange('cancelled')} className="w-full p-2 bg-[var(--bg-overlay)] hover:bg-[var(--bg-overlay-hover)] text-[var(--text-muted)] rounded-xl font-bold border border-[var(--border)] transition-all text-xs flex justify-center items-center gap-2"><X size={14}/> Cancelada (Omitir)</button>
+                        </div>
+                        <button onClick={() => setStatusModalData(null)} className="mt-2 w-full py-3 text-[var(--text-muted)] font-bold hover:text-[var(--text-main)] bg-[var(--bg-card)] rounded-xl transition-colors border border-[var(--border)] hover:border-[var(--border-strong)] shadow-sm">Cerrar</button>
+                    </div>
+                </div>
+            )}
+
+            {/* PAYWALL PREMIUM MODAL */}
+            {paywallModal.isOpen && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in w-full">
+                    <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl rounded-3xl shadow-[0_0_80px_rgba(94,230,177,0.2)] border border-[var(--accent-50)] p-8 w-full max-w-md text-center transition-colors relative overflow-hidden">
+                        <div className="absolute -top-20 -right-20 w-40 h-40 bg-[var(--accent)] blur-[80px] opacity-30 pointer-events-none"></div>
+                        <button onClick={() => setPaywallModal({ isOpen: false, feature: '' })} className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"><X size={20}/></button>
+                        
+                        <Crown size={56} className="text-[var(--accent)] mx-auto mb-6 drop-shadow-md" />
+                        
+                        <h3 className="text-[var(--text-main)] font-extrabold text-2xl mb-2 tracking-tight">
+                            Pásate a <span className="text-transparent bg-clip-text bg-gradient-to-r from-[var(--accent)] to-blue-500">PRO</span>
+                        </h3>
+                        <p className="text-[var(--text-muted)] text-sm mb-6 whitespace-pre-wrap leading-relaxed">
+                            Has alcanzado el <strong>{paywallModal.feature}</strong> de tu plan gratuito. Sube de nivel tu gestión para desbloquear el máximo potencial.
+                        </p>
+                        
+                        <div className="bg-[var(--bg-overlay)] rounded-2xl p-5 text-left space-y-3 mb-8 border border-[var(--border)] w-full">
+                            <p className="text-xs font-bold text-[var(--text-main)] flex items-center gap-2"><CheckCircle2 size={16} className="text-[var(--accent)]"/> Escáner Inteligente IA Ilimitado</p>
+                            <p className="text-xs font-bold text-[var(--text-main)] flex items-center gap-2"><CheckCircle2 size={16} className="text-[var(--accent)]"/> Bancas y Apuestas Ilimitadas</p>
+                            <p className="text-xs font-bold text-[var(--text-main)] flex items-center gap-2"><CheckCircle2 size={16} className="text-[var(--accent)]"/> Integración de Widgets Públicos</p>
+                        </div>
+
+                        <a href="#" className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] py-4 rounded-xl font-extrabold shadow-[var(--shadow-glow-md)] transition-all flex justify-center items-center gap-2 text-lg tracking-wide hover:scale-105 active:scale-95">
+                            Ser PRO por 4€/mes
+                        </a>
+                        <p className="text-[10px] text-[var(--text-muted)] mt-4">Cancela en cualquier momento.</p>
                     </div>
                 </div>
             )}
