@@ -374,6 +374,7 @@ export default function App() {
                     ...prev,
                     amount: finalAmount,
                     stake: calculatedStake,
+                    // AQUÍ ESTÁ LA CORRECCIÓN: Actualizamos date y time
                     date: datosExtraidos.fecha && datosExtraidos.fecha !== "" ? datosExtraidos.fecha : prev.date,
                     time: datosExtraidos.hora && datosExtraidos.hora !== "" ? datosExtraidos.hora : prev.time,
                     selections: [
