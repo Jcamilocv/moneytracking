@@ -374,6 +374,8 @@ export default function App() {
                     ...prev,
                     amount: finalAmount,
                     stake: calculatedStake,
+                    date: datosExtraidos.fecha && datosExtraidos.fecha !== "" ? datosExtraidos.fecha : prev.date,
+                    time: datosExtraidos.hora && datosExtraidos.hora !== "" ? datosExtraidos.hora : prev.time,
                     selections: [
                         {
                             ...prev.selections[0],
