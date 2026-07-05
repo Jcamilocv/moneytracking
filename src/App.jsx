@@ -18,6 +18,7 @@ import { initializeApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 import { getFirestore, collection, onSnapshot, addDoc, doc, deleteDoc, updateDoc, setDoc, writeBatch } from "firebase/firestore";
 
+// --- CONFIGURACIÓN DE FIREBASE ---
 const firebaseConfig = {
     apiKey: "AIzaSyDdhFhK2leqXczuBU-inLBLi9PfMt7NbkY",
     authDomain: "money-tracking-d908b.firebaseapp.com",
@@ -31,6 +32,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// --- ESTILOS GLOBALES & THEME ---
 const getGlobalStyles = (theme) => {
     const isDark = theme === 'dark';
     return `
@@ -134,6 +136,23 @@ const parseComplexCSV = (text) => {
     return rows;
 };
 
+const fetchWithRetry = async (url, options, retries = 5) => {
+    const delays = [1000, 2000, 4000, 8000, 16000];
+    for (let i = 0; i < retries; i++) {
+        try {
+            const response = await fetch(url, options);
+            if (response.ok) return response;
+        } catch (e) {
+            if (i === retries - 1) throw e;
+        }
+        if (i < retries - 1) {
+            await new Promise(r => setTimeout(r, delays[i]));
+        }
+    }
+    throw new Error("Failed after retries");
+};
+
+// --- HELPER ESTADÍSTICAS BÁSICAS ---
 const getStatsForBets = (betList, initialCap) => {
     let staked=0, returned=0, runningProfit=0;
     betList.forEach(bet => {
@@ -157,17 +176,17 @@ const getStatsForBets = (betList, initialCap) => {
     return { picks: betList.filter(b => b.status !== 'pending').length, profit: runningProfit, yieldPerc, progression };
 };
 
+// --- COMPONENTES UI ---
 const StatCard = ({ title, value, subValue, isCurrency = false, currency = 'EUR', colorClass = "text-[var(--text-main)]" }) => (
-    <div className="p-4 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl hover:bg-[var(--bg-hover)] transition-all flex flex-col justify-between min-h-[85px] shadow-sm">
-        <p className="text-[var(--text-muted)] text-[9px] uppercase tracking-wider font-bold mb-1 truncate" title={title}>{title}</p>
+    <div className="p-3 md:p-3 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl hover:bg-[var(--bg-hover)] transition-all flex flex-col justify-between min-h-[76px] shadow-sm w-full">
+        <p className="text-[var(--text-muted)] text-[9px] uppercase tracking-wider font-bold mb-0.5 truncate" title={title}>{title}</p>
         <div className="flex-1 flex flex-col justify-end">
-            <h3 className={`text-xl font-bold ${colorClass} truncate drop-shadow-sm leading-tight`}>{isCurrency ? formatCurrency(value, currency) : value}</h3>
-            {subValue && <p className="text-[9px] text-[var(--text-muted)] opacity-80 mt-1 truncate">{String(subValue)}</p>}
+            <h3 className={`text-base md:text-xl font-bold ${colorClass} truncate drop-shadow-sm leading-tight`}>{isCurrency ? formatCurrency(value, currency) : value}</h3>
+            {subValue && <p className="text-[9px] text-[var(--text-muted)] opacity-80 mt-0.5 truncate">{String(subValue)}</p>}
         </div>
     </div>
 );
 
-// Fallback legacy badge just in case
 const StatusBadge = ({ status }) => {
     const styles = {
         won: 'bg-[var(--accent-10)] text-[var(--accent)] border-[var(--accent-30)] shadow-[var(--shadow-glow-sm)]', 
@@ -194,12 +213,13 @@ const RenderCompactStatus = ({ status }) => {
     return <span className="text-[var(--text-muted)] font-extrabold text-xs block text-center uppercase">{status}</span>;
 };
 
+// --- APP PRINCIPAL ---
 export default function App() {
     const [initialShare] = useState(() => {
         if (typeof window === 'undefined') return { mode: 'personal', uid: null, bid: null, isEmbed: false };
         const params = new URLSearchParams(window.location.search);
         const sData = params.get('s');
-        const isEmbed = params.get('embed') === 'true'; 
+        const isEmbed = params.get('embed') === 'true'; // Detección de iFrame
         if (sData) {
             try {
                 const decoded = atob(sData);
@@ -243,6 +263,7 @@ export default function App() {
     
     const [feedbackModal, setFeedbackModal] = useState({ isOpen: false, type: 'alert', message: '', onConfirm: null });
     const [shareModal, setShareModal] = useState({ isOpen: false, link: '', iframe: '' }); 
+    
     const [paywallModal, setPaywallModal] = useState({ isOpen: false, feature: '' });
     
     const [isProcessing, setIsProcessing] = useState(false);
@@ -275,6 +296,7 @@ export default function App() {
     const MAX_SCANS_PER_DAY = 10;
     const [scanCount, setScanCount] = useState(0);
 
+    // STATE: Soporte nativo para Back/Lay, Tipster, Cashout, EachWay, Hidden
     const [newBet, setNewBet] = useState({
         date: new Date().toISOString().split('T')[0], time: '00:00', bookmaker: 'Bet365', betMode: 'simple', title: '', 
         selections: [{ id: Date.now(), title: '', selection: '', sport: 'Fútbol', status: 'pending', category: '', odds: 1.50, isOpen: true }],
@@ -303,11 +325,40 @@ export default function App() {
         }
     };
 
-    // AVATARES PREDETERMINADOS (Si los subes a public/avatars/ funcionarán perfecto. Si no, renderizan un fallback)
+    // AVATARES PREDETERMINADOS
     const predefinedAvatars = [
         '/avatars/avatar1.png', '/avatars/avatar2.png', '/avatars/avatar3.png', 
         '/avatars/avatar4.png', '/avatars/avatar5.png', '/avatars/avatar6.png'
     ];
+
+    // INYECCIÓN DE PWA PARA EL ICONO MÓVIL
+    useEffect(() => {
+        if (!document.querySelector('link[rel="apple-touch-icon"]')) {
+            const appleIcon = document.createElement('link');
+            appleIcon.rel = 'apple-touch-icon';
+            appleIcon.href = '/favicon.jpg';
+            document.head.appendChild(appleIcon);
+        }
+        if (!document.querySelector('link[rel="manifest"]')) {
+            const manifest = {
+                name: "MoneyTracKING",
+                short_name: "MoneyTracKING",
+                start_url: ".",
+                display: "standalone",
+                background_color: "#081225",
+                theme_color: "#081225",
+                icons: [
+                    { src: "/favicon.jpg", sizes: "192x192", type: "image/jpeg" },
+                    { src: "/favicon.jpg", sizes: "512x512", type: "image/jpeg" }
+                ]
+            };
+            const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+            const link = document.createElement('link');
+            link.rel = 'manifest';
+            link.href = URL.createObjectURL(blob);
+            document.head.appendChild(link);
+        }
+    }, []);
 
     useEffect(() => { localStorage.setItem('moneytracking_theme', theme); }, [theme]);
 
@@ -327,6 +378,7 @@ export default function App() {
             reader.onloadend = async () => {
                 const base64Data = reader.result.split(',')[1];
                 
+                // --- BACKEND VERCEL ---
                 const response = await fetch('/api/scan', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -546,12 +598,13 @@ export default function App() {
 
         rawBets = rawBets.sort((a, b) => new Date(`${b.date}T${b.time || '00:00'}`) - new Date(`${a.date}T${a.time || '00:00'}`));
 
+        // LÓGICA DE OCULTACIÓN (isHidden + pending)
         rawBets = rawBets.filter(b => {
             if (b.isHidden && b.status === 'pending') {
                 const betDate = new Date(`${b.date}T${b.time || '00:00'}`);
                 const now = new Date();
                 const diffHours = Math.abs(now - betDate) / 36e5;
-                if (diffHours < 48) return false; 
+                if (diffHours < 48) return false; // Se oculta si han pasado menos de 48h
             }
             return true;
         });
@@ -590,7 +643,7 @@ export default function App() {
             }
             groups[key].bets.push(bet); 
             const amt = bet.amount || 0; let pl = 0;
-            const mult = bet.isBack === false ? -1 : 1; 
+            const mult = bet.isBack === false ? -1 : 1; // Back/Lay multiplier
             
             if (bet.status === 'won') pl = ((amt * bet.odds) - amt) * mult;
             else if (bet.status === 'lost') pl = -amt * mult;
@@ -657,6 +710,7 @@ export default function App() {
         };
     }, [activeBetsData, activeBankData]);
 
+    // INYECCIÓN DE FUNCIONES DE UTILIDAD RESTAURADAS (handleLogout, showAlert, etc)
     const handleAuth = async (e) => {
         e.preventDefault();
         setAuthError('');
@@ -687,6 +741,7 @@ export default function App() {
             setFeedbackModal(prev => ({ ...prev, isOpen: false }));
         }
     };
+    // FIN INYECCIÓN UTILIDADES
 
     const openShareModal = () => {
         if(!activeBankData || !activeBankData.id) return showAlert("Selecciona una banca o balance válido.");
@@ -1175,6 +1230,53 @@ export default function App() {
                         </div>
                     </div>
                 )}
+
+                {/* MODAL FEEDBACK PREMIUM (INCLUSO SI NO HAY BANCAS) */}
+                {feedbackModal.isOpen && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in w-full">
+                        <div className="bg-[var(--bg-card)] backdrop-blur-2xl rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.3)] border border-[var(--border-strong)] p-8 w-full max-w-sm text-center transition-colors">
+                            {feedbackModal.type === 'alert' ? (
+                                <AlertTriangle size={48} className="text-[var(--accent)] mx-auto mb-4 drop-shadow-md" />
+                            ) : (
+                                <AlertTriangle size={48} className="text-[var(--yellow)] mx-auto mb-4 drop-shadow-md" />
+                            )}
+                            <h3 className="text-[var(--text-main)] font-extrabold text-xl mb-2 tracking-tight">
+                                {feedbackModal.type === 'alert' ? 'Aviso' : 'Confirmación'}
+                            </h3>
+                            <p className="text-[var(--text-muted)] text-sm mb-6 whitespace-pre-wrap">{feedbackModal.message}</p>
+                            <div className="flex gap-3 justify-center w-full">
+                                {feedbackModal.type === 'confirm' && (
+                                    <button 
+                                        onClick={closeFeedbackModal} 
+                                        disabled={isProcessing}
+                                        className="flex-1 py-3 bg-[var(--bg-input)] text-[var(--text-main)] border border-[var(--border)] rounded-xl font-bold hover:bg-[var(--bg-hover)] transition-all disabled:opacity-50"
+                                    >
+                                        Cancelar
+                                    </button>
+                                )}
+                                <button 
+                                    onClick={async () => { 
+                                        if (feedbackModal.type === 'confirm' && feedbackModal.onConfirm) { 
+                                            setIsProcessing(true);
+                                            await feedbackModal.onConfirm(); 
+                                            setIsProcessing(false);
+                                        } else {
+                                            closeFeedbackModal(); 
+                                        }
+                                    }} 
+                                    disabled={isProcessing}
+                                    className="flex-1 py-3 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] rounded-xl font-bold shadow-[var(--shadow-glow-md)] transition-all flex justify-center items-center gap-2 disabled:opacity-50"
+                                >
+                                    {isProcessing ? (
+                                        <><div className="w-4 h-4 border-2 border-[var(--bg-input)] border-t-[var(--accent-fg)] rounded-full animate-spin"></div> Procesando...</>
+                                    ) : (
+                                        'Aceptar'
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div></>
         );
     }
@@ -1273,7 +1375,7 @@ export default function App() {
                     </div>
                 </header>
 
-                <div className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-6 custom-scrollbar relative z-10 w-full max-w-full">
+                <div className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-6 custom-scrollbar relative z-10 w-full ">
                 {activeTab === 'dashboard' && activeBankData && (
                     <><div className="relative overflow-hidden bg-[var(--bg-card)] rounded-3xl p-6 md:p-8 lg:p-10 border border-[var(--border)] shadow-md transition-colors w-full">
                         <div className="absolute inset-0 bg-gradient-to-br from-[var(--bg-card)] to-[var(--bg-base)]"></div>
@@ -1324,9 +1426,9 @@ export default function App() {
                         <div key={g.id} className="border border-[var(--border)] rounded-2xl overflow-hidden bg-[var(--bg-card)] shadow-sm transition-colors w-full">
                             <div onClick={()=>toggleMonth(g.id)} className="flex items-center justify-between p-5 bg-[var(--bg-hover)] cursor-pointer hover:bg-[var(--bg-overlay)] transition-all border-b border-[var(--border)] w-full"><div className="flex items-center gap-3">{expandedMonths[g.id]?<ChevronUp size={20} className="text-[var(--accent)]"/>:<ChevronDown size={20} className="text-[var(--text-muted)]"/>}<span className="font-bold text-[var(--text-main)] text-base tracking-wide drop-shadow-sm">{g.label}</span></div><div className={`px-4 py-1.5 rounded-lg text-sm font-bold ${g.profit>=0?'bg-[var(--accent-10)] text-[var(--accent)] border border-[var(--accent-20)]':'bg-[var(--red-10)] text-[var(--red)] border border-[var(--red-20)]'}`}>{g.profit>0?'+':''}{formatCurrency(g.profit, activeBankData?.currency)}</div></div>
                             {expandedMonths[g.id]&&(
-                                <div className="overflow-x-auto w-full">
+                                <div className="overflow-x-auto md:overflow-x-visible w-full">
                                     {/* NUEVA TABLA COMPACTA */}
-                                    <table className="w-full text-left text-sm min-w-[700px]">
+                                    <table className="w-full text-left text-sm ">
                                         <thead className="bg-[var(--bg-base)]/50 text-[var(--text-muted)] text-xs uppercase tracking-widest font-semibold border-b border-[var(--border)]">
                                             <tr>
                                                 <th className="px-4 py-3">Fecha</th>
@@ -1404,7 +1506,6 @@ export default function App() {
                     </div>
                 )}
 
-                {}
                 {activeTab === 'balances' && viewMode === 'personal' && (
                     <div className="w-full space-y-6 pb-20 md:pb-0">
                         <div className="flex justify-between items-center mb-2">
@@ -1508,7 +1609,6 @@ export default function App() {
                     </div>
                 )}
 
-                {}
                 {activeTab === 'customization' && viewMode === 'personal' && (
                     <div className="w-full space-y-6 pb-20 md:pb-0">
                         
@@ -1576,7 +1676,7 @@ export default function App() {
             </div>
             </main>
 
-            {}
+            {/* MODALES DE FORMULARIO Y CONFIRMACIÓN (Ocultos por defecto) */}
             {showBetForm && (
             <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 md:p-6 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in w-full">
                 <div className="bg-[var(--bg-base-95)] backdrop-blur-3xl w-full max-w-lg rounded-3xl shadow-[var(--shadow-glow-lg)] border border-[var(--accent-30)] overflow-hidden flex flex-col max-h-[95vh] transition-colors">
