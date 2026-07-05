@@ -1273,7 +1273,7 @@ export default function App() {
                     </div>
                 </header>
 
-                <div className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-6 custom-scrollbar relative z-10 w-full max-w-full">
+                <div className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-6 custom-scrollbar relative z-10 w-full ">
                 {activeTab === 'dashboard' && activeBankData && (
                     <><div className="relative overflow-hidden bg-[var(--bg-card)] rounded-3xl p-6 md:p-8 lg:p-10 border border-[var(--border)] shadow-md transition-colors w-full">
                         <div className="absolute inset-0 bg-gradient-to-br from-[var(--bg-card)] to-[var(--bg-base)]"></div>
@@ -1324,9 +1324,9 @@ export default function App() {
                         <div key={g.id} className="border border-[var(--border)] rounded-2xl overflow-hidden bg-[var(--bg-card)] shadow-sm transition-colors w-full">
                             <div onClick={()=>toggleMonth(g.id)} className="flex items-center justify-between p-5 bg-[var(--bg-hover)] cursor-pointer hover:bg-[var(--bg-overlay)] transition-all border-b border-[var(--border)] w-full"><div className="flex items-center gap-3">{expandedMonths[g.id]?<ChevronUp size={20} className="text-[var(--accent)]"/>:<ChevronDown size={20} className="text-[var(--text-muted)]"/>}<span className="font-bold text-[var(--text-main)] text-base tracking-wide drop-shadow-sm">{g.label}</span></div><div className={`px-4 py-1.5 rounded-lg text-sm font-bold ${g.profit>=0?'bg-[var(--accent-10)] text-[var(--accent)] border border-[var(--accent-20)]':'bg-[var(--red-10)] text-[var(--red)] border border-[var(--red-20)]'}`}>{g.profit>0?'+':''}{formatCurrency(g.profit, activeBankData?.currency)}</div></div>
                             {expandedMonths[g.id]&&(
-                                <div className="overflow-x-auto w-full">
+                                <div className="overflow-x-auto md:overflow-x-visible w-full">
                                     {/* NUEVA TABLA COMPACTA */}
-                                    <table className="w-full text-left text-sm min-w-[700px]">
+                                    <table className="w-full text-left text-sm ">
                                         <thead className="bg-[var(--bg-base)]/50 text-[var(--text-muted)] text-xs uppercase tracking-widest font-semibold border-b border-[var(--border)]">
                                             <tr>
                                                 <th className="px-4 py-3">Fecha</th>
