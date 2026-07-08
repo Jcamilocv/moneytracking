@@ -78,7 +78,7 @@ const getGlobalStyles = (theme) => {
         --shadow-red: ${isDark ? '0 0 10px rgba(255,90,95,0.1)' : '0 0 10px rgba(239,68,68,0.1)'};
         --shadow-yellow: ${isDark ? '0 0 10px rgba(234,179,8,0.1)' : '0 0 10px rgba(217,119,6,0.1)'};
     }
-    body { background-color: var(--bg-base); color: var(--text-main); margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; transition: background-color 0.3s ease, color 0.3s ease; }
+    body { background-color: var(--bg-base); color: var(--text-main); margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; transition: background-color 0.5s ease, color 0.5s ease; }
     
     .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
@@ -216,7 +216,39 @@ export default function App() {
     });
 
     const [isEmbed] = useState(initialShare.isEmbed);
-    const [theme, setTheme] = useState(() => localStorage.getItem('moneytracking_theme') || 'dark');
+
+    // --- LÓGICA TEMA (AUTO DÍA/NOCHE) ---
+    const [theme, setTheme] = useState(() => {
+        const manualTheme = localStorage.getItem('moneytracking_manual_theme');
+        if (manualTheme) return manualTheme;
+        const hour = new Date().getHours();
+        return (hour >= 7 && hour < 19) ? 'light' : 'dark';
+    });
+
+    const handleThemeToggle = () => {
+        setTheme(prev => {
+            const newTheme = prev === 'dark' ? 'light' : 'dark';
+            localStorage.setItem('moneytracking_manual_theme', newTheme);
+            return newTheme;
+        });
+    };
+
+    useEffect(() => {
+        // Tracker automático por hora si el usuario NO ha forzado el color
+        const checkTimeTheme = () => {
+            const manualTheme = localStorage.getItem('moneytracking_manual_theme');
+            if (manualTheme) return; // Se respeta la preferencia manual
+            
+            const hour = new Date().getHours();
+            const expectedTheme = (hour >= 7 && hour < 19) ? 'light' : 'dark';
+            setTheme(prev => prev !== expectedTheme ? expectedTheme : prev);
+        };
+
+        checkTimeTheme(); 
+        const intervalId = setInterval(checkTimeTheme, 60000); // Check cada minuto
+        return () => clearInterval(intervalId);
+    }, []);
+
     const [currentUser, setCurrentUser] = useState(null);
     
     // Estado del Avatar de Usuario
@@ -276,7 +308,7 @@ export default function App() {
     const [isScanning, setIsScanning] = useState(false);
     const [aiMessage, setAiMessage] = useState(''); 
 
-    // --- NUEVO: ESTADOS PARA FILTROS DEL DASHBOARD ---
+    // --- ESTADOS PARA FILTROS DEL DASHBOARD ---
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
     const [dashboardFilters, setDashboardFilters] = useState({
         dateFrom: '',
@@ -360,8 +392,6 @@ export default function App() {
             document.head.appendChild(link);
         }
     }, []);
-
-    useEffect(() => { localStorage.setItem('moneytracking_theme', theme); }, [theme]);
 
     const escanearBoleto = async (event) => {
         const file = event.target.files[0];
@@ -1089,15 +1119,59 @@ export default function App() {
 
                     {activeTab === 'dashboard' && (
                         <div className="space-y-4 w-full">
-                            <div className="bg-[var(--bg-card)] rounded-2xl p-6 border border-[var(--border)] shadow-sm text-center w-full">
-                                <p className="text-[var(--accent)] text-xs font-bold mb-1 uppercase tracking-widest">Beneficio Total</p>
-                                <h2 className="text-4xl font-extrabold text-[var(--text-main)] tracking-tight">{formatCurrency(stats.totalProfit, activeBankData?.currency)}</h2>
+                            {/* Dashboard Premium en Iframe */}
+                            <div className="relative overflow-hidden bg-[var(--bg-card)] rounded-2xl p-6 md:p-8 border border-[var(--border)] shadow-md transition-colors w-full text-center">
+                                <div className="absolute inset-0 bg-gradient-to-r from-[var(--accent-5)] to-transparent"></div>
+                                <p className="text-[var(--accent)] text-xs font-bold mb-1 uppercase tracking-widest relative z-10">Beneficio Total ({activeBankData?.name})</p>
+                                <h2 className="text-4xl md:text-5xl font-extrabold text-[var(--text-main)] tracking-tight drop-shadow-lg relative z-10">{formatCurrency(stats.totalProfit, activeBankData?.currency)}</h2>
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full">
-                                <StatCard title="Picks" value={stats.picks} />
-                                <StatCard title="Ganados" value={stats.won} colorClass="text-[var(--accent)]" />
-                                <StatCard title="Perdidos" value={stats.lost} colorClass="text-[var(--red)]" />
-                                <StatCard title="Yield" value={`${stats.yield.toFixed(2)}%`} colorClass={stats.yield >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} />
+                            
+                            <div className="bg-transparent w-full">
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 w-full">
+                                    <StatCard title="Picks" value={stats.picks} subValue="Total" />
+                                    <StatCard title="Ganados" value={stats.won} colorClass="text-[var(--accent)]" />
+                                    <StatCard title="U. APOSTADAS" value={formatUnits(stats.stakedUnits)} />
+                                    <StatCard title="Beneficio/Día" value={formatCurrency(stats.profitDay, activeBankData?.currency)} colorClass={stats.profitDay >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} />
+                                    <StatCard title="Factor de Beneficio" value={stats.profitFactor.toFixed(2)} />
+                                    <StatCard title="Tasa de Acierto" value={`${stats.winRate.toFixed(2)}%`} />
+                                    <StatCard title="Perdidos" value={stats.lost} colorClass="text-[var(--red)]" />
+                                    <StatCard title="U. GANADAS (NETO)" value={formatUnits(stats.profitUnits)} colorClass={stats.profitUnits >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} />
+                                    <StatCard title="Beneficio/Pick" value={formatCurrency(stats.profitPerPick, activeBankData?.currency)} colorClass={stats.profitPerPick >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} />
+                                    <StatCard title="Yield" value={`${stats.yield.toFixed(2)}%`} colorClass={stats.yield >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 w-full mt-2">
+                                {/* CHART 1 */}
+                                <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4 h-64 flex flex-col relative shadow-sm transition-colors w-full">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <h4 className="text-[10px] text-[var(--text-muted)] uppercase font-bold tracking-wider">Evolución del Beneficio</h4>
+                                        <div className="flex bg-[var(--bg-input)] rounded-lg p-1 border border-[var(--border)]">
+                                            <button onClick={() => setChartViewMode('detailed')} className={`px-2 py-1 text-[10px] rounded font-medium transition-colors ${chartViewMode==='detailed'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><TrendingUp size={12}/></button>
+                                            <button onClick={() => setChartViewMode('weekly')} className={`px-2 py-1 text-[10px] rounded font-medium transition-colors ${chartViewMode==='weekly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><LineChart size={12}/></button>
+                                        </div>
+                                    </div>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        {chartViewMode === 'detailed' ? (
+                                            <AreaChart data={stats.detailedChart}><defs><linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={theme === 'dark' ? '#5EE6B1' : '#2563EB'} stopOpacity={0.4}/><stop offset="95%" stopColor={theme === 'dark' ? '#5EE6B1' : '#2563EB'} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} itemStyle={{color: theme === 'dark' ? '#5EE6B1' : '#2563EB', fontWeight:'bold'}} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']} /><Area type="monotone" dataKey="profit" stroke={theme === 'dark' ? '#5EE6B1' : '#2563EB'} strokeWidth={3} fill="url(#colorProfit)"/></AreaChart>
+                                        ) : (
+                                            <ReLineChart data={stats.weeklyChart}><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} itemStyle={{color: theme === 'dark' ? '#5EE6B1' : '#2563EB', fontWeight:'bold'}} labelFormatter={(l, p) => p[0]?.payload?.fullLabel || l} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']} /><Line type="linear" dataKey="profit" stroke={theme === 'dark' ? '#5EE6B1' : '#2563EB'} strokeWidth={3} dot={{r: 4, fill: theme === 'dark' ? '#5EE6B1' : '#2563EB', strokeWidth: 0}} activeDot={{r: 6, stroke: theme === 'dark' ? '#fff' : '#0F172A', strokeWidth: 2}}/></ReLineChart>
+                                        )}
+                                    </ResponsiveContainer>
+                                </div>
+                                {/* CHART 2 */}
+                                <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl p-4 h-64 flex flex-col relative shadow-sm transition-colors w-full">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <h4 className="text-[10px] text-[var(--text-muted)] uppercase font-bold tracking-wider">Rendimiento Temporal</h4>
+                                        <div className="flex bg-[var(--bg-input)] rounded-lg p-1 border border-[var(--border)]">
+                                            <button onClick={() => setBarChartViewMode('weekly')} className={`px-2 py-1 text-[10px] rounded font-medium flex items-center gap-1 transition-colors ${barChartViewMode==='weekly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><CalendarDays size={10}/> Semana</button>
+                                            <button onClick={() => setBarChartViewMode('monthly')} className={`px-2 py-1 text-[10px] rounded font-medium flex items-center gap-1 transition-colors ${barChartViewMode==='monthly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><Calendar size={10}/> Mes</button>
+                                        </div>
+                                    </div>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={barChartViewMode === 'weekly' ? stats.weeklyBarChart : stats.monthlyBarChart}><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} cursor={{fill: theme === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)'}} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']}/><Bar dataKey="profit" radius={[4,4,0,0]}>{(barChartViewMode === 'weekly' ? stats.weeklyBarChart : stats.monthlyBarChart).map((e,i)=><Cell key={`c-${i}`} fill={e.profit>=0?(theme === 'dark' ? '#5EE6B1' : '#2563EB'):(theme === 'dark' ? '#FF5A5F' : '#EF4444')}/>)}</Bar></BarChart>
+                                    </ResponsiveContainer>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -1365,7 +1439,7 @@ export default function App() {
                         </h2>
                     </div>
                     <div className="flex items-center gap-3">
-                        <button onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} className="p-2 rounded-xl bg-[var(--bg-overlay)] text-[var(--text-main)] hover:bg-[var(--bg-overlay-hover)] border border-[var(--border)] transition-colors shadow-sm shrink-0" title="Alternar Tema">
+                        <button onClick={handleThemeToggle} className="p-2 rounded-xl bg-[var(--bg-overlay)] text-[var(--text-main)] hover:bg-[var(--bg-overlay-hover)] border border-[var(--border)] transition-colors shadow-sm shrink-0" title="Alternar Tema">
                             {theme === 'dark' ? <Sun size={18} className="text-[var(--text-muted)] hover:text-white" /> : <Moon size={18} className="text-[var(--text-muted)] hover:text-[#0F172A]" />}
                         </button>
                         
@@ -1396,16 +1470,18 @@ export default function App() {
                     <>
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
                         <h3 className="text-xl font-bold text-[var(--text-main)] tracking-tight">Rendimiento General</h3>
-                        <button 
-                            onClick={() => setIsFiltersOpen(!isFiltersOpen)}
-                            className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm ${isFiltersOpen ? 'bg-[var(--accent)] text-[var(--accent-fg)] border border-[var(--accent-50)]' : 'bg-[var(--bg-card)] text-[var(--text-main)] hover:bg-[var(--bg-hover)] border border-[var(--border)]'}`}
-                        >
-                            <Filter size={16} /> Filtros Avanzados {isFiltersOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                        </button>
+                        {viewMode === 'personal' && (
+                            <button 
+                                onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+                                className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-sm ${isFiltersOpen ? 'bg-[var(--accent)] text-[var(--accent-fg)] border border-[var(--accent-50)]' : 'bg-[var(--bg-card)] text-[var(--text-main)] hover:bg-[var(--bg-hover)] border border-[var(--border)]'}`}
+                            >
+                                <Filter size={16} /> Filtros Avanzados {isFiltersOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </button>
+                        )}
                     </div>
 
                     {/* PANEL DE FILTROS PLEGABLE */}
-                    {isFiltersOpen && (
+                    {isFiltersOpen && viewMode === 'personal' && (
                         <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 shadow-sm mb-6 animate-in fade-in slide-in-from-top-2 w-full">
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                                 <div className="space-y-1.5">
@@ -1471,7 +1547,7 @@ export default function App() {
                     </div>
                     
                     <div className="bg-transparent w-full"><div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 w-full"><StatCard title="Picks" value={stats.picks} subValue="Total" /><StatCard title="Ganados" value={stats.won} colorClass="text-[var(--accent)]" /><StatCard title="U. APOSTADAS" value={formatUnits(stats.stakedUnits)} /><StatCard title="Beneficio/Día" value={formatCurrency(stats.profitDay, activeBankData?.currency)} colorClass={stats.profitDay >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /><StatCard title="Factor de Beneficio" value={stats.profitFactor.toFixed(2)} /><StatCard title="Tasa de Acierto" value={`${stats.winRate.toFixed(2)}%`} /><StatCard title="Perdidos" value={stats.lost} colorClass="text-[var(--red)]" /><StatCard title="U. GANADAS (NETO)" value={formatUnits(stats.profitUnits)} colorClass={stats.profitUnits >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /><StatCard title="Beneficio/Pick" value={formatCurrency(stats.profitPerPick, activeBankData?.currency)} colorClass={stats.profitPerPick >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /><StatCard title="Yield" value={`${stats.yield.toFixed(2)}%`} colorClass={stats.yield >= 0 ? "text-[var(--accent)]" : "text-[var(--red)]"} /></div></div>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full"><div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 h-60 md:h-[260px] flex flex-col relative shadow-sm transition-colors w-full"><div className="flex justify-between items-center mb-4"><h4 className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider">Evolución del Beneficio</h4><div className="flex bg-[var(--bg-input)] rounded-lg p-1 border border-[var(--border)] backdrop-blur-sm"><button onClick={() => setChartViewMode('detailed')} className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${chartViewMode==='detailed'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><TrendingUp size={14}/></button><button onClick={() => setChartViewMode('weekly')} className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${chartViewMode==='weekly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><LineChart size={14}/></button></div></div><ResponsiveContainer width="100%" height="100%">{chartViewMode === 'detailed' ? (<AreaChart data={stats.detailedChart}><defs><linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={theme === 'dark' ? '#5EE6B1' : '#2563EB'} stopOpacity={0.4}/><stop offset="95%" stopColor={theme === 'dark' ? '#5EE6B1' : '#2563EB'} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} itemStyle={{color: theme === 'dark' ? '#5EE6B1' : '#2563EB', fontWeight:'bold'}} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']} /><Area type="monotone" dataKey="profit" stroke={theme === 'dark' ? '#5EE6B1' : '#2563EB'} strokeWidth={3} fill="url(#colorProfit)"/></AreaChart>) : (<ReLineChart data={stats.weeklyChart}><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} itemStyle={{color: theme === 'dark' ? '#5EE6B1' : '#2563EB', fontWeight:'bold'}} labelFormatter={(l, p) => p[0]?.payload?.fullLabel || l} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']} /><Line type="linear" dataKey="profit" stroke={theme === 'dark' ? '#5EE6B1' : '#2563EB'} strokeWidth={3} dot={{r: 4, fill: theme === 'dark' ? '#5EE6B1' : '#2563EB', strokeWidth: 0}} activeDot={{r: 6, stroke: theme === 'dark' ? '#fff' : '#0F172A', strokeWidth: 2}}/></ReLineChart>)}</ResponsiveContainer></div><div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 h-60 md:h-[260px] flex flex-col relative shadow-sm transition-colors w-full"><div className="flex justify-between items-center mb-4"><h4 className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider">Rendimiento Temporal</h4><div className="flex bg-[var(--bg-input)] rounded-lg p-1 border border-[var(--border)] backdrop-blur-sm"><button onClick={() => setBarChartViewMode('weekly')} className={`px-3 py-1 text-xs rounded-md font-medium flex items-center gap-1 transition-colors ${barChartViewMode==='weekly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><CalendarDays size={12}/> Semana</button><button onClick={() => setBarChartViewMode('monthly')} className={`px-3 py-1 text-xs rounded-md font-medium flex items-center gap-1 transition-colors ${barChartViewMode==='monthly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><Calendar size={12}/> Mes</button></div></div><ResponsiveContainer width="100%" height="100%"><BarChart data={barChartViewMode === 'weekly' ? stats.weeklyBarChart : stats.monthlyBarChart}><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} cursor={{fill: theme === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)'}} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']}/><Bar dataKey="profit" radius={[6,6,0,0]}>{(barChartViewMode === 'weekly' ? stats.weeklyBarChart : stats.monthlyBarChart).map((e,i)=><Cell key={`c-${i}`} fill={e.profit>=0?(theme === 'dark' ? '#5EE6B1' : '#2563EB'):(theme === 'dark' ? '#FF5A5F' : '#EF4444')}/>)}</Bar></BarChart></ResponsiveContainer></div></div></>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full"><div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 h-60 md:h-[260px] flex flex-col relative shadow-sm transition-colors w-full"><div className="flex justify-between items-center mb-4"><h4 className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider">Evolución del Beneficio</h4><div className="flex bg-[var(--bg-input)] rounded-lg p-1 border border-[var(--border)] backdrop-blur-sm"><button onClick={() => setChartViewMode('detailed')} className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${chartViewMode==='detailed'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><TrendingUp size={14}/></button><button onClick={() => setChartViewMode('weekly')} className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${chartViewMode==='weekly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><LineChart size={14}/></button></div></div><ResponsiveContainer width="100%" height="100%">{chartViewMode === 'detailed' ? (<AreaChart data={stats.detailedChart}><defs><linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={theme === 'dark' ? '#5EE6B1' : '#2563EB'} stopOpacity={0.4}/><stop offset="95%" stopColor={theme === 'dark' ? '#5EE6B1' : '#2563EB'} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} itemStyle={{color: theme === 'dark' ? '#5EE6B1' : '#2563EB', fontWeight:'bold'}} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']} /><Area type="monotone" dataKey="profit" stroke={theme === 'dark' ? '#5EE6B1' : '#2563EB'} strokeWidth={3} fill="url(#colorProfit)"/></AreaChart>) : (<ReLineChart data={stats.weeklyChart}><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} itemStyle={{color: theme === 'dark' ? '#5EE6B1' : '#2563EB', fontWeight:'bold'}} labelFormatter={(l, p) => p[0]?.payload?.fullLabel || l} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']} /><Line type="linear" dataKey="profit" stroke={theme === 'dark' ? '#5EE6B1' : '#2563EB'} strokeWidth={3} dot={{r: 4, fill: theme === 'dark' ? '#5EE6B1' : '#2563EB', strokeWidth: 0}} activeDot={{r: 6, stroke: theme === 'dark' ? '#fff' : '#0F172A', strokeWidth: 2}}/></ReLineChart>)}</ResponsiveContainer></div><div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 h-60 md:h-[260px] flex flex-col relative shadow-sm transition-colors w-full"><div className="flex justify-between items-center mb-4"><h4 className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider">Rendimiento Temporal</h4><div className="flex bg-[var(--bg-input)] rounded-lg p-1 border border-[var(--border)] backdrop-blur-sm"><button onClick={() => setBarChartViewMode('weekly')} className={`px-3 py-1 text-xs rounded-md font-medium flex items-center gap-1 transition-colors ${barChartViewMode==='weekly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><CalendarDays size={12}/> Semana</button><button onClick={() => setBarChartViewMode('monthly')} className={`px-3 py-1 text-xs rounded-md font-medium flex items-center gap-1 transition-colors ${barChartViewMode==='monthly'?'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]':'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><Calendar size={12}/> Mes</button></div></div><ResponsiveContainer width="100%" height="100%"><BarChart data={barChartViewMode === 'weekly' ? stats.weeklyBarChart : stats.monthlyBarChart}><CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false}/><XAxis dataKey="name" stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><YAxis stroke={theme === 'dark' ? '#64748b' : '#94a3b8'} tick={{fontSize:10, fill: theme === 'dark' ? '#64748b' : '#94a3b8'}} tickLine={false} axisLine={false}/><Tooltip contentStyle={{backgroundColor: theme === 'dark' ? '#111621' : '#FFFFFF', border:`1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`, borderRadius:'12px', color: theme === 'dark' ? 'white' : '#1E293B'}} cursor={{fill: theme === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)'}} formatter={(val)=>[formatCurrency(val,activeBankData?.currency), 'Beneficio']}/><Bar dataKey="profit" radius={[4,4,0,0]}>{(barChartViewMode === 'weekly' ? stats.weeklyBarChart : stats.monthlyBarChart).map((e,i)=><Cell key={`c-${i}`} fill={e.profit>=0?(theme === 'dark' ? '#5EE6B1' : '#2563EB'):(theme === 'dark' ? '#FF5A5F' : '#EF4444')}/>)}</Bar></BarChart></ResponsiveContainer></div></div></>
                 )}
 
                 {}
