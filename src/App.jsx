@@ -1222,8 +1222,8 @@ export default function App() {
                 </main>
 
                 {/* Footer */}
-                <a href={window.location.origin} target="_blank" rel="noopener noreferrer" className="block text-center py-2 bg-[var(--bg-card)] border-t border-[var(--border)] text-[10px] font-bold text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors uppercase tracking-widest z-20 w-full">
-                    ⚡ Powered by MoneyTracKING
+                <a href={window.location.origin} target="_blank" rel="noopener noreferrer" className="block text-center py-2 bg-[var(--bg-card)] border-t border-[var(--border)] text-[10px] font-bold transition-colors uppercase tracking-widest z-20 w-full hover:opacity-80">
+                    ⚡ Powered by <span className="text-transparent bg-clip-text bg-gradient-to-r from-slate-600 to-slate-400 dark:from-slate-300 dark:to-slate-500">MoneyTrac</span><span className="text-transparent bg-clip-text bg-gradient-to-br from-[#5EE6B1] to-emerald-600">KING</span>
                 </a>
             </div>
         );
@@ -1241,7 +1241,10 @@ export default function App() {
                     <div className="flex justify-center mb-6">
                         <img src="/favicon.jpg" alt="MoneyTrackING Logo" className="w-20 h-20 rounded-full object-cover shadow-inner border border-[var(--border)]" />
                     </div>
-                    <h1 className="text-3xl font-extrabold text-center text-[var(--text-main)] mb-2 tracking-tight">MoneyTrac<span className="text-[var(--yellow)]">KING</span></h1>
+                    <h1 className="text-3xl font-extrabold text-center mb-2 tracking-tight">
+                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-slate-800 to-slate-500 dark:from-slate-100 dark:to-slate-400">MoneyTrac</span>
+                        <span className="text-transparent bg-clip-text bg-gradient-to-br from-[#5EE6B1] to-emerald-600 drop-shadow-sm">KING</span>
+                    </h1>
                     <p className="text-[var(--text-muted)] text-center text-sm mb-8 font-medium">Tu gestor de bankroll nivel Dios</p>
                     <div className="flex bg-[var(--bg-input)] p-1.5 rounded-2xl mb-8 border border-[var(--border)] transition-colors"><button type="button" onClick={() => setIsRegistering(false)} className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all uppercase tracking-wider ${!isRegistering ? 'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-md)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>Entrar</button><button type="button" onClick={() => setIsRegistering(true)} className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all uppercase tracking-wider ${isRegistering ? 'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-md)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>Registrarse</button></div>
                     <form onSubmit={handleAuth} className="space-y-4">
@@ -1293,7 +1296,10 @@ export default function App() {
                 <aside className="hidden md:flex flex-col w-64 bg-[var(--bg-card)]/80 backdrop-blur-2xl border-r border-[var(--border)] transition-colors">
                     <div className="p-6 border-b border-[var(--border)] flex items-center gap-3">
                         <img src="/favicon.jpg" alt="Logo" className="w-8 h-8 rounded-lg object-cover shadow-[var(--shadow-glow-sm)]" />
-                        <h1 className="font-bold text-lg tracking-tight">MoneyTrac<span className="text-[var(--yellow)]">KING</span></h1>
+                        <h1 className="font-bold text-lg tracking-tight">
+                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-slate-800 to-slate-500 dark:from-slate-100 dark:to-slate-400">MoneyTrac</span>
+                            <span className="text-transparent bg-clip-text bg-gradient-to-br from-[#5EE6B1] to-emerald-600 drop-shadow-sm">KING</span>
+                        </h1>
                     </div>
                     <div className="flex-1 p-4 flex flex-col justify-end"><div className="p-4 border-t border-[var(--border)]"><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-[var(--accent)] flex items-center justify-center text-xs font-bold text-[var(--accent-fg)] shadow-[var(--shadow-glow-sm)]">{currentUser.email?.charAt(0).toUpperCase()}</div><div className="text-sm font-medium text-[var(--text-main)] max-w-[100px] truncate">{currentUser.email?.split('@')[0]}</div></div><button onClick={handleLogout} className="text-[var(--text-muted)] hover:text-[var(--red)]"><LogOut size={16}/></button></div></div></div>
                 </aside>
@@ -1397,7 +1403,10 @@ export default function App() {
             <aside className={`hidden md:flex flex-col w-64 bg-[var(--bg-card)]/50 backdrop-blur-2xl border-r border-[var(--border)] transition-colors shrink-0`}>
                 <div className="p-6 border-b border-[var(--border)] flex items-center gap-3">
                     <img src="/favicon.jpg" alt="Logo" className="w-8 h-8 rounded-lg object-cover shadow-[var(--shadow-glow-sm)]" />
-                    <h1 className="font-bold text-lg tracking-tight text-[var(--text-main)]">MoneyTrac<span className="text-[var(--yellow)] drop-shadow-sm">KING</span></h1>
+                    <h1 className="font-bold text-lg tracking-tight">
+                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-slate-800 to-slate-500 dark:from-slate-100 dark:to-slate-400">MoneyTrac</span>
+                        <span className="text-transparent bg-clip-text bg-gradient-to-br from-[#5EE6B1] to-emerald-600 drop-shadow-sm">KING</span>
+                    </h1>
                 </div>
                 {viewMode === 'visiting' ? (
                     <div className="flex-1 flex flex-col p-4 bg-indigo-500/5 w-full">
@@ -1439,7 +1448,7 @@ export default function App() {
                         </h2>
                     </div>
                     <div className="flex items-center gap-3">
-                        <button onClick={handleThemeToggle} className="p-2 rounded-xl bg-[var(--bg-overlay)] text-[var(--text-main)] hover:bg-[var(--bg-overlay-hover)] border border-[var(--border)] transition-colors shadow-sm shrink-0" title="Alternar Tema">
+                        <button onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} className="p-2 rounded-xl bg-[var(--bg-overlay)] text-[var(--text-main)] hover:bg-[var(--bg-overlay-hover)] border border-[var(--border)] transition-colors shadow-sm shrink-0" title="Alternar Tema">
                             {theme === 'dark' ? <Sun size={18} className="text-[var(--text-muted)] hover:text-white" /> : <Moon size={18} className="text-[var(--text-muted)] hover:text-[#0F172A]" />}
                         </button>
                         
