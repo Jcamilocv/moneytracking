@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MoneyTracKING - El control absoluto de tus inversiones</title>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Tailwind Configuration -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            dark: '#0A1128',
+                            darker: '#060a18',
+                            card: '#111A3A',
+                            neon: '#00F59B',
+                            neonHover: '#00d688',
+                        }
+                    },
+                    animation: {
+                        'float': 'float 6s ease-in-out infinite',
+                        'glow': 'glow 3s ease-in-out infinite alternate',
+                        'fade-in-up': 'fadeInUp 0.8s ease-out forwards',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-20px)' },
+                        },
+                        glow: {
+                            '0%': { boxShadow: '0 0 15px rgba(0, 245, 155, 0.2)' },
+                            '100%': { boxShadow: '0 0 40px rgba(0, 245, 155, 0.6)' },
+                        },
+                        fadeInUp: {
+                            '0%': { opacity: '0', transform: 'translateY(30px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom styles para efectos avanzados no nativos de Tailwind */
+        body {
+            background-color: #0A1128;
+            color: #ffffff;
+            overflow-x: hidden;
+        }
+        
+        /* Glassmorphism utility */
+        .glass {
+            background: rgba(17, 26, 58, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* Gradient Text */
+        .text-gradient {
+            background: linear-gradient(135deg, #ffffff 0%, #a0aec0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Hide scrollbar for the fake app UI */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="antialiased selection:bg-brand-neon selection:text-brand-dark relative">
+
+    <!-- Ambient Background Glows -->
+    <div class="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full bg-brand-neon/10 blur-[120px] pointer-events-none z-0"></div>
+    <div class="fixed bottom-[-10%] right-[-10%] w-[600px] h-[600px] rounded-full bg-blue-600/10 blur-[150px] pointer-events-none z-0"></div>
+
+    <!-- Header Navigation -->
+    <nav class="fixed w-full z-50 glass border-b-0 border-white/5 transition-all duration-300">
+        <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+            <!-- Logo -->
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-lg bg-brand-neon shadow-[0_0_15px_rgba(0,245,155,0.4)] flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0A1128" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                </div>
+                <span class="font-bold text-xl tracking-tight text-white"><span class="text-brand-neon">Money</span>Tips</span>
+            </div>
+            
+            <!-- Back to Main Web -->
+            <a href="index.html" class="flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-white transition-colors group">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover:-translate-x-1 transition-transform"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+                Volver a la web
+            </a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="relative z-10 pt-32 pb-20">
+        
+        <!-- Hero Section -->
+        <section class="max-w-7xl mx-auto px-6 pt-12 pb-24 grid lg:grid-cols-2 gap-16 items-center min-h-[85vh]">
+            
+            <!-- Copy & CTA -->
+            <div class="space-y-8 animate-fade-in-up">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-neon/10 border border-brand-neon/20 text-brand-neon text-xs font-semibold tracking-wide uppercase mb-2">
+                    <span class="w-2 h-2 rounded-full bg-brand-neon animate-pulse"></span>
+                    La evolución del bankroll
+                </div>
+                
+                <h1 class="text-5xl lg:text-7xl font-extrabold leading-tight tracking-tighter">
+                    El control absoluto de tus inversiones.<br>
+                    <span class="text-brand-neon drop-shadow-[0_0_15px_rgba(0,245,155,0.3)]">En tu bolsillo.</span>
+                </h1>
+                
+                <p class="text-lg lg:text-xl text-gray-400 leading-relaxed max-w-xl">
+                    <span class="text-white font-semibold">Tu gestor de bankroll nivel Dios.</span> Analiza tu rentabilidad al milímetro y comparte tus resultados como un profesional. Los tipsters tradicionales usan Excels obsoletos; nosotros te damos un ecosistema cloud potenciado por IA para escalar tus ganancias de verdad.
+                </p>
+                
+                <div class="flex flex-col sm:flex-row gap-4 pt-4">
+                    <a href="#premium" class="inline-flex justify-center items-center px-8 py-4 text-brand-dark font-bold text-lg rounded-xl bg-brand-neon hover:bg-brand-neonHover transition-all transform hover:scale-105 shadow-[0_0_30px_rgba(0,245,155,0.4)] hover:shadow-[0_0_50px_rgba(0,245,155,0.6)]">
+                        Acceder Gratis
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="ml-2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Phone Mockup -->
+            <div class="relative flex justify-center lg:justify-end animate-float">
+                <!-- Phone Frame -->
+                <div class="relative w-[320px] h-[650px] bg-brand-darker rounded-[45px] border-[8px] border-[#1e293b] shadow-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+                    <!-- Notch -->
+                    <div class="absolute top-0 inset-x-0 h-6 flex justify-center z-20">
+                        <div class="w-32 h-6 bg-[#1e293b] rounded-b-3xl"></div>
+                    </div>
+                    
+                    <!-- App UI Fake -->
+                    <div class="w-full h-full bg-brand-dark p-5 pt-10 overflow-y-auto no-scrollbar relative">
+                        
+                        <!-- Top Bar UI -->
+                        <div class="flex justify-between items-center mb-6">
+                            <div>
+                                <p class="text-xs text-gray-400">Bankroll Total</p>
+                                <h3 class="text-2xl font-bold text-white">€ 12,450.00</h3>
+                            </div>
+                            <div class="w-10 h-10 rounded-full bg-brand-card flex items-center justify-center border border-white/10">
+                                <span class="text-brand-neon font-bold text-xs">AI</span>
+                            </div>
+                        </div>
+
+                        <!-- Chart Fake -->
+                        <div class="w-full h-32 bg-brand-card rounded-xl border border-white/5 mb-6 relative overflow-hidden flex items-end p-2">
+                            <svg class="w-full h-full opacity-80" viewBox="0 0 200 100" preserveAspectRatio="none">
+                                <path d="M0,80 Q20,60 40,70 T80,40 T120,50 T160,20 T200,30 L200,100 L0,100 Z" fill="url(#gradientNeon)" />
+                                <path d="M0,80 Q20,60 40,70 T80,40 T120,50 T160,20 T200,30" fill="none" stroke="#00F59B" stroke-width="3" />
+                                <defs>
+                                    <linearGradient id="gradientNeon" x1="0%" y1="0%" x2="0%" y2="100%">
+                                        <stop offset="0%" stop-color="#00F59B" stop-opacity="0.3" />
+                                        <stop offset="100%" stop-color="#00F59B" stop-opacity="0" />
+                                    </linearGradient>
+                                </defs>
+                            </svg>
+                        </div>
+
+                        <!-- Scanning Effect (AI) -->
+                        <div class="w-full rounded-xl border border-brand-neon/50 bg-brand-card p-4 relative overflow-hidden mb-6 group cursor-pointer">
+                            <div class="absolute inset-0 bg-brand-neon/10 -translate-y-full group-hover:translate-y-[200%] transition-transform duration-1000 ease-in-out"></div>
+                            <div class="absolute top-0 left-0 w-full h-[2px] bg-brand-neon shadow-[0_0_10px_#00F59B] animate-[float_2s_ease-in-out_infinite]"></div>
+                            
+                            <div class="flex items-center gap-3">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00F59B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect width="10" height="8" x="7" y="8" rx="1"/><path d="M12 12v.01"/></svg>
+                                <div>
+                                    <p class="text-sm font-bold text-brand-neon">Escáner IA Activo</p>
+                                    <p class="text-[10px] text-gray-400">Analizando boleto...</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Fake Bets List -->
+                        <div class="space-y-3">
+                            <h4 class="text-sm font-semibold text-gray-300">Últimos movimientos</h4>
+                            
+                            <!-- Item 1 -->
+                            <div class="bg-brand-card p-3 rounded-lg border border-white/5 flex justify-between items-center">
+                                <div>
+                                    <p class="text-xs font-bold text-white">Real Madrid vs Barça</p>
+                                    <p class="text-[10px] text-gray-400">Cuota 1.95 • Automático</p>
+                                </div>
+                                <span class="text-brand-neon font-bold text-sm">+€95.00</span>
+                            </div>
+                            <!-- Item 2 -->
+                            <div class="bg-brand-card p-3 rounded-lg border border-white/5 flex justify-between items-center">
+                                <div>
+                                    <p class="text-xs font-bold text-white">Nadal Gana Set 1</p>
+                                    <p class="text-[10px] text-gray-400">Cuota 1.50 • IA Scanner</p>
+                                </div>
+                                <span class="text-brand-neon font-bold text-sm">+€50.00</span>
+                            </div>
+                            <!-- Item 3 -->
+                            <div class="bg-brand-card p-3 rounded-lg border border-white/5 flex justify-between items-center opacity-50">
+                                <div>
+                                    <p class="text-xs font-bold text-white">Lakers Hándicap -5.5</p>
+                                    <p class="text-[10px] text-gray-400">Cuota 1.85 • Manual</p>
+                                </div>
+                                <span class="text-red-400 font-bold text-sm">-€100.00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Decorative Blur behind phone -->
+                <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[250px] h-[500px] bg-brand-neon/20 blur-[80px] rounded-full z-[-1]"></div>
+            </div>
+        </section>
+
+        <section class="max-w-7xl mx-auto px-6 py-24 relative">
+            <div class="text-center mb-20 relative z-10">
+                <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-sm font-semibold tracking-wide mb-6">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                    Funcionalidades Core
+                </div>
+                <h2 class="text-4xl md:text-5xl lg:text-6xl font-extrabold mb-6">Un arsenal tecnológico <br/><span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-neon to-blue-400">para profesionales</span></h2>
+                <p class="text-gray-400 max-w-2xl mx-auto text-lg">Diseñado milímetro a milímetro para que dejes de perder tiempo en tareas manuales y te enfoques en lo que importa: tu rentabilidad.</p>
+            </div>
+
+            <!-- Bento Grid Layout -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10">
+                
+                <!-- Card 1: IA Scanner (Col Span 2 on large screens) -->
+                <div class="lg:col-span-2 glass p-8 md:p-10 rounded-[32px] group hover:-translate-y-1 transition-all duration-300 shadow-[0_0_20px_rgba(0,245,155,0.02)] border border-brand-neon/20 hover:border-brand-neon/50 relative overflow-hidden flex flex-col justify-between">
+                    <div class="absolute top-0 right-0 p-4 bg-gradient-to-bl from-brand-neon to-transparent text-brand-dark font-black text-xs uppercase tracking-widest rounded-bl-3xl">IA Premium</div>
+                    <!-- Decoración fondo -->
+                    <div class="absolute -right-20 -top-20 w-64 h-64 bg-brand-neon/10 blur-[60px] rounded-full pointer-events-none transition-transform group-hover:scale-150 duration-700"></div>
+                    
+                    <div class="w-16 h-16 rounded-2xl bg-brand-neon/10 border border-brand-neon/30 flex items-center justify-center mb-8">
+                        <span class="text-3xl">🤖</span>
+                    </div>
+                    <div class="relative z-10">
+                        <h3 class="text-2xl font-bold text-white mb-3 flex items-center gap-2">
+                            Escáner Inteligente de Boletos
+                            <span class="flex h-3 w-3 relative">
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-neon opacity-75"></span>
+                                <span class="relative inline-flex rounded-full h-3 w-3 bg-brand-neon"></span>
+                            </span>
+                        </h3>
+                        <p class="text-gray-400 text-base leading-relaxed mb-4 max-w-xl">
+                            Olvídate de picar datos a mano. Con nuestro escáner impulsado por Visión Artificial, solo tienes que subir una captura de tu boleto. El sistema extraerá automáticamente el <span class="text-white font-medium">evento, cuota, mercado, stake y fecha</span> en segundos.
+                        </p>
+                        <div class="inline-flex px-3 py-1.5 rounded-lg bg-brand-dark/50 border border-white/5 text-sm text-brand-neon font-semibold">
+                            🎁 10 escaneos gratuitos al día en la versión básica.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 2: Dashboard -->
+                <div class="glass p-8 rounded-[32px] group hover:-translate-y-1 transition-all duration-300 border border-white/5 hover:border-blue-400/30 relative overflow-hidden flex flex-col">
+                    <div class="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-6">
+                        <span class="text-2xl">📊</span>
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-3">Dashboard Analítico Pro</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed flex-grow">
+                        Tus números no mienten. Calcula Yield, Win Rate y Factor de Beneficio en tiempo real. Analiza gráficos interactivos y disecciona resultados con <span class="text-white font-medium">filtros avanzados</span> por fecha, cuota o deporte.
+                    </p>
+                </div>
+
+                <!-- Card 3: Multi-Banca -->
+                <div class="glass p-8 rounded-[32px] group hover:-translate-y-1 transition-all duration-300 border border-white/5 hover:border-white/20 relative overflow-hidden">
+                    <div class="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-6 group-hover:bg-white/10 transition-colors">
+                        <span class="text-2xl">💼</span>
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-3">Multi-Banca & Balances</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed mb-4">
+                        Controla tu capital como un fondo de inversión. Crea hasta <span class="text-white font-medium">15 bancas (Premium)</span> o 5 gratuitas, con divisas independientes (EUR, USD...).
+                    </p>
+                    <p class="text-gray-500 text-xs font-medium">
+                        ✦ Agrupa balances para ver tu ecosistema en 1 clic.
+                    </p>
+                </div>
+
+                <!-- Card 4: Tipsters (Col Span 2 on large screens) -->
+                <div class="lg:col-span-2 glass p-8 rounded-[32px] group hover:-translate-y-1 transition-all duration-300 border border-white/5 hover:border-purple-500/30 relative overflow-hidden bg-gradient-to-br from-purple-900/10 to-transparent">
+                    <div class="flex items-center justify-between mb-6">
+                        <div class="w-14 h-14 rounded-2xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center">
+                            <span class="text-2xl">🔗</span>
+                        </div>
+                        <!-- Mini fake UI for Tipsters -->
+                        <div class="flex items-center gap-2 bg-brand-dark py-2 px-4 rounded-full border border-white/5">
+                            <div class="w-2 h-2 rounded-full bg-red-500"></div>
+                            <span class="text-xs text-gray-400">Modo Privacidad Activado</span>
+                        </div>
+                    </div>
+                    <h3 class="text-2xl font-bold text-white mb-3">Herramientas para Tipsters</h3>
+                    <p class="text-gray-400 text-sm md:text-base leading-relaxed mb-4 max-w-2xl">
+                        Perfecto para demostrar transparencia y captar seguidores de pago. Genera un <span class="text-white font-medium">Link Público Dinámico</span> para Telegram, incrusta un Widget Iframe en tu web y usa el Modo Contraseña para ocultar picks pendientes.
+                    </p>
+                </div>
+
+                <!-- Card 5: Registro -->
+                <div class="glass p-8 rounded-[32px] group hover:-translate-y-1 transition-all duration-300 border border-white/5 hover:border-yellow-400/30">
+                    <div class="w-12 h-12 rounded-xl bg-yellow-400/10 border border-yellow-400/20 flex items-center justify-center mb-5">
+                        <span class="text-xl">⚡</span>
+                    </div>
+                    <h3 class="text-lg font-bold text-white mb-2">Registro Ultra-Detallado</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed">
+                        Soporte nativo para combinadas, Freebets, Cashout y <span class="text-white font-medium">Trading Deportivo (Back/Lay)</span>. Usa botones rápidos (1%, 5%, 10%) para gestionar tu riesgo al instante.
+                    </p>
+                </div>
+
+                <!-- Card 6: Personalización -->
+                <div class="glass p-8 rounded-[32px] group hover:-translate-y-1 transition-all duration-300 border border-white/5 hover:border-pink-400/30">
+                    <div class="w-12 h-12 rounded-xl bg-pink-400/10 border border-pink-400/20 flex items-center justify-center mb-5">
+                        <span class="text-xl">🎨</span>
+                    </div>
+                    <h3 class="text-lg font-bold text-white mb-2">Personalización Total</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed">
+                        Interfaz dinámica (Claro/Oscuro). Crea <span class="text-white font-medium">etiquetas a medida</span> para deportes de nicho y configura tu perfil público con tu propio avatar corporativo.
+                    </p>
+                </div>
+
+                <!-- Card 7: Seguridad/Migración -->
+                <div class="glass p-8 rounded-[32px] group hover:-translate-y-1 transition-all duration-300 border border-white/5 hover:border-brand-neon/30">
+                    <div class="w-12 h-12 rounded-xl bg-brand-neon/10 border border-brand-neon/20 flex items-center justify-center mb-5">
+                        <span class="text-xl">☁️</span>
+                    </div>
+                    <h3 class="text-lg font-bold text-white mb-2">Sincronización & Respaldo</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed">
+                        Datos en tiempo real (Cloud). Vienes de otro lado? <span class="text-white font-medium">Importa tu Excel (CSV)</span> en dos clics. Eres dueño de tus datos: expórtalos cuando quieras.
+                    </p>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Final CTA -->
+        <section class="max-w-4xl mx-auto px-6 py-20 text-center">
+            <div class="glass p-12 rounded-3xl border border-brand-neon/20 relative overflow-hidden">
+                <div class="absolute inset-0 bg-gradient-to-b from-brand-neon/5 to-transparent pointer-events-none"></div>
+                <h2 class="text-3xl md:text-4xl font-bold mb-6 text-white">¿Listo para operar como un profesional?</h2>
+                <p class="text-gray-400 mb-8 max-w-xl mx-auto">Deja atrás los métodos anticuados. Optimiza tu tiempo, analiza tus resultados reales y toma el control de tus inversiones hoy mismo.</p>
+                <button class="px-8 py-4 text-brand-dark font-bold text-lg rounded-xl bg-brand-neon hover:bg-brand-neonHover transition-all shadow-[0_0_20px_rgba(0,245,155,0.3)] hover:shadow-[0_0_40px_rgba(0,245,155,0.6)] hover:scale-105">
+                    Crear mi cuenta gratis
+                </button>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer Minimalista -->
+    <footer class="border-t border-white/5 py-8 mt-10 relative z-10">
+        <div class="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-gray-500">
+            <div class="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00F59B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                <span class="font-bold text-gray-400">MoneyTracKING</span>
+            </div>
+            <p>&copy; 2026 Todos los derechos reservados.</p>
+        </div>
+    </footer>
+
+</body>
+</html>
