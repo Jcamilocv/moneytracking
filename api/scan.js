@@ -65,6 +65,7 @@ const firestoreRequest = async (path, token, options = {}) => {
     if (!response.ok) {
         const error = new Error(data.error?.message || 'Error consultando Firestore');
         error.status = response.status;
+        error.code = data.error?.status;
         throw error;
     }
     return data;
@@ -77,17 +78,12 @@ const integerField = (document, fieldName, fallback = 0) => {
 
 const consumeScanQuota = async (token, userId) => {
     const encodedUserId = encodeURIComponent(userId);
+    const usagePath = `/documents/users/${encodedUserId}/preferences/usageLimits`;
 
     for (let attempt = 0; attempt < 3; attempt++) {
-        const transactionData = await firestoreRequest('/documents:beginTransaction', token, {
-            method: 'POST',
-            body: '{}'
-        });
-        const transaction = transactionData.transaction;
-        const transactionQuery = `?transaction=${encodeURIComponent(transaction)}`;
         const [usageDocument, entitlementDocument] = await Promise.all([
-            firestoreRequest(`/documents/users/${encodedUserId}/preferences/usageLimits${transactionQuery}`, token),
-            firestoreRequest(`/documents/users/${encodedUserId}/entitlements/limits${transactionQuery}`, token)
+            firestoreRequest(usagePath, token),
+            firestoreRequest(`/documents/users/${encodedUserId}/entitlements/limits`, token)
         ]);
 
         const configuredLimit = integerField(entitlementDocument, 'maxScansPerDay', DEFAULT_MAX_SCANS_PER_DAY);
@@ -97,37 +93,37 @@ const consumeScanQuota = async (token, userId) => {
         const windowIsActive = windowStartedAt && (Date.now() - new Date(windowStartedAt).getTime()) < SCAN_WINDOW_MS;
 
         if (windowIsActive && currentCount >= maxScans) {
-            await firestoreRequest('/documents:rollback', token, {
-                method: 'POST',
-                body: JSON.stringify({ transaction })
-            });
             const error = new Error(`Has alcanzado el límite de ${maxScans} escaneos en 24 horas.`);
             error.status = 429;
             throw error;
         }
 
         const nextCount = windowIsActive ? currentCount + 1 : 1;
-        const usageName = `projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/users/${userId}/preferences/usageLimits`;
-        const write = {
-            update: {
-                name: usageName,
-                fields: { scanCount: { integerValue: String(nextCount) } }
-            },
-            updateMask: { fieldPaths: ['scanCount'] }
-        };
+        const fields = { scanCount: { integerValue: String(nextCount) } };
+        const query = new URLSearchParams();
+        query.append('updateMask.fieldPaths', 'scanCount');
+
         if (!windowIsActive) {
-            write.update.fields.windowStartedAt = { timestampValue: new Date().toISOString() };
-            write.updateMask.fieldPaths.push('windowStartedAt');
+            fields.windowStartedAt = { timestampValue: new Date().toISOString() };
+            query.append('updateMask.fieldPaths', 'windowStartedAt');
+        }
+
+        if (usageDocument?.updateTime) {
+            query.set('currentDocument.updateTime', usageDocument.updateTime);
+        } else {
+            query.set('currentDocument.exists', 'false');
         }
 
         try {
-            await firestoreRequest('/documents:commit', token, {
-                method: 'POST',
-                body: JSON.stringify({ writes: [write], transaction })
+            await firestoreRequest(`${usagePath}?${query.toString()}`, token, {
+                method: 'PATCH',
+                body: JSON.stringify({ fields })
             });
             return { scanCount: nextCount, maxScans };
         } catch (error) {
-            if (![409, 429].includes(error.status) || attempt === 2) throw error;
+            const isConflict = [409, 412].includes(error.status)
+                || ['ABORTED', 'FAILED_PRECONDITION'].includes(error.code);
+            if (!isConflict || attempt === 2) throw error;
         }
     }
 
