@@ -101,7 +101,17 @@ const LiquidBackground = ({ theme }) => (
     </div>
 );
 
-const LIMITS = { MAX_BANKS: 5, MAX_BETS_PER_BANK: 5000 };
+const DEFAULT_LIMITS = {
+    maxBanks: 5,
+    maxBetsPerBank: 1000,
+    maxScansPerDay: 10
+};
+
+const normalizeAccountLimits = (data = {}) => ({
+    maxBanks: Math.max(DEFAULT_LIMITS.maxBanks, Math.floor(Number(data.maxBanks) || 0)),
+    maxBetsPerBank: Math.max(DEFAULT_LIMITS.maxBetsPerBank, Math.floor(Number(data.maxBetsPerBank) || 0)),
+    maxScansPerDay: Math.max(DEFAULT_LIMITS.maxScansPerDay, Math.floor(Number(data.maxScansPerDay) || 0))
+});
 
 const formatCurrency = (value, currency = 'EUR') => {
     const val = typeof value === 'number' ? value : parseFloat(value) || 0;
@@ -117,7 +127,7 @@ const formatUnits = (value) => {
 const formatDate = (dateString) => {
     if (!dateString) return '-';
     try { const date = new Date(dateString); return new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: '2-digit' }).format(date); } 
-    catch (e) { return '-'; }
+    catch { return '-'; }
 };
 
 const COMMON_BOOKMAKERS = ["Bet365", "William Hill", "Betfair", "Bwin", "888sport", "Betway", "Marathonbet", "Sportium", "Codere", "Kirolbet", "Retabet", "Luckia", "Paf", "LeoVegas", "TonyBet", "Pinnacle", "1xBet", "Winamax", "Coolbet"].sort();
@@ -138,7 +148,7 @@ const parseComplexCSV = (text) => {
 
 // --- HELPER ESTADÍSTICAS BÁSICAS ---
 const getStatsForBets = (betList, initialCap) => {
-    let staked=0, returned=0, runningProfit=0;
+    let staked=0, runningProfit=0;
     betList.forEach(bet => {
         if(bet.status === 'pending') return;
         const amt = bet.amount || 0; 
@@ -148,10 +158,10 @@ const getStatsForBets = (betList, initialCap) => {
         // Multiplicador Back/Lay
         const mult = bet.isBack === false ? -1 : 1; 
 
-        if (bet.status === 'won') { profit = ((amt * bet.odds) - amt) * mult; returned += (amt * bet.odds); } 
+        if (bet.status === 'won') { profit = ((amt * bet.odds) - amt) * mult; }
         else if (bet.status === 'lost') { profit = -amt * mult; }
-        else if (bet.status === 'half-won') { profit = ((amt/2)*(bet.odds-1)) * mult; returned += (amt + profit); }
-        else if (bet.status === 'half-lost') { profit = -(amt/2) * mult; returned += (amt/2); }
+        else if (bet.status === 'half-won') { profit = ((amt/2)*(bet.odds-1)) * mult; }
+        else if (bet.status === 'half-lost') { profit = -(amt/2) * mult; }
         
         runningProfit += profit;
     });
@@ -281,8 +291,6 @@ export default function App() {
     const [feedbackModal, setFeedbackModal] = useState({ isOpen: false, type: 'alert', message: '', onConfirm: null });
     const [shareModal, setShareModal] = useState({ isOpen: false, link: '', iframe: '' }); 
     
-    const [paywallModal, setPaywallModal] = useState({ isOpen: false, feature: '' });
-    
     const [isProcessing, setIsProcessing] = useState(false);
     const [expandedMonths, setExpandedMonths] = useState({});
     const [formErrors, setFormErrors] = useState({}); 
@@ -324,9 +332,9 @@ export default function App() {
         setDashboardFilters({ dateFrom: '', dateTo: '', minOdds: '', maxOdds: '', category: '', sport: '', status: '' });
     };
 
-    // LIMITES DE NEGOCIO FREEMIUM
-    const isPro = false; 
-    const MAX_SCANS_PER_DAY = 10;
+    // Límites base. Las excepciones superiores se leen desde
+    // users/{uid}/entitlements/limits y solo las administra Money Tips.
+    const [accountLimits, setAccountLimits] = useState(DEFAULT_LIMITS);
     const [scanCount, setScanCount] = useState(0);
 
     // STATE: Soporte nativo para Back/Lay, Tipster, Cashout, EachWay, Hidden
@@ -397,8 +405,8 @@ export default function App() {
         const file = event.target.files[0];
         if (!file) return;
 
-        if (!isPro && scanCount >= MAX_SCANS_PER_DAY) {
-            setPaywallModal({ isOpen: true, feature: 'Límite de Escaneos Inteligentes Alcanzado' });
+        if (scanCount >= accountLimits.maxScansPerDay) {
+            showAlert(`Has alcanzado el límite diario de ${accountLimits.maxScansPerDay} escaneos.`);
             return;
         }
 
@@ -407,61 +415,56 @@ export default function App() {
         try {
             const reader = new FileReader();
             reader.onloadend = async () => {
-                const base64Data = reader.result.split(',')[1];
-                
-                const response = await fetch('/api/scan', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ imageBase64: base64Data, mimeType: file.type })
-                });
+                try {
+                    const base64Data = reader.result.split(',')[1];
+                    const idToken = await currentUser.getIdToken();
 
-                const result = await response.json();
-                
-                if (!response.ok) {
-                    throw new Error(result.error || "Fallo en la conexión segura con la IA");
-                }
-
-                const parsedAmount = parseFloat(result.importe);
-                let calculatedStake = newBet.stake;
-                let finalAmount = newBet.amount;
-                
-                if (!isNaN(parsedAmount) && parsedAmount > 0) {
-                    finalAmount = parsedAmount;
-                    const cap = parseFloat(activeBankData?.initialCapital || 1000);
-                    calculatedStake = ((parsedAmount / cap) * 100).toFixed(2);
-                }
-
-                setNewBet(prev => ({
-                    ...prev,
-                    amount: finalAmount,
-                    stake: calculatedStake,
-                    date: result.fecha && result.fecha !== "" ? result.fecha : prev.date,
-                    time: result.hora && result.hora !== "" ? result.hora : prev.time,
-                    selections: [
-                        {
-                            ...prev.selections[0],
-                            title: result.equipo || prev.selections[0].title,
-                            selection: result.mercado || prev.selections[0].selection,
-                            odds: parseFloat(result.cuota) || prev.selections[0].odds
+                    const response = await fetch('/api/scan', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${idToken}`
                         },
-                        ...prev.selections.slice(1)
-                    ]
-                }));
-                
-                // ACTUALIZAR CONTADOR DE ESCANEOS EN FIREBASE
-                if (!isPro) {
-                    const hoy = new Date().toISOString().split('T')[0];
-                    const prefsRef = doc(db, 'users', currentUser.uid, 'preferences', 'usageLimits');
-                    const newCount = scanCount + 1;
-                    await setDoc(prefsRef, { date: hoy, scanCount: newCount }, { merge: true });
-                    setScanCount(newCount);
-                }
+                        body: JSON.stringify({ imageBase64: base64Data, mimeType: file.type })
+                    });
 
-                setIsScanning(false);
-                if (result.mensaje_ia) {
-                    setAiMessage(result.mensaje_ia);
-                } else {
-                    setAiMessage("✅ ¡Boleto analizado con éxito por nuestro Backend!");
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error || "Fallo en la conexión segura con la IA");
+
+                    const parsedAmount = parseFloat(result.importe);
+                    let calculatedStake = newBet.stake;
+                    let finalAmount = newBet.amount;
+                    if (!isNaN(parsedAmount) && parsedAmount > 0) {
+                        finalAmount = parsedAmount;
+                        const cap = parseFloat(activeBankData?.initialCapital || 1000);
+                        calculatedStake = ((parsedAmount / cap) * 100).toFixed(2);
+                    }
+
+                    setNewBet(prev => ({
+                        ...prev,
+                        amount: finalAmount,
+                        stake: calculatedStake,
+                        date: result.fecha && result.fecha !== "" ? result.fecha : prev.date,
+                        time: result.hora && result.hora !== "" ? result.hora : prev.time,
+                        selections: [
+                            {
+                                ...prev.selections[0],
+                                title: result.equipo || prev.selections[0].title,
+                                selection: result.mercado || prev.selections[0].selection,
+                                odds: parseFloat(result.cuota) || prev.selections[0].odds
+                            },
+                            ...prev.selections.slice(1)
+                        ]
+                    }));
+
+                    if (result.usage?.scanCount) setScanCount(result.usage.scanCount);
+
+                    setAiMessage(result.mensaje_ia || "✅ ¡Boleto analizado con éxito por nuestro Backend!");
+                } catch (error) {
+                    console.error("Error escaneando el boleto:", error);
+                    setAiMessage(error.message || "Hubo un error de conexión con nuestros servidores seguros.");
+                } finally {
+                    setIsScanning(false);
                 }
             };
             
@@ -477,6 +480,8 @@ export default function App() {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             setCurrentUser(user);
+            setAccountLimits(DEFAULT_LIMITS);
+            setScanCount(0);
             if (!user && viewMode === 'personal') { setLoading(false); setBanks([]); setBets([]); setBalances([]); }
         });
         return () => unsubscribe();
@@ -546,19 +551,37 @@ export default function App() {
         // LEER LOS LIMITES DIARIOS
         if (viewMode === 'personal' && currentUser) {
             const usageRef = doc(db, 'users', currentUser.uid, 'preferences', 'usageLimits');
-            onSnapshot(usageRef, (docSnap) => {
+            const unsubUsage = onSnapshot(usageRef, (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
-                    const hoy = new Date().toISOString().split('T')[0];
-                    if (data.date === hoy) {
+                    const startedAt = data.windowStartedAt?.toDate?.();
+                    const windowIsActive = startedAt && (Date.now() - startedAt.getTime()) < (24 * 60 * 60 * 1000);
+                    if (windowIsActive) {
                         setScanCount(data.scanCount || 0);
                     } else {
-                        setScanCount(0); // Nuevo dia, reset
+                        setScanCount(0);
                     }
                 } else {
                     setScanCount(0);
                 }
             });
+
+            const limitsRef = doc(db, 'users', currentUser.uid, 'entitlements', 'limits');
+            const unsubLimits = onSnapshot(limitsRef, (docSnap) => {
+                setAccountLimits(docSnap.exists() ? normalizeAccountLimits(docSnap.data()) : DEFAULT_LIMITS);
+            }, (error) => {
+                console.error('Error cargando límites de cuenta:', error);
+                setAccountLimits(DEFAULT_LIMITS);
+            });
+
+            return () => {
+                unsubBanks();
+                unsubBets();
+                unsubPrefs();
+                unsubBalances();
+                unsubUsage();
+                unsubLimits();
+            };
         }
 
         return () => { unsubBanks(); unsubBets(); unsubPrefs(); unsubBalances(); };
@@ -587,7 +610,6 @@ export default function App() {
         if (viewMode === 'visiting') {
             if (!visitingBank) return null;
             if (visitingBank.isBalance) {
-                const includedBanks = banks.length > 0 ? banks.filter(b => visitingBank.bankIds.includes(b.id)) : [];
                 return { ...visitingBank, currency: 'EUR' }; 
             }
             return visitingBank;
@@ -700,8 +722,9 @@ export default function App() {
     }, [activeBetsData]);
 
     useEffect(() => {
-        if (betsByMonth.length > 0 && Object.keys(expandedMonths).length === 0) setExpandedMonths({ [betsByMonth[0].id]: true });
-    }, [betsByMonth.length]);
+        if (betsByMonth.length === 0) return;
+        setExpandedMonths(previous => Object.keys(previous).length === 0 ? { [betsByMonth[0].id]: true } : previous);
+    }, [betsByMonth]);
 
     const toggleMonth = (id) => setExpandedMonths(p => ({ ...p, [id]: !p[id] }));
 
@@ -741,7 +764,6 @@ export default function App() {
 
         let wkAcc = 0;
         const weeklyLineData = weeklyChartData.map(d => { wkAcc += d.profit; return { ...d, profit: wkAcc }; });
-        const profitFactor = Math.abs(runningProfit) > 0 && staked > 0 ? (returned / staked) : 0;
         const days = activeBetsData.length > 0 ? Math.max(1, (new Date() - new Date(activeBetsData[activeBetsData.length-1].date)) / (1000 * 60 * 60 * 24)) : 1;
         
         return {
@@ -805,7 +827,11 @@ export default function App() {
     };
 
     const handleExitVisiting = () => {
-        try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e) {}
+        try {
+            window.history.replaceState({}, document.title, window.location.pathname);
+        } catch (error) {
+            console.warn('No se pudo limpiar la URL compartida:', error);
+        }
         setViewMode('personal'); 
         setVisitingUserId(null); 
         setVisitingBankId(null);
@@ -825,8 +851,8 @@ export default function App() {
         if (!newBet.amount) return showAlert("Introduce un importe válido."); if (!currentBankId) return showAlert("Crea una banca primero.");
         if (activeBankData?.isBalance) return showAlert("No puedes añadir apuestas en una vista de Balance Agrupado. Selecciona una banca individual.");
         
-        if (!isPro && !editingBetId && currentBets.length >= LIMITS.MAX_BETS_PER_BANK) {
-            return showAlert(`Límite de ${LIMITS.MAX_BETS_PER_BANK} apuestas por banca alcanzado.`);
+        if (!editingBetId && currentBets.length >= accountLimits.maxBetsPerBank) {
+            return showAlert(`Límite de ${accountLimits.maxBetsPerBank} apuestas por banca alcanzado.`);
         }
 
         const totalOdds = newBet.selections.reduce((acc, s) => acc * (parseFloat(s.odds)||1), 1);
@@ -870,8 +896,8 @@ export default function App() {
             });
             if (currentBet) newBets.push(currentBet);
             
-            if (!isPro && (currentBets.length + newBets.length) > LIMITS.MAX_BETS_PER_BANK) {
-                return setPaywallModal({ isOpen: true, feature: `Límite de ${LIMITS.MAX_BETS_PER_BANK} Apuestas Superado con esta Importación` });
+            if ((currentBets.length + newBets.length) > accountLimits.maxBetsPerBank) {
+                return showAlert(`La importación superaría el límite de ${accountLimits.maxBetsPerBank} apuestas de esta banca.`);
             }
 
             try {
@@ -1010,8 +1036,8 @@ export default function App() {
     };
     
     const openAddBankModal = () => {
-        if (!isPro && banks.length >= LIMITS.MAX_BANKS) {
-            setPaywallModal({ isOpen: true, feature: `Límite de ${LIMITS.MAX_BANKS} Bancas Individuales Alcanzado` });
+        if (banks.length >= accountLimits.maxBanks) {
+            showAlert(`Has alcanzado el límite de ${accountLimits.maxBanks} bancas.`);
             return;
         }
         setNewBankData({ name: `Nueva Banca ${banks.length+1}`, initialCapital: 1000, currency: 'EUR', premiumPassword: '' }); setIsAddingBank(true);
@@ -1077,8 +1103,8 @@ export default function App() {
         });
     };
 
-    const MobileMenuItem = ({ icon: Icon, label, tabId }) => (
-        <button onClick={() => { setActiveTab(tabId); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === tabId ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><Icon size={18}/> {label}</button>
+    const MobileMenuItem = ({ icon, label, tabId }) => (
+        <button onClick={() => { setActiveTab(tabId); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === tabId ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}>{React.createElement(icon, { size: 18 })} {label}</button>
     );
 
     // =========================================================================
@@ -1768,7 +1794,7 @@ export default function App() {
                 {activeTab === 'settings' && viewMode === 'personal' && (
                     <div className="w-full space-y-6 pb-20 md:pb-0">
                         <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-6 lg:p-8 shadow-sm transition-colors">
-                            <div className="flex justify-between items-center mb-8 border-b border-[var(--border)] pb-5"><div><h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">Gestión de Bancas</h3><p className="text-[var(--text-muted)] text-sm mt-1">Sube de nivel controlando hasta 5 bancas independientes.</p></div>{banks.length < LIMITS.MAX_BANKS && (<button onClick={openAddBankModal} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold transition-all shadow-[var(--shadow-glow-md)]"><Plus size={16} /> Nueva Banca</button>)}</div>
+                            <div className="flex justify-between items-center mb-8 border-b border-[var(--border)] pb-5"><div><h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">Gestión de Bancas</h3><p className="text-[var(--text-muted)] text-sm mt-1">Puedes gestionar hasta {accountLimits.maxBanks} bancas independientes.</p></div>{banks.length < accountLimits.maxBanks && (<button onClick={openAddBankModal} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold transition-all shadow-[var(--shadow-glow-md)]"><Plus size={16} /> Nueva Banca</button>)}</div>
                             
                             <div className="space-y-4 max-w-3xl mx-auto w-full">
                                 {banks.map((bank) => (
@@ -1879,7 +1905,7 @@ export default function App() {
                         <div className="bg-[var(--bg-card)] border border-[var(--border)] p-5 rounded-2xl text-center relative overflow-hidden shadow-inner w-full">
                             <div className="absolute top-0 right-0 p-2 opacity-[0.03] dark:opacity-5 pointer-events-none"><Crown size={60}/></div>
                             <p className="text-xs text-[var(--accent)] mb-3 font-bold uppercase tracking-widest flex items-center justify-center gap-2">
-                                <Crown size={14}/> Análisis IA Premium
+                                <Crown size={14}/> Análisis con IA
                             </p>
                             <label className={`cursor-pointer ${isScanning ? 'bg-[var(--bg-hover)] border-[var(--accent-50)]' : 'bg-[var(--bg-hover)] hover:bg-[var(--bg-overlay-hover)] border-[var(--border)] hover:border-[var(--accent-50)] text-[var(--text-main)]'} border px-6 py-3 rounded-xl font-bold shadow-sm flex items-center justify-center gap-3 mx-auto w-fit transition-all`}>
                                 <Upload size={18}/> {isScanning ? 'Procesando visión artificial...' : 'Subir Captura del Boleto'}
@@ -2020,7 +2046,7 @@ export default function App() {
 
                             <div className="bg-[var(--bg-base)] p-4 rounded-2xl border border-[var(--border)] shadow-inner relative overflow-hidden w-full">
                                 <h4 className="text-xs font-bold uppercase tracking-widest text-[var(--text-main)] mb-2 flex items-center gap-2"><Layers size={14} className="text-[var(--accent)]"/> Insertar Widget en tu Web</h4>
-                                <p className="text-[10px] text-[var(--text-muted)] mb-3 leading-relaxed">Copia este código HTML y pégalo en tu web (WordPress, Shopify, etc.). Se mostrará un Widget premium adaptado y sin menús laterales.</p>
+                                <p className="text-[10px] text-[var(--text-muted)] mb-3 leading-relaxed">Copia este código HTML y pégalo en tu web (WordPress, Shopify, etc.). Se mostrará un widget adaptado y sin menús laterales.</p>
                                 <div className="relative group w-full">
                                     <textarea readOnly value={shareModal.iframe} className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-3 text-[10px] font-mono text-[var(--text-muted)] outline-none resize-none h-20 custom-scrollbar"></textarea>
                                     <button onClick={() => copyToClipboard(shareModal.iframe, "¡Código HTML del Widget copiado!")} className="absolute right-2 bottom-2 bg-[var(--accent)] text-[var(--accent-fg)] px-3 py-1.5 rounded-lg text-xs font-bold hover:opacity-90 transition-opacity shadow-md">Copiar Código</button>
@@ -2153,36 +2179,6 @@ export default function App() {
                             <button onClick={() => handleQuickStatusChange('cancelled')} className="w-full p-2 bg-[var(--bg-overlay)] hover:bg-[var(--bg-overlay-hover)] text-[var(--text-muted)] rounded-xl font-bold border border-[var(--border)] transition-all text-xs flex justify-center items-center gap-2"><X size={14}/> Cancelada (Omitir)</button>
                         </div>
                         <button onClick={() => setStatusModalData(null)} className="mt-2 w-full py-3 text-[var(--text-muted)] font-bold hover:text-[var(--text-main)] bg-[var(--bg-card)] rounded-xl transition-colors border border-[var(--border)] hover:border-[var(--border-strong)] shadow-sm">Cerrar</button>
-                    </div>
-                </div>
-            )}
-
-            {/* PAYWALL PREMIUM MODAL */}
-            {paywallModal.isOpen && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in w-full">
-                    <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl rounded-3xl shadow-[0_0_80px_rgba(94,230,177,0.2)] border border-[var(--accent-50)] p-8 w-full max-w-md text-center transition-colors relative overflow-hidden">
-                        <div className="absolute -top-20 -right-20 w-40 h-40 bg-[var(--accent)] blur-[80px] opacity-30 pointer-events-none"></div>
-                        <button onClick={() => setPaywallModal({ isOpen: false, feature: '' })} className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"><X size={20}/></button>
-                        
-                        <Crown size={56} className="text-[var(--accent)] mx-auto mb-6 drop-shadow-md" />
-                        
-                        <h3 className="text-[var(--text-main)] font-extrabold text-2xl mb-2 tracking-tight">
-                            Pásate a <span className="text-transparent bg-clip-text bg-gradient-to-r from-[var(--accent)] to-blue-500">PRO</span>
-                        </h3>
-                        <p className="text-[var(--text-muted)] text-sm mb-6 whitespace-pre-wrap leading-relaxed">
-                            Has alcanzado el <strong>{paywallModal.feature}</strong> de tu plan gratuito. Sube de nivel tu gestión para desbloquear el máximo potencial.
-                        </p>
-                        
-                        <div className="bg-[var(--bg-overlay)] rounded-2xl p-5 text-left space-y-3 mb-8 border border-[var(--border)] w-full">
-                            <p className="text-xs font-bold text-[var(--text-main)] flex items-center gap-2"><CheckCircle2 size={16} className="text-[var(--accent)]"/> Escáner Inteligente IA Ilimitado</p>
-                            <p className="text-xs font-bold text-[var(--text-main)] flex items-center gap-2"><CheckCircle2 size={16} className="text-[var(--accent)]"/> Bancas y Apuestas Ilimitadas</p>
-                            <p className="text-xs font-bold text-[var(--text-main)] flex items-center gap-2"><CheckCircle2 size={16} className="text-[var(--accent)]"/> Integración de Widgets Públicos</p>
-                        </div>
-
-                        <a href="#" className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] py-4 rounded-xl font-extrabold shadow-[var(--shadow-glow-md)] transition-all flex justify-center items-center gap-2 text-lg tracking-wide hover:scale-105 active:scale-95">
-                            Ser PRO por 4€/mes
-                        </a>
-                        <p className="text-[10px] text-[var(--text-muted)] mt-4">Cancela en cualquier momento.</p>
                     </div>
                 </div>
             )}

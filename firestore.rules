@@ -1,0 +1,77 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function entitlementPath(userId) {
+      return /databases/$(database)/documents/users/$(userId)/entitlements/limits;
+    }
+
+    function maxScans(userId) {
+      return exists(entitlementPath(userId))
+        && get(entitlementPath(userId)).data.maxScansPerDay is int
+        && get(entitlementPath(userId)).data.maxScansPerDay >= 10
+        ? get(entitlementPath(userId)).data.maxScansPerDay
+        : 10;
+    }
+
+    function startsNewScanWindow() {
+      return request.resource.data.scanCount == 1
+        && request.resource.data.windowStartedAt == request.time;
+    }
+
+    function incrementsActiveScanWindow(userId) {
+      return 'windowStartedAt' in resource.data
+        && resource.data.windowStartedAt is timestamp
+        && request.time < resource.data.windowStartedAt + duration.value(24, 'h')
+        && request.resource.data.windowStartedAt == resource.data.windowStartedAt
+        && request.resource.data.scanCount == resource.data.scanCount + 1
+        && request.resource.data.scanCount <= maxScans(userId);
+    }
+
+    function resetsExpiredScanWindow() {
+      return (!('windowStartedAt' in resource.data)
+          || (resource.data.windowStartedAt is timestamp
+            && request.time >= resource.data.windowStartedAt + duration.value(24, 'h')))
+        && startsNewScanWindow();
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      match /banks/{bankId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /bets/{betId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /balances/{balanceId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /preferences/customOptions {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /preferences/usageLimits {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && startsNewScanWindow()
+          && request.resource.data.scanCount <= maxScans(userId);
+        allow update: if isOwner(userId)
+          && (incrementsActiveScanWindow(userId) || resetsExpiredScanWindow());
+        allow delete: if false;
+      }
+
+      match /entitlements/{entitlementId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
+    }
+  }
+}
