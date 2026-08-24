@@ -116,7 +116,8 @@ const consumeScanQuota = async (token, userId) => {
             updateMask: { fieldPaths: ['scanCount'] }
         };
         if (!windowIsActive) {
-            write.updateTransforms = [{ fieldPath: 'windowStartedAt', setToServerValue: 'REQUEST_TIME' }];
+            write.update.fields.windowStartedAt = { timestampValue: new Date().toISOString() };
+            write.updateMask.fieldPaths.push('windowStartedAt');
         }
 
         try {

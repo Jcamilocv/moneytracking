@@ -130,6 +130,26 @@ const formatDate = (dateString) => {
     catch { return '-'; }
 };
 
+const getBetStatus = (bet = {}) => {
+    if (typeof bet.status === 'string' && bet.status) return bet.status;
+    return bet.selections?.[0]?.status || 'pending';
+};
+
+const getBetDisplayTitle = (bet = {}) => {
+    const title = typeof bet.title === 'string' ? bet.title.trim() : '';
+    if (title) return title;
+    const selectionTitle = typeof bet.selections?.[0]?.title === 'string' ? bet.selections[0].title.trim() : '';
+    return selectionTitle || 'Sin evento';
+};
+
+const getBetDisplaySelection = (bet = {}) => {
+    const selection = typeof bet.selection === 'string' ? bet.selection.trim() : '';
+    if (selection) return selection;
+    if (bet.selections?.length > 1) return 'Múltiple';
+    const firstSelection = typeof bet.selections?.[0]?.selection === 'string' ? bet.selections[0].selection.trim() : '';
+    return firstSelection || 'Sin pronóstico';
+};
+
 const COMMON_BOOKMAKERS = ["Bet365", "William Hill", "Betfair", "Bwin", "888sport", "Betway", "Marathonbet", "Sportium", "Codere", "Kirolbet", "Retabet", "Luckia", "Paf", "LeoVegas", "TonyBet", "Pinnacle", "1xBet", "Winamax", "Coolbet"].sort();
 
 const parseComplexCSV = (text) => {
@@ -150,7 +170,8 @@ const parseComplexCSV = (text) => {
 const getStatsForBets = (betList, initialCap) => {
     let staked=0, runningProfit=0;
     betList.forEach(bet => {
-        if(bet.status === 'pending') return;
+        const status = getBetStatus(bet);
+        if(status === 'pending') return;
         const amt = bet.amount || 0; 
         staked += amt; 
         let profit = 0;
@@ -158,16 +179,16 @@ const getStatsForBets = (betList, initialCap) => {
         // Multiplicador Back/Lay
         const mult = bet.isBack === false ? -1 : 1; 
 
-        if (bet.status === 'won') { profit = ((amt * bet.odds) - amt) * mult; }
-        else if (bet.status === 'lost') { profit = -amt * mult; }
-        else if (bet.status === 'half-won') { profit = ((amt/2)*(bet.odds-1)) * mult; }
-        else if (bet.status === 'half-lost') { profit = -(amt/2) * mult; }
+        if (status === 'won') { profit = ((amt * bet.odds) - amt) * mult; }
+        else if (status === 'lost') { profit = -amt * mult; }
+        else if (status === 'half-won') { profit = ((amt/2)*(bet.odds-1)) * mult; }
+        else if (status === 'half-lost') { profit = -(amt/2) * mult; }
         
         runningProfit += profit;
     });
     const yieldPerc = staked > 0 ? (runningProfit / staked) * 100 : 0;
     const progression = initialCap > 0 ? (runningProfit / initialCap) * 100 : 0;
-    return { picks: betList.filter(b => b.status !== 'pending').length, profit: runningProfit, yieldPerc, progression };
+    return { picks: betList.filter(b => getBetStatus(b) !== 'pending').length, profit: runningProfit, yieldPerc, progression };
 };
 
 // --- COMPONENTES UI ---
@@ -292,6 +313,7 @@ export default function App() {
     const [shareModal, setShareModal] = useState({ isOpen: false, link: '', iframe: '' }); 
     
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isCreatingBank, setIsCreatingBank] = useState(false);
     const [expandedMonths, setExpandedMonths] = useState({});
     const [formErrors, setFormErrors] = useState({}); 
     const [isCustomBookmaker, setIsCustomBookmaker] = useState(false);
@@ -312,6 +334,7 @@ export default function App() {
     const [newBankData, setNewBankData] = useState({ name: '', initialCapital: 1000, currency: 'EUR', premiumPassword: '' }); 
     const [newBalanceData, setNewBalanceData] = useState({ name: '', bankIds: [] }); 
     const fileInputRef = useRef(null);
+    const bankCreationInFlightRef = useRef(false);
     
     const [isScanning, setIsScanning] = useState(false);
     const [aiMessage, setAiMessage] = useState(''); 
@@ -657,7 +680,7 @@ export default function App() {
                 if (dashboardFilters.maxOdds && b.odds > parseFloat(dashboardFilters.maxOdds)) return false;
                 if (dashboardFilters.category && b.category !== dashboardFilters.category && b.selections?.[0]?.category !== dashboardFilters.category) return false;
                 if (dashboardFilters.sport && b.selections?.[0]?.sport !== dashboardFilters.sport) return false;
-                if (dashboardFilters.status && b.status !== dashboardFilters.status) return false;
+                if (dashboardFilters.status && getBetStatus(b) !== dashboardFilters.status) return false;
                 return true;
             });
         }
@@ -666,7 +689,7 @@ export default function App() {
 
         // LÓGICA DE OCULTACIÓN (isHidden + pending)
         rawBets = rawBets.filter(b => {
-            if (b.isHidden && b.status === 'pending') {
+            if (b.isHidden && getBetStatus(b) === 'pending') {
                 const betDate = new Date(`${b.date}T${b.time || '00:00'}`);
                 const now = new Date();
                 const diffHours = Math.abs(now - betDate) / 36e5;
@@ -677,7 +700,7 @@ export default function App() {
 
         if (viewMode === 'visiting') {
             if (activeBankData?.premiumPassword && unlockedBank) return rawBets;
-            return rawBets.filter(b => b.status !== 'pending');
+            return rawBets.filter(b => getBetStatus(b) !== 'pending');
         }
         return rawBets; 
     }, [bets, currentBankId, viewMode, visitingBets, activeBankData, unlockedBank, dashboardFilters, activeTab]);
@@ -687,7 +710,7 @@ export default function App() {
         let bList = [];
         if(activeBankData.isBalance) bList = visitingBets.filter(b => activeBankData.bankIds?.includes(b.bankId));
         else bList = visitingBets.filter(b => b.bankId === activeBankData.id);
-        return bList.filter(b => b.status === 'pending').length;
+        return bList.filter(b => getBetStatus(b) === 'pending').length;
     }, [visitingBets, viewMode, activeBankData]);
 
     const currentBets = activeBetsData;
@@ -710,11 +733,12 @@ export default function App() {
             groups[key].bets.push(bet); 
             const amt = bet.amount || 0; let pl = 0;
             const mult = bet.isBack === false ? -1 : 1; // Back/Lay multiplier
+            const status = getBetStatus(bet);
             
-            if (bet.status === 'won') pl = ((amt * bet.odds) - amt) * mult;
-            else if (bet.status === 'lost') pl = -amt * mult;
-            else if (bet.status === 'half-won') pl = ((amt/2)*(bet.odds-1)) * mult;
-            else if (bet.status === 'half-lost') pl = -(amt/2) * mult;
+            if (status === 'won') pl = ((amt * bet.odds) - amt) * mult;
+            else if (status === 'lost') pl = -amt * mult;
+            else if (status === 'half-won') pl = ((amt/2)*(bet.odds-1)) * mult;
+            else if (status === 'half-lost') pl = -(amt/2) * mult;
             
             groups[key].profit += pl;
         });
@@ -738,14 +762,15 @@ export default function App() {
         const getWeekKey = (dStr) => { try { const d=new Date(dStr); d.setHours(0,0,0,0); d.setDate(d.getDate()+4-(d.getDay()||7)); const yStart=new Date(d.getFullYear(),0,1); return `${d.getFullYear()}-W${String(Math.ceil((((d-yStart)/86400000)+1)/7)).padStart(2,'0')}`; } catch{return 'Unknown'} };
 
         [...activeBetsData].sort((a,b)=> new Date(`${a.date}T${a.time || '00:00'}`) - new Date(`${b.date}T${b.time || '00:00'}`)).forEach((bet, idx) => {
-            if(bet.status === 'pending') return;
+            const status = getBetStatus(bet);
+            if(status === 'pending') return;
             const amt = bet.amount || 0; staked += amt; let profit = 0;
             const mult = bet.isBack === false ? -1 : 1; 
 
-            if (bet.status === 'won') { won++; profit = ((amt * bet.odds) - amt) * mult; returned += (amt * bet.odds); } 
-            else if (bet.status === 'lost') { lost++; profit = -amt * mult; }
-            else if (bet.status === 'half-won') { won+=0.5; profit = ((amt/2)*(bet.odds-1)) * mult; returned += (amt + profit); }
-            else if (bet.status === 'half-lost') { lost+=0.5; profit = -(amt/2) * mult; returned += (amt/2); }
+            if (status === 'won') { won++; profit = ((amt * bet.odds) - amt) * mult; returned += (amt * bet.odds); }
+            else if (status === 'lost') { lost++; profit = -amt * mult; }
+            else if (status === 'half-won') { won+=0.5; profit = ((amt/2)*(bet.odds-1)) * mult; returned += (amt + profit); }
+            else if (status === 'half-lost') { lost+=0.5; profit = -(amt/2) * mult; returned += (amt/2); }
             
             runningProfit += profit;
             profitHistory.push({ name: idx+1, profit: runningProfit, date: bet.date, fullLabel: `Apuesta ${idx+1}` });
@@ -855,8 +880,22 @@ export default function App() {
             return showAlert(`Límite de ${accountLimits.maxBetsPerBank} apuestas por banca alcanzado.`);
         }
 
-        const totalOdds = newBet.selections.reduce((acc, s) => acc * (parseFloat(s.odds)||1), 1);
-        const betData = { ...newBet, odds: parseFloat(totalOdds.toFixed(2)), amount: parseFloat(newBet.amount), bankId: currentBankId, createdAt: new Date().toISOString() };
+        const selections = Array.isArray(newBet.selections) ? newBet.selections : [];
+        const primarySelection = selections[0] || {};
+        const isCombined = selections.length > 1 || newBet.betMode === 'combined';
+        const totalOdds = selections.reduce((acc, s) => acc * (parseFloat(s.odds)||1), 1);
+        const betData = {
+            ...newBet,
+            selections,
+            title: isCombined ? (newBet.title?.trim() || primarySelection.title?.trim() || 'Combinada') : (primarySelection.title?.trim() || newBet.title?.trim() || ''),
+            selection: isCombined ? 'Múltiple' : (primarySelection.selection?.trim() || ''),
+            status: primarySelection.status || 'pending',
+            category: primarySelection.category || newBet.category || '',
+            odds: parseFloat(totalOdds.toFixed(2)),
+            amount: parseFloat(newBet.amount),
+            bankId: currentBankId,
+            createdAt: new Date().toISOString()
+        };
         
         try {
             if (editingBetId) {
@@ -922,7 +961,7 @@ export default function App() {
         const header = `"Date";"Type";"Sport";"Label";"Odds";"Stake";"State";"Bookmaker";"Tipster";"Category";"Competition";"BetType";"Closing";"Commission";"Bonus";"Live";"Freebet";"Cashout";"Eachway";"Comment"`;
         const rows = activeBetsData.map(b => {
             const statusMap = { 'won': 'W', 'lost': 'L', 'void': 'V', 'pending': 'P', 'half-won': 'HW', 'half-lost': 'HL' }; const dateFull = `${b.date} ${b.time || '00:00'}`; const safeText = (txt) => txt ? txt.replace(/"/g, '""') : '';
-            return `"${dateFull}";"${b.selections?.length > 1 ? 'Combined' : 'Simple'}";"${safeText(b.selections?.[0]?.sport || '')}";"${safeText(b.title)}";"${b.odds}";"${b.amount || 0}";"${statusMap[b.status] || 'P'}";"${safeText(b.bookmaker)}";"${safeText(b.tipster || '')}";"${safeText(b.category || b.selections?.[0]?.category || '')}";"";"${safeText(b.selection || b.selections?.[0]?.selection || '')}";"";"";"";"${b.isLive ? 'Yes' : 'No'}";"${b.isFreebet ? 'Yes' : 'No'}";"${b.cashout || ''}";"${b.isEachWay ? 'Yes' : 'No'}";"${safeText(b.analysis)}"`
+            return `"${dateFull}";"${b.selections?.length > 1 ? 'Combined' : 'Simple'}";"${safeText(b.selections?.[0]?.sport || '')}";"${safeText(getBetDisplayTitle(b))}";"${b.odds}";"${b.amount || 0}";"${statusMap[getBetStatus(b)] || 'P'}";"${safeText(b.bookmaker)}";"${safeText(b.tipster || '')}";"${safeText(b.category || b.selections?.[0]?.category || '')}";"";"${safeText(getBetDisplaySelection(b))}";"";"";"";"${b.isLive ? 'Yes' : 'No'}";"${b.isFreebet ? 'Yes' : 'No'}";"${b.cashout || ''}";"${b.isEachWay ? 'Yes' : 'No'}";"${safeText(b.analysis)}"`
         });
         const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([[header, ...rows].join("\n")], { type: 'text/csv;charset=utf-8;' })); link.setAttribute("download", `MoneyTracKING_Export_${new Date().toISOString().slice(0,10)}.csv`); document.body.appendChild(link); link.click(); document.body.removeChild(link);
     };
@@ -970,13 +1009,13 @@ export default function App() {
             time: bet.time || '00:00',
             bookmaker: bet.bookmaker || 'Bet365',
             betMode: bet.betMode || 'simple',
-            title: bet.title || '',
+            title: bet.title || (bet.selections?.length > 1 ? getBetDisplayTitle(bet) : ''),
             selections: bet.selections?.length > 0 ? bet.selections : [{ 
                 id: Date.now(), 
                 title: bet.title || '', 
                 selection: bet.selection || '', 
                 sport: bet.sport || customOptions.sports?.[0] || 'Fútbol', 
-                status: bet.status || 'pending', 
+                status: getBetStatus(bet),
                 category: bet.category || '', 
                 odds: bet.odds || 1.50, 
                 isOpen: true 
@@ -1045,9 +1084,26 @@ export default function App() {
 
     const confirmAddBank = async (e) => {
         e.preventDefault();
+        if (bankCreationInFlightRef.current) return;
+        if (banks.length >= accountLimits.maxBanks) {
+            setIsAddingBank(false);
+            showAlert(`Has alcanzado el límite de ${accountLimits.maxBanks} bancas.`);
+            return;
+        }
+
         const newBank = { name: newBankData.name || `Nueva Banca ${banks.length+1}`, initialCapital: parseFloat(newBankData.initialCapital) || 1000, currency: newBankData.currency, premiumPassword: newBankData.premiumPassword || '', createdAt: new Date().toISOString(), isEditable: false };
-        try { await addDoc(collection(db, 'users', currentUser.uid, 'banks'), newBank); setIsAddingBank(false); }
-        catch(error) { console.error(error); showAlert("Error creando banca."); }
+        bankCreationInFlightRef.current = true;
+        setIsCreatingBank(true);
+        try {
+            await addDoc(collection(db, 'users', currentUser.uid, 'banks'), newBank);
+            setIsAddingBank(false);
+        } catch(error) {
+            console.error(error);
+            showAlert("Error creando banca.");
+        } finally {
+            bankCreationInFlightRef.current = false;
+            setIsCreatingBank(false);
+        }
     };
 
     const handleUpdateBank = async (id, field, value) => {
@@ -1230,21 +1286,22 @@ export default function App() {
                                             {g.bets.map(b => {
                                                 const amt=b.amount?parseFloat(b.amount):parseFloat(b.stake)*10;
                                                 const mult = b.isBack === false ? -1 : 1;
-                                                const pl=b.status==='won'?((amt*b.odds)-amt)*mult:b.status==='lost'?-amt*mult:0;
+                                                const status = getBetStatus(b);
+                                                const pl=status==='won'?((amt*b.odds)-amt)*mult:status==='lost'?-amt*mult:0;
                                                 return (
                                                     <div key={b.id} className="p-3 text-sm hover:bg-[var(--bg-overlay)] transition-colors w-full">
                                                         <div className="flex justify-between items-start mb-1">
                                                             <div className="font-bold text-[var(--text-main)] truncate max-w-[60%] flex items-center gap-1">
                                                                 {b.isBack === false && <span className="text-[8px] bg-[var(--red-10)] text-[var(--red)] px-1.5 py-0.5 rounded border border-[var(--red-30)] mr-1">LAY</span>}
-                                                                {b.title}
+                                                                {getBetDisplayTitle(b)}
                                                             </div>
                                                             <div className={`font-bold ${b.isBack === false ? 'text-[var(--red)]' : 'text-[var(--accent)]'}`}>@{b.odds.toFixed(2)}</div>
                                                         </div>
                                                         <div className="flex justify-between items-center text-xs w-full">
-                                                            <div className="text-[var(--text-muted)] truncate max-w-[50%]">{typeof b.selection==='string'?b.selection:'Múltiple'}</div>
+                                                            <div className="text-[var(--text-muted)] truncate max-w-[50%]">{getBetDisplaySelection(b)}</div>
                                                             <div className="flex items-center gap-2 shrink-0">
                                                                 <span className={`font-bold ${pl>0?'text-[var(--accent)]':pl<0?'text-[var(--red)]':'text-[var(--text-muted)]'}`}>{pl>0?'+':''}{formatCurrency(pl,activeBankData?.currency)}</span>
-                                                                <StatusBadge status={b.status} />
+                                                                <StatusBadge status={status} />
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1358,7 +1415,7 @@ export default function App() {
                                 <div className="space-y-1.5"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Nombre</label><input type="text" placeholder="Ej: Bet365 Principal" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors" value={newBankData.name} onChange={e => setNewBankData({...newBankData, name: e.target.value})} autoFocus /></div>
                                 <div className="space-y-1.5"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1 flex items-center gap-2">Capital Inicial</label><input type="number" placeholder="1000" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors" value={newBankData.initialCapital} onChange={e => setNewBankData({...newBankData, initialCapital: e.target.value})} /></div>
                                 <div className="space-y-1.5"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Divisa</label><select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors appearance-none" value={newBankData.currency} onChange={e => setNewBankData({...newBankData, currency: e.target.value})}><option value="EUR">EUR (€)</option><option value="USD">USD ($)</option><option value="GBP">GBP (£)</option><option value="MXN">MXN ($)</option></select></div>
-                                <button onClick={confirmAddBank} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-bold py-3.5 rounded-xl transition-all shadow-[var(--shadow-glow-md)] mt-4">Crear Banca</button>
+                                <button onClick={confirmAddBank} disabled={isCreatingBank} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-bold py-3.5 rounded-xl transition-all shadow-[var(--shadow-glow-md)] mt-4 disabled:opacity-50 disabled:cursor-not-allowed">{isCreatingBank ? 'Creando...' : 'Crear Banca'}</button>
                             </div>
                         </div>
                     </div>
@@ -1662,7 +1719,8 @@ export default function App() {
                                             {g.bets.map(b=>{
                                                 const amt=b.amount?parseFloat(b.amount):parseFloat(b.stake)*10;
                                                 const mult = b.isBack === false ? -1 : 1;
-                                                const pl=b.status==='won'?((amt*b.odds)-amt)*mult:b.status==='lost'?-amt*mult:0;
+                                                const status = getBetStatus(b);
+                                                const pl=status==='won'?((amt*b.odds)-amt)*mult:status==='lost'?-amt*mult:0;
                                                 const isExp=expandedBetId===b.id;
                                                 return(
                                                     <React.Fragment key={b.id}>
@@ -1678,10 +1736,10 @@ export default function App() {
                                                             <td className="px-4 py-3">
                                                                 <div className="font-bold text-[var(--text-main)] text-sm leading-tight flex items-start gap-1.5 line-clamp-2">
                                                                     {b.isBack === false && <span className="text-[8px] bg-[var(--red-10)] text-[var(--red)] px-1.5 py-0.5 rounded border border-[var(--red-30)] shrink-0 mt-0.5">LAY</span>}
-                                                                    <span>{b.title}</span>
+                                                                    <span>{getBetDisplayTitle(b)}</span>
                                                                 </div>
                                                                 <div className="text-xs text-[var(--text-muted)] mt-1 line-clamp-1">
-                                                                    {typeof b.selection==='string'?b.selection:'Múltiple'}
+                                                                    {getBetDisplaySelection(b)}
                                                                 </div>
                                                             </td>
                                                             
@@ -1691,8 +1749,8 @@ export default function App() {
                                                             
                                                             {/* Estado Iconográfico */}
                                                             <td className="px-2 py-3 text-center">
-                                                                <div onClick={(e)=>{if(viewMode==='personal'){e.stopPropagation();setStatusModalData({id:b.id,currentStatus:b.status});}}} className={viewMode==='personal'?'cursor-pointer hover:opacity-80 transition-opacity':''}>
-                                                                    <RenderCompactStatus status={b.status}/>
+                                                                <div onClick={(e)=>{if(viewMode==='personal'){e.stopPropagation();setStatusModalData({id:b.id,currentStatus:status});}}} className={viewMode==='personal'?'cursor-pointer hover:opacity-80 transition-opacity':''}>
+                                                                    <RenderCompactStatus status={status}/>
                                                                 </div>
                                                             </td>
                                                             
@@ -2153,7 +2211,7 @@ export default function App() {
                             <div className="space-y-1.5 w-full"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Nombre</label><input type="text" placeholder="Ej: Bet365 Principal" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors w-full" value={newBankData.name} onChange={e => setNewBankData({...newBankData, name: e.target.value})} autoFocus /></div>
                             <div className="space-y-1.5 w-full"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Capital Inicial</label><input type="number" placeholder="1000" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors w-full" value={newBankData.initialCapital} onChange={e => setNewBankData({...newBankData, initialCapital: e.target.value})} /></div>
                             <div className="space-y-1.5 w-full"><label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Divisa</label><select className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors appearance-none w-full" value={newBankData.currency} onChange={e => setNewBankData({...newBankData, currency: e.target.value})}><option value="EUR">EUR (€)</option><option value="USD">USD ($)</option><option value="GBP">GBP (£)</option><option value="MXN">MXN ($)</option></select></div>
-                            <button onClick={confirmAddBank} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-bold py-3.5 rounded-xl transition-all shadow-[var(--shadow-glow-md)] mt-4">Crear Banca</button>
+                            <button onClick={confirmAddBank} disabled={isCreatingBank} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-bold py-3.5 rounded-xl transition-all shadow-[var(--shadow-glow-md)] mt-4 disabled:opacity-50 disabled:cursor-not-allowed">{isCreatingBank ? 'Creando...' : 'Crear Banca'}</button>
                         </div>
                     </div>
                 </div>

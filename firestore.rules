@@ -20,7 +20,9 @@ service cloud.firestore {
 
     function startsNewScanWindow() {
       return request.resource.data.scanCount == 1
-        && request.resource.data.windowStartedAt == request.time;
+        && request.resource.data.windowStartedAt is timestamp
+        && request.resource.data.windowStartedAt <= request.time
+        && request.resource.data.windowStartedAt >= request.time - duration.value(1, 'm');
     }
 
     function incrementsActiveScanWindow(userId) {
