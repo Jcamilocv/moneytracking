@@ -6,6 +6,40 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == userId;
     }
 
+    function isMoneyTipsAdmin() {
+      return request.auth != null
+        && request.auth.uid == 'Rvp7qaQBC5RQwSKICRKnAb8vaI93';
+    }
+
+    function isValidAppBonosState() {
+      return request.resource.data.keys().hasOnly([
+          'schemaVersion',
+          'legacyUserId',
+          'clientUpdatedAt',
+          'migratedAt',
+          'payload'
+        ])
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.legacyUserId is string
+        && request.resource.data.clientUpdatedAt is int
+        && request.resource.data.migratedAt == request.time
+        && request.resource.data.payload is map;
+    }
+
+    function isValidAdminCrm() {
+      return request.resource.data.keys().hasOnly([
+          'schemaVersion',
+          'clientUpdatedAt',
+          'updatedAt',
+          'crmData'
+        ])
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.clientUpdatedAt is int
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.crmData is map
+        && request.resource.data.crmData.leads is list;
+    }
+
     function entitlementPath(userId) {
       return /databases/$(database)/documents/users/$(userId)/entitlements/limits;
     }
@@ -74,6 +108,19 @@ service cloud.firestore {
         allow read: if isOwner(userId);
         allow write: if false;
       }
+
+      match /appBonos/{documentId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && documentId == 'state'
+          && isValidAppBonosState();
+      }
+    }
+
+    match /admin/appBonosCrm {
+      allow read, delete: if isMoneyTipsAdmin();
+      allow create, update: if isMoneyTipsAdmin()
+        && isValidAdminCrm();
     }
   }
 }
