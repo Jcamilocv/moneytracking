@@ -11,6 +11,72 @@ service cloud.firestore {
         && request.auth.uid == 'Rvp7qaQBC5RQwSKICRKnAb8vaI93';
     }
 
+    function shareOwnerPath(shareId) {
+      return /databases/$(database)/documents/shareOwners/$(shareId);
+    }
+
+    function ownsShare(shareId) {
+      return request.auth != null
+        && exists(shareOwnerPath(shareId))
+        && get(shareOwnerPath(shareId)).data.ownerUid == request.auth.uid;
+    }
+
+    function ownsShareAfterWrite(shareId) {
+      return request.auth != null
+        && existsAfter(shareOwnerPath(shareId))
+        && getAfter(shareOwnerPath(shareId)).data.ownerUid == request.auth.uid;
+    }
+
+    function isValidShareOwner() {
+      return request.auth != null
+        && request.resource.data.keys().hasOnly(['ownerUid', 'createdAt'])
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.createdAt == request.time;
+    }
+
+    function isValidPublicShare() {
+      return request.resource.data.keys().hasOnly([
+          'schemaVersion',
+          'createdAt',
+          'bank',
+          'betCount'
+        ])
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.betCount is int
+        && request.resource.data.betCount >= 0
+        && request.resource.data.betCount <= 5000
+        && request.resource.data.bank is map
+        && request.resource.data.bank.keys().hasOnly([
+          'id', 'name', 'initialCapital', 'currency', 'isBalance', 'bankIds'
+        ])
+        && request.resource.data.bank.id is string
+        && request.resource.data.bank.name is string
+        && request.resource.data.bank.initialCapital is number
+        && request.resource.data.bank.currency is string
+        && request.resource.data.bank.isBalance is bool
+        && request.resource.data.bank.bankIds is list;
+    }
+
+    function isValidPublicBet() {
+      return request.resource.data.keys().hasOnly([
+          'id', 'bankId', 'date', 'time', 'bookmaker', 'betMode', 'title',
+          'selection', 'status', 'category', 'odds', 'amount', 'stake',
+          'isBack', 'isLive', 'isFreebet', 'cashout', 'isEachWay',
+          'tipster', 'bonus', 'commission', 'selections'
+        ])
+        && request.resource.data.id is string
+        && request.resource.data.bankId is string
+        && request.resource.data.date is string
+        && request.resource.data.time is string
+        && request.resource.data.status is string
+        && request.resource.data.status != 'pending'
+        && request.resource.data.odds is number
+        && request.resource.data.amount is number
+        && request.resource.data.stake is number
+        && request.resource.data.selections is list;
+    }
+
     function isValidAppBonosState() {
       return request.resource.data.keys().hasOnly([
           'schemaVersion',
@@ -121,6 +187,27 @@ service cloud.firestore {
       allow read, delete: if isMoneyTipsAdmin();
       allow create, update: if isMoneyTipsAdmin()
         && isValidAdminCrm();
+    }
+
+    // Registro privado que vincula un snapshot público con su propietario.
+    // El UID no se expone dentro del documento público.
+    match /shareOwners/{shareId} {
+      allow read: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+      allow create: if isValidShareOwner();
+      allow update, delete: if false;
+    }
+
+    // Snapshots inmutables y saneados. Nunca apuntan directamente a /users.
+    match /publicShares/{shareId} {
+      allow read: if true;
+      allow create: if ownsShareAfterWrite(shareId) && isValidPublicShare();
+      allow update, delete: if false;
+
+      match /bets/{betId} {
+        allow read: if true;
+        allow create: if ownsShare(shareId) && isValidPublicBet();
+        allow update, delete: if false;
+      }
     }
   }
 }

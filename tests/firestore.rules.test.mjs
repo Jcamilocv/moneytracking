@@ -6,10 +6,12 @@ import {
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import {
+  collection,
   doc,
   getDoc,
   serverTimestamp,
   setDoc,
+  writeBatch,
 } from 'firebase/firestore';
 
 const PROJECT_ID = 'money-tracking-rules-test';
@@ -33,6 +35,45 @@ const validAdminCrm = () => ({
   clientUpdatedAt: Date.now(),
   updatedAt: serverTimestamp(),
   crmData: { leads: [] },
+});
+
+const validPublicShare = () => ({
+  schemaVersion: 1,
+  createdAt: serverTimestamp(),
+  betCount: 1,
+  bank: {
+    id: 'bank-1',
+    name: 'Histórico público',
+    initialCapital: 1000,
+    currency: 'EUR',
+    isBalance: false,
+    bankIds: [],
+  },
+});
+
+const validPublicBet = () => ({
+  id: 'private-bet-id',
+  bankId: 'bank-1',
+  date: '2026-08-26',
+  time: '18:30',
+  bookmaker: 'Casa',
+  betMode: 'simple',
+  title: 'Evento',
+  selection: 'Selección',
+  status: 'won',
+  category: 'Value',
+  odds: 2,
+  amount: 10,
+  stake: 1,
+  isBack: true,
+  isLive: false,
+  isFreebet: false,
+  cashout: '',
+  isEachWay: false,
+  tipster: '',
+  bonus: '',
+  commission: '',
+  selections: [],
 });
 
 before(async () => {
@@ -106,4 +147,54 @@ test('las reglas existentes de MoneyTracking conservan el aislamiento por propie
   await assertSucceeds(setDoc(doc(ownerDb, 'users', 'user-a', 'banks', 'bank-1'), { name: 'Principal' }));
   await assertFails(getDoc(doc(strangerDb, 'users', 'user-a', 'banks', 'bank-1')));
   await assertFails(setDoc(doc(ownerDb, 'users', 'user-a', 'entitlements', 'limits'), { maxScansPerDay: 20 }));
+});
+
+test('el propietario puede crear un snapshot saneado y un visitante anónimo puede leerlo', async () => {
+  const ownerDb = testEnvironment.authenticatedContext('user-a').firestore();
+  const anonymousDb = testEnvironment.unauthenticatedContext().firestore();
+  const shareId = 'public-share-123456';
+  const batch = writeBatch(ownerDb);
+
+  batch.set(doc(ownerDb, 'shareOwners', shareId), {
+    ownerUid: 'user-a',
+    createdAt: serverTimestamp(),
+  });
+  batch.set(doc(ownerDb, 'publicShares', shareId), validPublicShare());
+  await assertSucceeds(batch.commit());
+  await assertSucceeds(setDoc(doc(collection(ownerDb, 'publicShares', shareId, 'bets')), validPublicBet()));
+
+  await assertSucceeds(getDoc(doc(anonymousDb, 'publicShares', shareId)));
+});
+
+test('un usuario no puede publicar usando el registro de propiedad de otro', async () => {
+  const ownerDb = testEnvironment.authenticatedContext('user-a').firestore();
+  const strangerDb = testEnvironment.authenticatedContext('user-b').firestore();
+  const shareId = 'public-share-owned';
+
+  await assertSucceeds(setDoc(doc(ownerDb, 'shareOwners', shareId), {
+    ownerUid: 'user-a',
+    createdAt: serverTimestamp(),
+  }));
+  await assertFails(setDoc(doc(strangerDb, 'publicShares', shareId), validPublicShare()));
+});
+
+test('los snapshots rechazan apuestas pendientes y campos privados', async () => {
+  const ownerDb = testEnvironment.authenticatedContext('user-a').firestore();
+  const shareId = 'public-share-sanitized';
+  const initialBatch = writeBatch(ownerDb);
+  initialBatch.set(doc(ownerDb, 'shareOwners', shareId), {
+    ownerUid: 'user-a',
+    createdAt: serverTimestamp(),
+  });
+  initialBatch.set(doc(ownerDb, 'publicShares', shareId), validPublicShare());
+  await assertSucceeds(initialBatch.commit());
+
+  await assertFails(setDoc(doc(collection(ownerDb, 'publicShares', shareId, 'bets')), {
+    ...validPublicBet(),
+    status: 'pending',
+  }));
+  await assertFails(setDoc(doc(collection(ownerDb, 'publicShares', shareId, 'bets')), {
+    ...validPublicBet(),
+    analysis: 'nota privada',
+  }));
 });

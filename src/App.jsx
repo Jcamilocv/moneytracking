@@ -16,7 +16,7 @@ import LZString from 'lz-string';
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
-import { getFirestore, collection, onSnapshot, addDoc, doc, deleteDoc, updateDoc, setDoc, writeBatch } from "firebase/firestore";
+import { getFirestore, collection, onSnapshot, addDoc, doc, deleteDoc, updateDoc, setDoc, writeBatch, serverTimestamp } from "firebase/firestore";
 
 // --- CONFIGURACIÓN DE FIREBASE ---
 const firebaseConfig = {
@@ -111,6 +111,48 @@ const normalizeAccountLimits = (data = {}) => ({
     maxBanks: Math.max(DEFAULT_LIMITS.maxBanks, Math.floor(Number(data.maxBanks) || 0)),
     maxBetsPerBank: Math.max(DEFAULT_LIMITS.maxBetsPerBank, Math.floor(Number(data.maxBetsPerBank) || 0)),
     maxScansPerDay: Math.max(DEFAULT_LIMITS.maxScansPerDay, Math.floor(Number(data.maxScansPerDay) || 0))
+});
+
+const sanitizePublicBank = (bank = {}) => ({
+    id: String(bank.id || ''),
+    name: String(bank.name || 'Histórico público'),
+    initialCapital: Number(bank.initialCapital) || 0,
+    currency: String(bank.currency || 'EUR'),
+    isBalance: Boolean(bank.isBalance),
+    bankIds: Array.isArray(bank.bankIds) ? bank.bankIds.map(String) : []
+});
+
+const sanitizePublicBet = (bet = {}) => ({
+    id: String(bet.id || ''),
+    bankId: String(bet.bankId || ''),
+    date: String(bet.date || ''),
+    time: String(bet.time || '00:00'),
+    bookmaker: String(bet.bookmaker || ''),
+    betMode: String(bet.betMode || 'simple'),
+    title: String(bet.title || ''),
+    selection: String(bet.selection || ''),
+    status: String(getBetStatus(bet)),
+    category: String(bet.category || ''),
+    odds: Number(bet.odds) || 0,
+    amount: Number(bet.amount) || 0,
+    stake: Number(bet.stake) || 0,
+    isBack: bet.isBack !== false,
+    isLive: Boolean(bet.isLive),
+    isFreebet: Boolean(bet.isFreebet),
+    cashout: String(bet.cashout || ''),
+    isEachWay: Boolean(bet.isEachWay),
+    tipster: String(bet.tipster || ''),
+    bonus: String(bet.bonus || ''),
+    commission: String(bet.commission || ''),
+    selections: (Array.isArray(bet.selections) ? bet.selections : []).map((selection) => ({
+        id: String(selection.id || ''),
+        title: String(selection.title || ''),
+        selection: String(selection.selection || ''),
+        sport: String(selection.sport || ''),
+        status: String(selection.status || getBetStatus(bet)),
+        category: String(selection.category || ''),
+        odds: Number(selection.odds) || 0
+    }))
 });
 
 const formatCurrency = (value, currency = 'EUR') => {
@@ -232,18 +274,22 @@ const RenderCompactStatus = ({ status }) => {
 // --- APP PRINCIPAL ---
 export default function App() {
     const [initialShare] = useState(() => {
-        if (typeof window === 'undefined') return { mode: 'personal', uid: null, bid: null, isEmbed: false };
+        if (typeof window === 'undefined') return { mode: 'personal', uid: null, bid: null, shareId: null, isEmbed: false };
         const params = new URLSearchParams(window.location.search);
+        const publicShareId = params.get('p');
         const sData = params.get('s');
         const isEmbed = params.get('embed') === 'true'; 
+        if (publicShareId && /^[A-Za-z0-9_-]{16,80}$/.test(publicShareId)) {
+            return { mode: 'visiting', uid: null, bid: null, shareId: publicShareId, isEmbed };
+        }
         if (sData) {
             try {
                 const decoded = atob(sData);
                 const [uid, bid] = decoded.split('|');
-                if (uid && bid) return { mode: 'visiting', uid, bid, isEmbed };
+                if (uid && bid) return { mode: 'legacy-share', uid, bid, shareId: null, isEmbed };
             } catch (e) { console.error("Error decodificando enlace público.", e); }
         }
-        return { mode: 'personal', uid: null, bid: null, isEmbed: false };
+        return { mode: 'personal', uid: null, bid: null, shareId: null, isEmbed: false };
     });
 
     const [isEmbed] = useState(initialShare.isEmbed);
@@ -323,6 +369,7 @@ export default function App() {
     const [viewMode, setViewMode] = useState(initialShare.mode); 
     const [visitingUserId, setVisitingUserId] = useState(initialShare.uid);
     const [visitingBankId, setVisitingBankId] = useState(initialShare.bid);
+    const [publicShareId, setPublicShareId] = useState(initialShare.shareId);
     const [visitingBank, setVisitingBank] = useState(null);
     const [visitingBets, setVisitingBets] = useState([]);
     
@@ -511,6 +558,50 @@ export default function App() {
     }, [viewMode]);
 
     useEffect(() => {
+        if (viewMode === 'visiting') {
+            if (!publicShareId) {
+                setDbError('El enlace público no es válido. Solicita uno nuevo al propietario.');
+                setLoading(false);
+                return;
+            }
+
+            setLoading(true);
+            setDbError('');
+            const shareRef = doc(db, 'publicShares', publicShareId);
+            const shareBetsRef = collection(db, 'publicShares', publicShareId, 'bets');
+            const unsubShare = onSnapshot(shareRef, (snapshot) => {
+                if (!snapshot.exists()) {
+                    setVisitingBank(null);
+                    setDbError('Este histórico público no existe o ya no está disponible.');
+                    setLoading(false);
+                    return;
+                }
+                setVisitingBank(snapshot.data().bank || null);
+            }, (error) => {
+                console.error('Error cargando el histórico público:', error);
+                setDbError('No se pudo cargar el histórico público.');
+                setLoading(false);
+            });
+            const unsubPublicBets = onSnapshot(shareBetsRef, (snapshot) => {
+                setVisitingBets(snapshot.docs.map((item) => ({ ...item.data(), id: item.id })));
+                setLoading(false);
+            }, (error) => {
+                console.error('Error cargando apuestas públicas:', error);
+                setDbError('No se pudieron cargar las apuestas públicas.');
+                setLoading(false);
+            });
+            return () => {
+                unsubShare();
+                unsubPublicBets();
+            };
+        }
+
+        if (viewMode === 'legacy-share') {
+            setDbError('Este enlace público antiguo ha caducado. Solicita al propietario un enlace actualizado.');
+            setLoading(false);
+            return;
+        }
+
         const targetUid = viewMode === 'visiting' ? visitingUserId : currentUser?.uid;
         if (!targetUid) {
             if (viewMode === 'personal') setLoading(false);
@@ -608,7 +699,7 @@ export default function App() {
         }
 
         return () => { unsubBanks(); unsubBets(); unsubPrefs(); unsubBalances(); };
-    }, [currentUser, viewMode, visitingUserId, visitingBankId]);
+    }, [currentUser, viewMode, visitingUserId, visitingBankId, publicShareId]);
 
     useEffect(() => {
         if (viewMode === 'personal' && banks.length > 0 && !currentBankId) {
@@ -832,13 +923,49 @@ export default function App() {
         }
     };
 
-    const openShareModal = () => {
+    const openShareModal = async () => {
         if(!activeBankData || !activeBankData.id) return showAlert("Selecciona una banca o balance válido.");
-        const shareStr = btoa(`${currentUser.uid}|${activeBankData.id}`);
-        let currentDomain = window.location.origin + window.location.pathname;
-        const link = `${currentDomain}?s=${shareStr}`;
-        const iframeCode = `<iframe src="${link}&embed=true" width="100%" height="700" style="border:none; border-radius: 16px; overflow:hidden; background: transparent;"></iframe>`;
-        setShareModal({ isOpen: true, link, iframe: iframeCode });
+        if (!currentUser) return showAlert('Inicia sesión para publicar este histórico.');
+
+        setIsProcessing(true);
+        try {
+            const publicBets = activeBetsData
+                .filter((bet) => getBetStatus(bet) !== 'pending')
+                .map(sanitizePublicBet);
+            const publicShareRef = doc(collection(db, 'publicShares'));
+            const ownerRef = doc(db, 'shareOwners', publicShareRef.id);
+            const initialBatch = writeBatch(db);
+            initialBatch.set(ownerRef, {
+                ownerUid: currentUser.uid,
+                createdAt: serverTimestamp()
+            });
+            initialBatch.set(publicShareRef, {
+                schemaVersion: 1,
+                createdAt: serverTimestamp(),
+                bank: sanitizePublicBank(activeBankData),
+                betCount: publicBets.length
+            });
+            await initialBatch.commit();
+
+            for (let offset = 0; offset < publicBets.length; offset += 400) {
+                const batch = writeBatch(db);
+                publicBets.slice(offset, offset + 400).forEach((bet) => {
+                    const betRef = doc(collection(db, 'publicShares', publicShareRef.id, 'bets'));
+                    batch.set(betRef, bet);
+                });
+                await batch.commit();
+            }
+
+            const currentDomain = window.location.origin + window.location.pathname;
+            const link = `${currentDomain}?p=${publicShareRef.id}`;
+            const iframeCode = `<iframe src="${link}&embed=true" title="Histórico público de ${sanitizePublicBank(activeBankData).name}" width="100%" height="700" style="border:none; border-radius: 16px; overflow:hidden; background: transparent;"></iframe>`;
+            setShareModal({ isOpen: true, link, iframe: iframeCode });
+        } catch (error) {
+            console.error('Error publicando el histórico:', error);
+            showAlert('No se pudo crear la copia pública. Revisa tu conexión e inténtalo de nuevo.');
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
     const copyToClipboard = (text, msg) => {
@@ -860,6 +987,7 @@ export default function App() {
         setViewMode('personal'); 
         setVisitingUserId(null); 
         setVisitingBankId(null);
+        setPublicShareId(null);
         setVisitingBank(null); 
         setVisitingBets([]);
         setUnlockedBank(false);
@@ -1353,9 +1481,9 @@ export default function App() {
         );
     }
 
-    if (loading && viewMode === 'personal') return <><style>{getGlobalStyles(theme)}</style><LiquidBackground theme={theme}/><div className="min-h-screen flex items-center justify-center text-[var(--accent)] animate-pulse font-bold text-xl drop-shadow-md">Conectando con la nube...</div></>;
+    if (loading) return <><style>{getGlobalStyles(theme)}</style><LiquidBackground theme={theme}/><div className="min-h-screen flex items-center justify-center text-[var(--accent)] animate-pulse font-bold text-xl drop-shadow-md">Conectando con la nube...</div></>;
 
-    if (viewMode === 'visiting' && !loading && !activeBankData) {
+    if ((viewMode === 'visiting' || viewMode === 'legacy-share') && !loading && !activeBankData) {
         return (
             <><style>{getGlobalStyles(theme)}</style>
             <LiquidBackground theme={theme}/>
