@@ -107,6 +107,13 @@ const DEFAULT_LIMITS = {
     maxScansPerDay: 10
 };
 
+const LEGACY_PUBLIC_SHARE_IDS = {
+    fvEukLKhTCAhPMr0Ltb3: 'mt_h_8h3DjKp7MxQ2vN6cZaR4',
+    tJl2mmFKuDg4PLBBA6Kx: 'mt_2526_Bp9mQ4xL7dRt2VwK',
+    gpAuTBhXfUafErkLAwEg: 'mt_2425_Cf6nY8sH3jUa5PeM',
+    '235TEdWK4baHQgcbAGi6': 'mt_2324_Gk2rT9vB4zXq7NdS'
+};
+
 const normalizeAccountLimits = (data = {}) => ({
     maxBanks: Math.max(DEFAULT_LIMITS.maxBanks, Math.floor(Number(data.maxBanks) || 0)),
     maxBetsPerBank: Math.max(DEFAULT_LIMITS.maxBetsPerBank, Math.floor(Number(data.maxBetsPerBank) || 0)),
@@ -286,7 +293,11 @@ export default function App() {
             try {
                 const decoded = atob(sData);
                 const [uid, bid] = decoded.split('|');
-                if (uid && bid) return { mode: 'legacy-share', uid, bid, shareId: null, isEmbed };
+                if (uid && bid) {
+                    const migratedShareId = LEGACY_PUBLIC_SHARE_IDS[bid];
+                    if (migratedShareId) return { mode: 'visiting', uid: null, bid: null, shareId: migratedShareId, isEmbed };
+                    return { mode: 'legacy-share', uid, bid, shareId: null, isEmbed };
+                }
             } catch (e) { console.error("Error decodificando enlace público.", e); }
         }
         return { mode: 'personal', uid: null, bid: null, shareId: null, isEmbed: false };
