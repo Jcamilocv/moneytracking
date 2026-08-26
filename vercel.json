@@ -1,0 +1,13 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/refresh-official-snapshots",
+      "schedule": "17 4 * * *"
+    }
+  ],
+  "functions": {
+    "api/cron/refresh-official-snapshots.js": {
+      "maxDuration": 300
+    }
+  }
+}

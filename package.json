@@ -8,10 +8,12 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test:rules": "node --test tests/firestore.rules.test.mjs"
+    "test:rules": "node --test tests/firestore.rules.test.mjs",
+    "test:snapshots": "node --test tests/official-snapshot-data.test.mjs"
   },
   "dependencies": {
     "firebase": "^11.10.0",
+    "firebase-admin": "^13.6.0",
     "lucide-react": "0.268.0",
     "lz-string": "^1.5.0",
     "react": "^18.2.0",
