@@ -15,7 +15,7 @@ import LZString from 'lz-string';
 
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from "firebase/app";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 import { getFirestore, collection, onSnapshot, addDoc, doc, deleteDoc, updateDoc, setDoc, writeBatch, serverTimestamp } from "firebase/firestore";
 
 // --- CONFIGURACIÓN DE FIREBASE ---
@@ -922,6 +922,24 @@ export default function App() {
         }
     };
 
+    const handleGoogleAuth = async () => {
+        setAuthError('');
+        try {
+            const provider = new GoogleAuthProvider();
+            provider.setCustomParameters({ prompt: 'select_account' });
+            await signInWithPopup(auth, provider);
+        } catch (error) {
+            console.error(error);
+            if (error.code === 'auth/popup-closed-by-user') {
+                setAuthError('Has cerrado el acceso con Google antes de completarlo.');
+            } else if (error.code === 'auth/popup-blocked') {
+                setAuthError('Tu navegador ha bloqueado la ventana de Google. Permite las ventanas emergentes e inténtalo de nuevo.');
+            } else {
+                setAuthError('No se pudo iniciar sesión con Google. Inténtalo de nuevo.');
+            }
+        }
+    };
+
     const handleLogout = async () => {
         await signOut(auth);
     };
@@ -1481,6 +1499,11 @@ export default function App() {
                     </h1>
                     <p className="text-[var(--text-muted)] text-center text-sm mb-8 font-medium">Tu gestor de bankroll nivel Dios</p>
                     <div className="flex bg-[var(--bg-input)] p-1.5 rounded-2xl mb-8 border border-[var(--border)] transition-colors"><button type="button" onClick={() => setIsRegistering(false)} className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all uppercase tracking-wider ${!isRegistering ? 'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-md)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>Entrar</button><button type="button" onClick={() => setIsRegistering(true)} className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all uppercase tracking-wider ${isRegistering ? 'bg-[var(--accent)] text-[var(--accent-fg)] shadow-[var(--shadow-glow-md)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>Registrarse</button></div>
+                    <button type="button" onClick={handleGoogleAuth} className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-100 text-slate-800 font-extrabold py-4 rounded-xl transition-all shadow-sm border border-slate-200 uppercase tracking-widest text-sm mb-5" aria-label="Continuar con Google">
+                        <span className="text-xl leading-none" aria-hidden="true">G</span>
+                        Continuar con Google
+                    </button>
+                    <div className="flex items-center gap-3 mb-5" aria-hidden="true"><div className="h-px flex-1 bg-[var(--border)]" /><span className="text-[10px] font-bold tracking-widest text-[var(--text-muted)] uppercase">o con contraseña</span><div className="h-px flex-1 bg-[var(--border)]" /></div>
                     <form onSubmit={handleAuth} className="space-y-4">
                         <div><input type="email" placeholder="Email" className="w-full bg-[var(--bg-input)] border border-transparent rounded-xl px-5 py-4 text-[var(--text-main)] focus:border-[var(--accent-50)] outline-none transition-all placeholder-[var(--text-muted)] font-medium text-sm shadow-inner" value={email} onChange={e => setEmail(e.target.value)} autoFocus required /></div>
                         <div><input type="password" placeholder="Contraseña" className="w-full bg-[var(--bg-input)] border border-transparent rounded-xl px-5 py-4 text-[var(--text-main)] focus:border-[var(--accent-50)] outline-none transition-all placeholder-[var(--text-muted)] font-medium text-sm shadow-inner" value={password} onChange={e => setPassword(e.target.value)} required /></div>
