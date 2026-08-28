@@ -1,9 +1,10 @@
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 
 const FIREBASE_PROJECT_ID = 'money-tracking-d908b';
 
-export const getAdminDb = () => {
+const getAdminApp = () => {
     if (!getApps().length) {
         const rawServiceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
         if (!rawServiceAccount) throw new Error('Falta FIREBASE_SERVICE_ACCOUNT_JSON');
@@ -22,5 +23,9 @@ export const getAdminDb = () => {
         initializeApp({ credential: cert(serviceAccount) });
     }
 
-    return getFirestore();
+    return getApps()[0];
 };
+
+export const getAdminDb = () => getFirestore(getAdminApp());
+
+export const getAdminAuth = () => getAuth(getAdminApp());

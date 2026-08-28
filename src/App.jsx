@@ -5,7 +5,7 @@ import {
     Clock, Calendar, Download, Upload, FileText, 
     ArrowUpRight, ArrowDownRight, AlertTriangle, 
     BarChart2, LineChart, Tags, LogOut, Database, Eye, Link as LinkIcon, CalendarDays,
-    HelpCircle, Lock, ShieldCheck, XCircle, AlertCircle, Sun, Moon, Layers, Code, User, Filter
+    HelpCircle, Lock, ShieldCheck, XCircle, AlertCircle, Sun, Moon, Layers, Code, User, Filter, Send
 } from 'lucide-react';
 import { 
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
@@ -384,6 +384,74 @@ const OfficialPickPublicPage = ({ pickId, theme }) => {
     return <><style>{getGlobalStyles(theme)}</style><LiquidBackground theme={theme}/><main className="min-h-screen p-4 md:p-8 flex items-center justify-center"><section className="w-full max-w-2xl bg-[var(--bg-card)] border border-[var(--border)] rounded-[2rem] shadow-[var(--shadow-glow-md)] overflow-hidden"><header className="p-6 md:p-8 border-b border-[var(--border)]"><div className="flex items-center gap-2 text-[var(--accent)] font-bold text-xs uppercase tracking-widest"><ShieldCheck size={16}/> Comprobante oficial Money Tips</div><h1 className="mt-3 text-2xl md:text-3xl font-extrabold text-[var(--text-main)]">{pick ? `${pick.event.homeTeam} vs ${pick.event.awayTeam}` : 'Verificando pick'}</h1><p className="text-sm text-[var(--text-muted)] mt-2">Registro sellado por servidor. Este documento no se puede editar desde la aplicación.</p></header><div className="p-6 md:p-8">{error ? <div className="text-[var(--red)] bg-[var(--red-10)] border border-[var(--red-30)] rounded-2xl p-5 text-sm">{error}</div> : !pick ? <div className="text-center text-[var(--text-muted)] py-10">Cargando comprobante...</div> : <div className="space-y-6"><div className="grid sm:grid-cols-2 gap-4"><div className="bg-[var(--bg-input)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Pronóstico</p><p className="font-bold text-[var(--text-main)] mt-2">{pick.bet.market}</p><p className="text-[var(--accent)] font-bold mt-1">{pick.bet.selection} · @{Number(pick.bet.oddsAtPublication).toFixed(2)}</p></div><div className="bg-[var(--bg-input)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Horario</p><p className="font-bold text-[var(--text-main)] mt-2">Inicio: {formatOfficialDateTime(pick.event.kickoffAt)}</p><p className="text-[var(--accent)] text-sm mt-1">Publicado: {formatOfficialDateTime(pick.publishedAt)}</p></div></div><div className="border border-[var(--border)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Evidencia</p><p className="text-sm text-[var(--text-main)] mt-2">Sistema: {pick.system.id} · versión {pick.system.version}</p><p className="text-xs font-mono break-all text-[var(--text-muted)] mt-2">SHA-256: {pick.source.evidenceHash}</p></div><div><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Historial del registro</p><div className="space-y-2">{events.map((event) => <div key={event.id} className="flex items-center justify-between gap-3 text-sm bg-[var(--bg-input)] rounded-xl px-4 py-3"><span className="font-bold text-[var(--text-main)]">{event.type}</span><span className="text-[var(--text-muted)] text-xs">{formatOfficialDateTime(event.createdAt)}</span></div>)}</div></div></div>}</div><footer className="p-6 border-t border-[var(--border)]"><a href={window.location.pathname} className="block text-center bg-[var(--accent)] text-[var(--accent-fg)] rounded-xl py-3 font-bold">Abrir MoneyTracKING</a></footer></section></main></>;
 };
 
+const emptyOfficialPickForm = () => ({
+    sourceEventId: '', competition: '', homeTeam: '', awayTeam: '', kickoffAt: '',
+    market: '', selection: '', oddsAtPublication: '', systemId: '', systemVersion: 'v1', sourceProvider: 'money-tips-owned'
+});
+
+const OfficialPicksAdminPanel = ({ currentUser }) => {
+    const [form, setForm] = useState(emptyOfficialPickForm);
+    const [isPublishing, setIsPublishing] = useState(false);
+    const [error, setError] = useState('');
+    const [publishedPick, setPublishedPick] = useState(null);
+
+    const update = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+    const handleSubmit = async (event) => {
+        event.preventDefault();
+        setError('');
+        setPublishedPick(null);
+        if (!window.confirm('Este pick se publicará de inmediato y no podrá editarse ni eliminarse. ¿Has revisado evento, mercado, cuota y hora?')) return;
+
+        setIsPublishing(true);
+        try {
+            const token = await currentUser.getIdToken();
+            const response = await fetch('/api/admin/official-picks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                    event: {
+                        sourceEventId: form.sourceEventId,
+                        competition: form.competition,
+                        homeTeam: form.homeTeam,
+                        awayTeam: form.awayTeam,
+                        kickoffAt: new Date(form.kickoffAt).toISOString()
+                    },
+                    bet: { market: form.market, selection: form.selection, oddsAtPublication: Number(form.oddsAtPublication) },
+                    system: { id: form.systemId, version: form.systemVersion },
+                    source: { provider: form.sourceProvider, observedAt: new Date().toISOString() }
+                })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'No se pudo publicar el pick.');
+            setPublishedPick(data.pick);
+            setForm(emptyOfficialPickForm());
+        } catch (requestError) {
+            setError(requestError.message || 'No se pudo publicar el pick.');
+        } finally {
+            setIsPublishing(false);
+        }
+    };
+
+    const fields = [
+        ['sourceEventId', 'ID único del evento', 'text'], ['competition', 'Competición', 'text'],
+        ['homeTeam', 'Equipo local', 'text'], ['awayTeam', 'Equipo visitante', 'text'],
+        ['kickoffAt', 'Inicio del partido', 'datetime-local'], ['market', 'Mercado', 'text'],
+        ['selection', 'Selección', 'text'], ['oddsAtPublication', 'Cuota publicada', 'number'],
+        ['systemId', 'Sistema', 'text'], ['systemVersion', 'Versión', 'text'], ['sourceProvider', 'Fuente autorizada', 'text']
+    ];
+
+    return <section className="space-y-6 w-full">
+        <div><div className="flex items-center gap-2 text-[var(--accent)] text-xs font-bold uppercase tracking-widest"><ShieldCheck size={15}/> Acceso exclusivo de propietario</div><h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight mt-2">Publicar pick oficial</h3><p className="text-sm text-[var(--text-muted)] mt-2 max-w-2xl">La aplicación nunca recibe un secreto. Tu sesión Firebase se valida otra vez en el servidor y el registro resultante queda sellado.</p></div>
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-4 text-sm text-[var(--text-main)]"><strong>Publicación irreversible.</strong> Revisa la cuota real disponible y la hora de inicio antes de confirmar. Esta pantalla es solo para picks cuya distribución esté autorizada.</div>
+        <form onSubmit={handleSubmit} className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 md:p-7 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {fields.map(([field, label, type]) => <label key={field} className={field === 'competition' || field === 'market' || field === 'selection' ? 'md:col-span-2' : ''}><span className="block text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-2">{label}</span><input required type={type} step={type === 'number' ? '0.01' : undefined} min={type === 'number' ? '1.01' : undefined} max={type === 'number' ? '1000' : undefined} value={form[field]} onChange={(e) => update(field, e.target.value)} className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-3 text-[var(--text-main)] outline-none focus:border-[var(--accent)]" /></label>)}
+            <div className="md:col-span-2 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between pt-2"><p className="text-xs text-[var(--text-muted)]">La hora prevista se calcula a cinco minutos antes del inicio; el comprobante conserva la hora real del servidor.</p><button disabled={isPublishing} type="submit" className="shrink-0 px-5 py-3 rounded-xl bg-[var(--accent)] text-[var(--accent-fg)] font-extrabold disabled:opacity-50 flex items-center gap-2"><Send size={16}/>{isPublishing ? 'Publicando...' : 'Publicar pick'}</button></div>
+        </form>
+        {error && <div className="bg-[var(--red-10)] border border-[var(--red-30)] text-[var(--red)] rounded-2xl p-4 text-sm">{error}</div>}
+        {publishedPick && <div className="bg-[var(--accent-10)] border border-[var(--accent-30)] rounded-2xl p-5"><p className="font-bold text-[var(--accent)]">{publishedPick.created ? 'Pick publicado y sellado.' : 'Este pick ya existía; no se duplicó.'}</p><a className="inline-block mt-3 font-bold underline text-[var(--text-main)]" href={buildOfficialPickLink(publishedPick.id)} target="_blank" rel="noreferrer">Abrir comprobante público</a></div>}
+    </section>;
+};
+
 // --- APP PRINCIPAL ---
 export default function App() {
     const [initialShare] = useState(() => {
@@ -507,6 +575,7 @@ export default function App() {
     const [isScanning, setIsScanning] = useState(false);
     const [aiMessage, setAiMessage] = useState(''); 
     const [copyingOfficialPickId, setCopyingOfficialPickId] = useState('');
+    const [isOfficialPicksAdmin, setIsOfficialPicksAdmin] = useState(false);
 
     // --- ESTADOS PARA FILTROS DEL DASHBOARD ---
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
@@ -678,6 +747,25 @@ export default function App() {
         });
         return () => unsubscribe();
     }, [viewMode]);
+
+    useEffect(() => {
+        let active = true;
+        const checkAdminAccess = async () => {
+            if (!currentUser || viewMode !== 'personal') {
+                if (active) setIsOfficialPicksAdmin(false);
+                return;
+            }
+            try {
+                const token = await currentUser.getIdToken();
+                const response = await fetch('/api/admin/official-picks', { headers: { Authorization: `Bearer ${token}` } });
+                if (active) setIsOfficialPicksAdmin(response.ok);
+            } catch {
+                if (active) setIsOfficialPicksAdmin(false);
+            }
+        };
+        checkAdminAccess();
+        return () => { active = false; };
+    }, [currentUser, viewMode]);
 
     useEffect(() => {
         if (viewMode === 'visiting') {
@@ -1828,6 +1916,7 @@ export default function App() {
                             <MobileMenuItem icon={LayoutDashboard} label="Dashboard" tabId="dashboard" />
                             <MobileMenuItem icon={List} label="Mis Apuestas" tabId="bets" />
                             <MobileMenuItem icon={ShieldCheck} label="Picks Money Tips" tabId="official-picks" />
+                            {isOfficialPicksAdmin && <MobileMenuItem icon={Send} label="Publicar pick" tabId="official-picks-admin" />}
                             <MobileMenuItem icon={Layers} label="Balances" tabId="balances" />
                             <div className="pt-6 pb-2 px-4 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Configuración</div>
                             <MobileMenuItem icon={Settings} label="Configuración" tabId="settings" />
@@ -1856,6 +1945,7 @@ export default function App() {
                         <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'dashboard' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><LayoutDashboard size={18}/> Dashboard</button>
                         <button onClick={() => setActiveTab('bets')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'bets' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><List size={18}/> Mis Apuestas</button>
                         <button onClick={() => setActiveTab('official-picks')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'official-picks' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><ShieldCheck size={18}/> Picks Money Tips</button>
+                        {isOfficialPicksAdmin && <button onClick={() => setActiveTab('official-picks-admin')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'official-picks-admin' ? 'bg-[var(--accent-10)] text-[var(--accent)] border border-[var(--accent-30)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay)] hover:text-[var(--text-main)]'}`}><Send size={18}/> Publicar pick</button>}
                         <button onClick={() => setActiveTab('balances')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'balances' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><Layers size={18}/> Balances</button>
                         <div className="pt-6 pb-2 px-4 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Configuración</div>
                         <button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'settings' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><Settings size={18}/> Configuración</button>
@@ -1882,7 +1972,7 @@ export default function App() {
                         <h2 className="text-xl font-bold text-[var(--text-main)] tracking-tight">
                             {viewMode === 'visiting' 
                                 ? <span className="text-indigo-500 dark:text-indigo-300 flex items-center gap-2 drop-shadow-sm"><Eye size={20}/> Visitando: {activeBankData?.name}</span> 
-                                : (activeTab === 'dashboard' ? 'Panel de Control' : activeTab === 'bets' ? 'Mis Apuestas' : activeTab === 'official-picks' ? 'Picks Money Tips' : activeTab === 'customization' ? 'Personalización' : activeTab === 'balances' ? 'Balances' : 'Configuración')}
+                                : (activeTab === 'dashboard' ? 'Panel de Control' : activeTab === 'bets' ? 'Mis Apuestas' : activeTab === 'official-picks' ? 'Picks Money Tips' : activeTab === 'official-picks-admin' ? 'Publicar pick' : activeTab === 'customization' ? 'Personalización' : activeTab === 'balances' ? 'Balances' : 'Configuración')}
                         </h2>
                     </div>
                     <div className="flex items-center gap-3">
@@ -2130,6 +2220,10 @@ export default function App() {
                         <div><h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">Picks oficiales de Money Tips</h3><p className="text-sm text-[var(--text-muted)] mt-2 max-w-2xl">Cada pick se publica desde el servidor y mantiene un comprobante con su hora, cuota y evidencia. Añádelo a la banca seleccionada con stake inicial del 1%.</p></div>
                         <OfficialPicksPanel currentBank={activeBankData} copiedPickIds={copiedOfficialPickIds} copyingPickId={copyingOfficialPickId} onCopy={handleCopyOfficialPick} />
                     </section>
+                )}
+
+                {activeTab === 'official-picks-admin' && viewMode === 'personal' && isOfficialPicksAdmin && (
+                    <OfficialPicksAdminPanel currentUser={currentUser} />
                 )}
 
                 {activeTab === 'balances' && viewMode === 'personal' && (
