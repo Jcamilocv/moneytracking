@@ -9,5 +9,15 @@
     "api/cron/refresh-official-snapshots.js": {
       "maxDuration": 300
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/__/auth/:path*",
+      "destination": "https://money-tracking-d908b.firebaseapp.com/__/auth/:path*"
+    },
+    {
+      "source": "/__/firebase/:path*",
+      "destination": "https://money-tracking-d908b.firebaseapp.com/__/firebase/:path*"
+    }
+  ]
 }
