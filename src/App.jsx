@@ -1117,8 +1117,11 @@ export default function App() {
     }, [activeBetsData, activeBankData]);
 
     const copiedOfficialPickIds = useMemo(() => new Set(
-        bets.map((bet) => String(bet.officialPickId || '')).filter(Boolean)
-    ), [bets]);
+        bets
+            .filter((bet) => bet.bankId === activeBankData?.id)
+            .map((bet) => String(bet.officialPickId || ''))
+            .filter(Boolean)
+    ), [bets, activeBankData?.id]);
 
     if (viewMode === 'official-pick') {
         return <OfficialPickPublicPage pickId={publicShareId} theme={theme} />;
@@ -1162,7 +1165,7 @@ export default function App() {
     const handleCopyOfficialPick = async (pick) => {
         if (!currentUser) return showAlert('Inicia sesión para añadir este pick a tu banca.');
         if (!activeBankData || activeBankData.isBalance) return showAlert('Selecciona una banca individual antes de añadir el pick.');
-        if (copiedOfficialPickIds.has(pick.id)) return showAlert('Este pick ya está añadido a esta cuenta.');
+        if (copiedOfficialPickIds.has(pick.id)) return showAlert(`Este pick ya está añadido a ${activeBankData.name}.`);
         const betCountInBank = bets.filter((bet) => bet.bankId === activeBankData.id).length;
         if (betCountInBank >= accountLimits.maxBetsPerBank) return showAlert(`Límite de ${accountLimits.maxBetsPerBank} apuestas por banca alcanzado.`);
 
