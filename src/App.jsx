@@ -15,7 +15,7 @@ import LZString from 'lz-string';
 
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithEmailAndPassword, signInWithRedirect, getRedirectResult, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 import { getFirestore, collection, onSnapshot, addDoc, doc, deleteDoc, updateDoc, setDoc, writeBatch, serverTimestamp } from "firebase/firestore";
 
 // --- CONFIGURACIÓN DE FIREBASE ---
@@ -750,20 +750,6 @@ export default function App() {
 
     useEffect(() => {
         let active = true;
-        getRedirectResult(auth).catch((error) => {
-            console.error('No se pudo completar el acceso con Google:', error);
-            if (!active) return;
-            if (error.code === 'auth/unauthorized-domain') {
-                setAuthError('Este dominio todavía no está autorizado en Firebase. Contacta con Money Tips.');
-            } else {
-                setAuthError('No se pudo completar el acceso con Google. Inténtalo de nuevo.');
-            }
-        });
-        return () => { active = false; };
-    }, []);
-
-    useEffect(() => {
-        let active = true;
         const checkAdminAccess = async () => {
             if (!currentUser || viewMode !== 'personal') {
                 if (active) setIsOfficialPicksAdmin(false);
@@ -1148,10 +1134,16 @@ export default function App() {
         try {
             const provider = new GoogleAuthProvider();
             provider.setCustomParameters({ prompt: 'select_account' });
-            await signInWithRedirect(auth, provider);
+            await signInWithPopup(auth, provider);
         } catch (error) {
             console.error(error);
-            setAuthError('No se pudo iniciar el acceso con Google. Inténtalo de nuevo.');
+            if (error.code === 'auth/popup-closed-by-user') {
+                setAuthError('Has cerrado el acceso con Google antes de completarlo.');
+            } else if (error.code === 'auth/popup-blocked') {
+                setAuthError('Tu navegador ha bloqueado la ventana de Google. Permite las ventanas emergentes e inténtalo de nuevo.');
+            } else {
+                setAuthError('No se pudo iniciar sesión con Google. Inténtalo de nuevo.');
+            }
         }
     };
 
