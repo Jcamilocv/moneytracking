@@ -12,6 +12,14 @@
   },
   "rewrites": [
     {
+      "source": "/api/official-pick-reports",
+      "destination": "/api/official-picks?mode=report"
+    },
+    {
+      "source": "/api/admin/official-pick-reports",
+      "destination": "/api/official-picks?mode=admin-reports"
+    },
+    {
       "source": "/__/auth/:path*",
       "destination": "https://money-tracking-d908b.firebaseapp.com/__/auth/:path*"
     },
