@@ -1,6 +1,8 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { getAdminDb } from './firebase-admin.js';
 import { normalizeOfficialPickInput, publicPickIdFor } from './official-pick-data.js';
+import { attachOfficialPickReviewSummaries } from './official-pick-reports.js';
+import { publishOfficialPickToTelegram } from './telegram.js';
 
 const toPlainValue = (value) => {
     if (value?.toDate && typeof value.toDate === 'function') return value.toDate().toISOString();
@@ -39,15 +41,35 @@ export const publishOfficialPick = async (input) => {
     });
 
     const snapshot = await pickRef.get();
-    return { created, pick: toPublicOfficialPick(snapshot) };
+    const pick = toPublicOfficialPick(snapshot);
+
+    if (created) {
+        try {
+            const telegram = await publishOfficialPickToTelegram(pick);
+            if (telegram.configured) {
+                await pickRef.collection('events').doc('telegram_anchor').set({
+                    type: 'telegram_anchor',
+                    chatId: telegram.chatId,
+                    messageId: telegram.messageId,
+                    permalink: telegram.permalink,
+                    createdAt: FieldValue.serverTimestamp()
+                });
+            }
+        } catch (error) {
+            console.error('No se pudo anclar el pick oficial en Telegram:', error.message);
+        }
+    }
+
+    return { created, pick };
 };
 
 export const listOfficialPicks = async (limit = 20) => {
     const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
     const snapshot = await getAdminDb().collection('officialPicks').orderBy('publishedAt', 'desc').limit(safeLimit).get();
-    return snapshot.docs
+    const picks = snapshot.docs
         .filter((document) => document.data().status === 'published')
         .map(toPublicOfficialPick);
+    return attachOfficialPickReviewSummaries(picks);
 };
 
 export const getOfficialPick = async (pickId) => {
@@ -55,9 +77,9 @@ export const getOfficialPick = async (pickId) => {
     const pickSnapshot = await db.collection('officialPicks').doc(pickId).get();
     if (!pickSnapshot.exists || pickSnapshot.data().status !== 'published') return null;
     const eventsSnapshot = await pickSnapshot.ref.collection('events').orderBy('createdAt', 'asc').get();
+    const [pick] = await attachOfficialPickReviewSummaries([toPublicOfficialPick(pickSnapshot)]);
     return {
-        pick: toPublicOfficialPick(pickSnapshot),
+        pick,
         events: eventsSnapshot.docs.map(toPublicOfficialPick)
     };
 };
-

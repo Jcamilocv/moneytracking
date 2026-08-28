@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
     LayoutDashboard, List, Settings, Plus, TrendingUp, Wallet, Menu, X, 
     ChevronDown, ChevronUp, Trash2, Edit2, CheckCircle2, Crown,
@@ -307,10 +307,40 @@ const getOfficialBetDateParts = (value) => {
 
 const buildOfficialPickLink = (pickId) => `${window.location.origin}${window.location.pathname}?pick=${encodeURIComponent(pickId)}`;
 
-const OfficialPicksPanel = ({ currentBank, copiedPickIds, copyingPickId, onCopy }) => {
+const OFFICIAL_REPORT_CATEGORY_LABELS = {
+    result_incorrect: 'Resultado corregido incorrectamente',
+    market_void: 'Mercado anulado o liquidado de forma distinta',
+    event_postponed: 'Partido aplazado o suspendido',
+    odds_mismatch: 'Cuota publicada no coincide'
+};
+
+const OFFICIAL_REVIEW_LABELS = {
+    confirmed: 'Resultado confirmado tras revisión',
+    correction_published: 'Corrección publicada en el historial'
+};
+
+const OfficialReviewStatus = ({ review }) => {
+    if (!review?.totalReports) return null;
+    const categories = Object.entries(review.categoryCounts || {})
+        .map(([category, count]) => `${OFFICIAL_REPORT_CATEGORY_LABELS[category] || category} (${count})`)
+        .join(' · ');
+    const hasOpenReports = review.openReports > 0;
+    return <div className={`mt-4 rounded-xl border p-3 text-xs ${hasOpenReports ? 'bg-yellow-500/10 border-yellow-500/30 text-[var(--text-main)]' : 'bg-[var(--accent-5)] border-[var(--accent-20)] text-[var(--text-main)]'}`}>
+        <p className="font-bold flex items-center gap-2"><AlertTriangle size={14} className={hasOpenReports ? 'text-[var(--yellow)]' : 'text-[var(--accent)]'}/>{hasOpenReports ? `Incidencia en revisión · ${review.openReports} ${review.openReports === 1 ? 'reporte' : 'reportes'} abierto${review.openReports === 1 ? '' : 's'}` : (OFFICIAL_REVIEW_LABELS[review.status] || 'Revisión finalizada')}</p>
+        {categories && <p className="mt-1 text-[var(--text-muted)]">{categories}</p>}
+        {review.resolution?.message && <p className="mt-2 text-[var(--text-main)]">Resolución: {review.resolution.message}</p>}
+        {review.resolution?.resolvedAt && <p className="mt-1 text-[var(--text-muted)]">Cerrada: {formatOfficialDateTime(review.resolution.resolvedAt)}</p>}
+    </div>;
+};
+
+const OfficialPicksPanel = ({ currentBank, currentUser, copiedPickIds, copyingPickId, onCopy }) => {
     const [picks, setPicks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [reportPick, setReportPick] = useState(null);
+    const [reportCategory, setReportCategory] = useState('');
+    const [reportError, setReportError] = useState('');
+    const [isReporting, setIsReporting] = useState(false);
 
     useEffect(() => {
         let active = true;
@@ -332,6 +362,30 @@ const OfficialPicksPanel = ({ currentBank, copiedPickIds, copyingPickId, onCopy 
         return () => { active = false; };
     }, []);
 
+    const submitReport = async (event) => {
+        event.preventDefault();
+        if (!reportPick || !reportCategory) return;
+        setReportError('');
+        setIsReporting(true);
+        try {
+            const token = await currentUser.getIdToken();
+            const response = await fetch('/api/official-pick-reports', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ pickId: reportPick.id, category: reportCategory })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'No se pudo registrar la incidencia.');
+            setPicks((current) => current.map((pick) => pick.id === reportPick.id ? { ...pick, review: data.review } : pick));
+            setReportPick(null);
+            setReportCategory('');
+        } catch (requestError) {
+            setReportError(requestError.message || 'No se pudo registrar la incidencia.');
+        } finally {
+            setIsReporting(false);
+        }
+    };
+
     if (loading) return <div className="text-sm text-[var(--text-muted)] p-8 text-center">Cargando picks oficiales...</div>;
     if (error) return <div className="bg-[var(--red-10)] border border-[var(--red-30)] text-[var(--red)] rounded-2xl p-5 text-sm">{error}</div>;
     if (picks.length === 0) return <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-10 text-center"><ShieldCheck size={34} className="mx-auto text-[var(--accent)] mb-3"/><h3 className="font-bold text-[var(--text-main)]">Aún no hay picks oficiales</h3><p className="text-sm text-[var(--text-muted)] mt-2">Cuando Money Tips publique uno, aparecerá aquí con su hora de publicación verificable.</p></div>;
@@ -347,11 +401,13 @@ const OfficialPicksPanel = ({ currentBank, copiedPickIds, copyingPickId, onCopy 
                         <h3 className="text-lg md:text-xl font-extrabold text-[var(--text-main)]">{pick.event.homeTeam} <span className="text-[var(--text-muted)] font-medium">vs</span> {pick.event.awayTeam}</h3>
                         <p className="text-sm text-[var(--text-muted)] mt-1">{pick.event.competition} · Inicio: {formatOfficialDateTime(pick.event.kickoffAt)}</p>
                         <div className="mt-4 grid grid-cols-2 gap-3 max-w-lg"><div className="bg-[var(--bg-input)] rounded-xl p-3"><p className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-muted)]">Mercado</p><p className="font-bold text-[var(--text-main)] text-sm mt-1">{pick.bet.market}</p><p className="text-[var(--accent)] text-sm mt-1">{pick.bet.selection}</p></div><div className="bg-[var(--bg-input)] rounded-xl p-3"><p className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-muted)]">Cuota publicada</p><p className="font-extrabold text-[var(--accent)] text-xl mt-1">@{Number(pick.bet.oddsAtPublication).toFixed(2)}</p><p className="text-[10px] text-[var(--text-muted)] mt-1">Sistema {pick.system.id} · {pick.system.version}</p></div></div>
+                        <OfficialReviewStatus review={pick.review} />
                     </div>
-                    <div className="flex flex-col gap-2 shrink-0 md:w-52"><a href={buildOfficialPickLink(pick.id)} target="_blank" rel="noreferrer" className="text-center px-4 py-2.5 rounded-xl border border-[var(--border)] text-sm font-bold text-[var(--text-main)] hover:bg-[var(--bg-hover)]">Ver comprobante</a><button onClick={() => onCopy(pick)} disabled={copied || cannotCopy || copyingPickId === pick.id} className="px-4 py-3 rounded-xl text-sm font-extrabold bg-[var(--accent)] text-[var(--accent-fg)] disabled:opacity-50 disabled:cursor-not-allowed">{copied ? 'Añadido a tu banca' : copyingPickId === pick.id ? 'Añadiendo...' : 'Añadir a mi banca'}</button>{cannotCopy && <p className="text-[10px] text-[var(--text-muted)] text-center">Selecciona una banca individual para copiarlo.</p>}<p className="text-[10px] text-[var(--text-muted)] text-center">Copia al 1% de la banca; podrás editarla.</p></div>
+                    <div className="flex flex-col gap-2 shrink-0 md:w-52"><a href={buildOfficialPickLink(pick.id)} target="_blank" rel="noreferrer" className="text-center px-4 py-2.5 rounded-xl border border-[var(--border)] text-sm font-bold text-[var(--text-main)] hover:bg-[var(--bg-hover)]">Ver comprobante</a><button onClick={() => onCopy(pick)} disabled={copied || cannotCopy || copyingPickId === pick.id} className="px-4 py-3 rounded-xl text-sm font-extrabold bg-[var(--accent)] text-[var(--accent-fg)] disabled:opacity-50 disabled:cursor-not-allowed">{copied ? 'Añadido a tu banca' : copyingPickId === pick.id ? 'Añadiendo...' : 'Añadir a mi banca'}</button><button onClick={() => { setReportPick(pick); setReportCategory(''); setReportError(''); }} className="px-4 py-2.5 rounded-xl border border-yellow-500/30 text-sm font-bold text-[var(--text-main)] hover:bg-yellow-500/10">Reportar incidencia</button>{cannotCopy && <p className="text-[10px] text-[var(--text-muted)] text-center">Selecciona una banca individual para copiarlo.</p>}<p className="text-[10px] text-[var(--text-muted)] text-center">Copia al 1% de la banca; podrás editarla.</p></div>
                 </div>
             </article>;
         })}
+        {reportPick && <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md"><form onSubmit={submitReport} className="w-full max-w-md bg-[var(--bg-card)] border border-[var(--border-strong)] rounded-3xl p-6 shadow-2xl"><div className="flex items-center gap-2 text-[var(--yellow)]"><AlertTriangle size={18}/><p className="font-bold text-sm uppercase tracking-wider">Reportar incidencia</p></div><h4 className="mt-3 text-lg font-extrabold text-[var(--text-main)]">{reportPick.event.homeTeam} vs {reportPick.event.awayTeam}</h4><p className="text-sm text-[var(--text-muted)] mt-2">El reporte será visible como una incidencia agregada y anónima. No modifica el pick original.</p><label className="block mt-5"><span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Motivo</span><select required value={reportCategory} onChange={(event) => setReportCategory(event.target.value)} className="w-full mt-2 bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-3 text-[var(--text-main)]"><option value="">Selecciona un motivo</option>{Object.entries(OFFICIAL_REPORT_CATEGORY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{reportError && <p className="mt-3 text-sm text-[var(--red)]">{reportError}</p>}<div className="flex gap-3 mt-6"><button type="button" onClick={() => setReportPick(null)} disabled={isReporting} className="flex-1 px-4 py-3 rounded-xl border border-[var(--border)] font-bold text-[var(--text-main)]">Cancelar</button><button type="submit" disabled={!reportCategory || isReporting} className="flex-1 px-4 py-3 rounded-xl bg-[var(--accent)] text-[var(--accent-fg)] font-extrabold disabled:opacity-50">{isReporting ? 'Enviando...' : 'Enviar reporte'}</button></div></form></div>}
     </div>;
 };
 
@@ -381,13 +437,74 @@ const OfficialPickPublicPage = ({ pickId, theme }) => {
         return () => { active = false; };
     }, [pickId]);
 
-    return <><style>{getGlobalStyles(theme)}</style><LiquidBackground theme={theme}/><main className="min-h-screen p-4 md:p-8 flex items-center justify-center"><section className="w-full max-w-2xl bg-[var(--bg-card)] border border-[var(--border)] rounded-[2rem] shadow-[var(--shadow-glow-md)] overflow-hidden"><header className="p-6 md:p-8 border-b border-[var(--border)]"><div className="flex items-center gap-2 text-[var(--accent)] font-bold text-xs uppercase tracking-widest"><ShieldCheck size={16}/> Comprobante oficial Money Tips</div><h1 className="mt-3 text-2xl md:text-3xl font-extrabold text-[var(--text-main)]">{pick ? `${pick.event.homeTeam} vs ${pick.event.awayTeam}` : 'Verificando pick'}</h1><p className="text-sm text-[var(--text-muted)] mt-2">Registro sellado por servidor. Este documento no se puede editar desde la aplicación.</p></header><div className="p-6 md:p-8">{error ? <div className="text-[var(--red)] bg-[var(--red-10)] border border-[var(--red-30)] rounded-2xl p-5 text-sm">{error}</div> : !pick ? <div className="text-center text-[var(--text-muted)] py-10">Cargando comprobante...</div> : <div className="space-y-6"><div className="grid sm:grid-cols-2 gap-4"><div className="bg-[var(--bg-input)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Pronóstico</p><p className="font-bold text-[var(--text-main)] mt-2">{pick.bet.market}</p><p className="text-[var(--accent)] font-bold mt-1">{pick.bet.selection} · @{Number(pick.bet.oddsAtPublication).toFixed(2)}</p></div><div className="bg-[var(--bg-input)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Horario</p><p className="font-bold text-[var(--text-main)] mt-2">Inicio: {formatOfficialDateTime(pick.event.kickoffAt)}</p><p className="text-[var(--accent)] text-sm mt-1">Publicado: {formatOfficialDateTime(pick.publishedAt)}</p></div></div><div className="border border-[var(--border)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Evidencia</p><p className="text-sm text-[var(--text-main)] mt-2">Sistema: {pick.system.id} · versión {pick.system.version}</p><p className="text-xs font-mono break-all text-[var(--text-muted)] mt-2">SHA-256: {pick.source.evidenceHash}</p></div><div><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Historial del registro</p><div className="space-y-2">{events.map((event) => <div key={event.id} className="flex items-center justify-between gap-3 text-sm bg-[var(--bg-input)] rounded-xl px-4 py-3"><span className="font-bold text-[var(--text-main)]">{event.type}</span><span className="text-[var(--text-muted)] text-xs">{formatOfficialDateTime(event.createdAt)}</span></div>)}</div></div></div>}</div><footer className="p-6 border-t border-[var(--border)]"><a href={window.location.pathname} className="block text-center bg-[var(--accent)] text-[var(--accent-fg)] rounded-xl py-3 font-bold">Abrir MoneyTracKING</a></footer></section></main></>;
+    const eventLabel = (event) => {
+        if (event.type === 'published') return 'Pick publicado por el servidor';
+        if (event.type === 'telegram_anchor') return 'Anclado en Telegram';
+        return OFFICIAL_REVIEW_LABELS[event.type] || event.type;
+    };
+
+    return <><style>{getGlobalStyles(theme)}</style><LiquidBackground theme={theme}/><main className="min-h-screen p-4 md:p-8 flex items-center justify-center"><section className="w-full max-w-2xl bg-[var(--bg-card)] border border-[var(--border)] rounded-[2rem] shadow-[var(--shadow-glow-md)] overflow-hidden"><header className="p-6 md:p-8 border-b border-[var(--border)]"><div className="flex items-center gap-2 text-[var(--accent)] font-bold text-xs uppercase tracking-widest"><ShieldCheck size={16}/> Comprobante oficial Money Tips</div><h1 className="mt-3 text-2xl md:text-3xl font-extrabold text-[var(--text-main)]">{pick ? `${pick.event.homeTeam} vs ${pick.event.awayTeam}` : 'Verificando pick'}</h1><p className="text-sm text-[var(--text-muted)] mt-2">Registro sellado por servidor. Este documento no se puede editar desde la aplicación.</p></header><div className="p-6 md:p-8">{error ? <div className="text-[var(--red)] bg-[var(--red-10)] border border-[var(--red-30)] rounded-2xl p-5 text-sm">{error}</div> : !pick ? <div className="text-center text-[var(--text-muted)] py-10">Cargando comprobante...</div> : <div className="space-y-6"><div className="grid sm:grid-cols-2 gap-4"><div className="bg-[var(--bg-input)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Pronóstico</p><p className="font-bold text-[var(--text-main)] mt-2">{pick.bet.market}</p><p className="text-[var(--accent)] font-bold mt-1">{pick.bet.selection} · @{Number(pick.bet.oddsAtPublication).toFixed(2)}</p></div><div className="bg-[var(--bg-input)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Horario</p><p className="font-bold text-[var(--text-main)] mt-2">Inicio: {formatOfficialDateTime(pick.event.kickoffAt)}</p><p className="text-[var(--accent)] text-sm mt-1">Publicado: {formatOfficialDateTime(pick.publishedAt)}</p></div></div><div className="border border-[var(--border)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Evidencia</p><p className="text-sm text-[var(--text-main)] mt-2">Sistema: {pick.system.id} · versión {pick.system.version}</p><p className="text-xs font-mono break-all text-[var(--text-muted)] mt-2">SHA-256: {pick.source.evidenceHash}</p></div><OfficialReviewStatus review={pick.review} /><div><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Historial del registro</p><div className="space-y-2">{events.map((event) => <div key={event.id} className="flex items-center justify-between gap-3 text-sm bg-[var(--bg-input)] rounded-xl px-4 py-3"><div><p className="font-bold text-[var(--text-main)]">{eventLabel(event)}</p>{event.message && <p className="text-xs text-[var(--text-muted)] mt-1">{event.message}</p>}{event.permalink && <a href={event.permalink} target="_blank" rel="noreferrer" className="inline-block text-xs text-[var(--accent)] font-bold mt-1">Ver mensaje de Telegram</a>}</div><span className="text-[var(--text-muted)] text-xs shrink-0">{formatOfficialDateTime(event.createdAt)}</span></div>)}</div></div></div>}</div><footer className="p-6 border-t border-[var(--border)]"><a href={window.location.pathname} className="block text-center bg-[var(--accent)] text-[var(--accent-fg)] rounded-xl py-3 font-bold">Abrir MoneyTracKING</a></footer></section></main></>;
 };
 
 const emptyOfficialPickForm = () => ({
     sourceEventId: '', competition: '', homeTeam: '', awayTeam: '', kickoffAt: '',
     market: '', selection: '', oddsAtPublication: '', systemId: '', systemVersion: 'v1', sourceProvider: 'money-tips-owned'
 });
+
+const OfficialPickReportsAdminPanel = ({ currentUser }) => {
+    const [reports, setReports] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [messages, setMessages] = useState({});
+    const [resolvingPickId, setResolvingPickId] = useState('');
+
+    const loadReports = useCallback(async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const token = await currentUser.getIdToken();
+            const response = await fetch('/api/admin/official-pick-reports', { headers: { Authorization: `Bearer ${token}` } });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'No se pudieron cargar las incidencias.');
+            setReports(Array.isArray(data.reports) ? data.reports : []);
+        } catch (requestError) {
+            setError(requestError.message || 'No se pudieron cargar las incidencias.');
+        } finally {
+            setLoading(false);
+        }
+    }, [currentUser]);
+
+    useEffect(() => { loadReports(); }, [loadReports]);
+
+    const resolve = async (pickId, decision) => {
+        const label = OFFICIAL_REVIEW_LABELS[decision];
+        if (!window.confirm(`${label}. Esta resolución se añadirá al historial público sin borrar el pick original. ¿Continuar?`)) return;
+        setResolvingPickId(pickId);
+        setError('');
+        try {
+            const token = await currentUser.getIdToken();
+            const response = await fetch('/api/admin/official-pick-reports', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ pickId, decision, message: messages[pickId] || '' })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'No se pudo cerrar la incidencia.');
+            await loadReports();
+        } catch (requestError) {
+            setError(requestError.message || 'No se pudo cerrar la incidencia.');
+        } finally {
+            setResolvingPickId('');
+        }
+    };
+
+    const groupedReports = reports.reduce((groups, report) => {
+        (groups[report.pickId] ||= []).push(report);
+        return groups;
+    }, {});
+
+    return <section className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 md:p-7 space-y-4"><div className="flex items-start justify-between gap-4"><div><h4 className="font-extrabold text-[var(--text-main)]">Incidencias abiertas</h4><p className="text-sm text-[var(--text-muted)] mt-1">Los usuarios solo ven el estado agregado. Aquí cierras la revisión y dejas la resolución pública.</p></div><button onClick={loadReports} className="px-3 py-2 rounded-xl border border-[var(--border)] text-xs font-bold text-[var(--text-main)]">Actualizar</button></div>{loading ? <p className="text-sm text-[var(--text-muted)]">Cargando incidencias…</p> : error ? <p className="text-sm text-[var(--red)]">{error}</p> : Object.keys(groupedReports).length === 0 ? <p className="text-sm text-[var(--text-muted)]">No hay incidencias abiertas.</p> : <div className="space-y-4">{Object.entries(groupedReports).map(([pickId, pickReports]) => <article key={pickId} className="rounded-2xl bg-[var(--bg-input)] border border-[var(--border)] p-4"><p className="font-mono text-xs text-[var(--text-muted)] break-all">{pickId}</p><p className="mt-2 text-sm font-bold text-[var(--text-main)]">{pickReports.length} {pickReports.length === 1 ? 'reporte' : 'reportes'}: {pickReports.map((report) => OFFICIAL_REPORT_CATEGORY_LABELS[report.category]).join(' · ')}</p><textarea value={messages[pickId] || ''} onChange={(event) => setMessages((current) => ({ ...current, [pickId]: event.target.value }))} maxLength={240} placeholder="Resolución pública opcional (máx. 240 caracteres)" className="w-full mt-3 min-h-20 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-[var(--accent)]"/><div className="flex flex-col sm:flex-row gap-2 mt-3"><button disabled={resolvingPickId === pickId} onClick={() => resolve(pickId, 'confirmed')} className="px-3 py-2.5 rounded-xl border border-[var(--accent-30)] text-sm font-bold text-[var(--text-main)] disabled:opacity-50">Confirmar resultado</button><button disabled={resolvingPickId === pickId} onClick={() => resolve(pickId, 'correction_published')} className="px-3 py-2.5 rounded-xl bg-[var(--accent)] text-[var(--accent-fg)] text-sm font-extrabold disabled:opacity-50">Publicar corrección</button></div></article>)}</div>}</section>;
+};
 
 const OfficialPicksAdminPanel = ({ currentUser }) => {
     const [form, setForm] = useState(emptyOfficialPickForm);
@@ -449,6 +566,7 @@ const OfficialPicksAdminPanel = ({ currentUser }) => {
         </form>
         {error && <div className="bg-[var(--red-10)] border border-[var(--red-30)] text-[var(--red)] rounded-2xl p-4 text-sm">{error}</div>}
         {publishedPick && <div className="bg-[var(--accent-10)] border border-[var(--accent-30)] rounded-2xl p-5"><p className="font-bold text-[var(--accent)]">{publishedPick.created ? 'Pick publicado y sellado.' : 'Este pick ya existía; no se duplicó.'}</p><a className="inline-block mt-3 font-bold underline text-[var(--text-main)]" href={buildOfficialPickLink(publishedPick.id)} target="_blank" rel="noreferrer">Abrir comprobante público</a></div>}
+        <OfficialPickReportsAdminPanel currentUser={currentUser} />
     </section>;
 };
 
@@ -2229,7 +2347,7 @@ export default function App() {
                 {activeTab === 'official-picks' && viewMode === 'personal' && (
                     <section className="space-y-6 w-full">
                         <div><h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">Picks oficiales de Money Tips</h3><p className="text-sm text-[var(--text-muted)] mt-2 max-w-2xl">Cada pick se publica desde el servidor y mantiene un comprobante con su hora, cuota y evidencia. Añádelo a la banca seleccionada con stake inicial del 1%.</p></div>
-                        <OfficialPicksPanel currentBank={activeBankData} copiedPickIds={copiedOfficialPickIds} copyingPickId={copyingOfficialPickId} onCopy={handleCopyOfficialPick} />
+                        <OfficialPicksPanel currentBank={activeBankData} currentUser={currentUser} copiedPickIds={copiedOfficialPickIds} copyingPickId={copyingOfficialPickId} onCopy={handleCopyOfficialPick} />
                     </section>
                 )}
 

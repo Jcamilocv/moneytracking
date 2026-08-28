@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test:rules": "node --test tests/firestore.rules.test.mjs",
     "test:snapshots": "node --test tests/official-snapshot-data.test.mjs",
-    "test:official-picks": "node --test tests/official-pick-data.test.mjs"
+    "test:official-picks": "node --test tests/official-pick-data.test.mjs tests/official-pick-reports.test.mjs"
   },
   "dependencies": {
     "firebase": "^11.10.0",
