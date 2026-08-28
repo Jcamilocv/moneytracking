@@ -140,6 +140,16 @@ test('solo el UID propietario puede leer y escribir el CRM', async () => {
   await assertFails(setDoc(otherRef, validAdminCrm()));
 });
 
+test('ningún navegador puede leer o escribir el ledger de picks oficiales', async () => {
+  const signedInDb = testEnvironment.authenticatedContext('user-a').firestore();
+  const anonymousDb = testEnvironment.unauthenticatedContext().firestore();
+  const pickRef = doc(signedInDb, 'officialPicks', 'op_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+
+  await assertFails(setDoc(pickRef, { status: 'published' }));
+  await assertFails(getDoc(doc(anonymousDb, 'officialPicks', 'op_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')));
+  await assertFails(setDoc(doc(signedInDb, 'officialPicks', 'op_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'events', 'published'), { type: 'published' }));
+});
+
 test('las reglas existentes de MoneyTracking conservan el aislamiento por propietario', async () => {
   const ownerDb = testEnvironment.authenticatedContext('user-a').firestore();
   const strangerDb = testEnvironment.authenticatedContext('user-b').firestore();

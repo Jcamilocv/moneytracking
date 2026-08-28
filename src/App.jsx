@@ -278,14 +278,124 @@ const RenderCompactStatus = ({ status }) => {
     return <span className="text-[var(--text-muted)] font-extrabold text-xs block text-center uppercase">{status}</span>;
 };
 
+const formatOfficialDateTime = (value) => {
+    if (!value) return 'Pendiente de confirmar';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Fecha no válida';
+    return new Intl.DateTimeFormat('es-ES', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: 'Europe/Madrid'
+    }).format(date);
+};
+
+const getOfficialBetDateParts = (value) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return { date: new Date().toISOString().slice(0, 10), time: '00:00' };
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/Madrid',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23'
+    });
+    const values = Object.fromEntries(formatter.formatToParts(date).map((part) => [part.type, part.value]));
+    return { date: `${values.year}-${values.month}-${values.day}`, time: `${values.hour}:${values.minute}` };
+};
+
+const buildOfficialPickLink = (pickId) => `${window.location.origin}${window.location.pathname}?pick=${encodeURIComponent(pickId)}`;
+
+const OfficialPicksPanel = ({ currentBank, copiedPickIds, copyingPickId, onCopy }) => {
+    const [picks, setPicks] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        let active = true;
+        const load = async () => {
+            try {
+                const response = await fetch('/api/official-picks?limit=20');
+                const isJson = response.headers.get('content-type')?.includes('application/json');
+                if (!isJson) throw new Error('El servicio de picks oficiales no está disponible en esta vista local.');
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'No se pudieron cargar los picks oficiales.');
+                if (active) setPicks(Array.isArray(data.picks) ? data.picks : []);
+            } catch (requestError) {
+                if (active) setError(requestError.message || 'No se pudieron cargar los picks oficiales.');
+            } finally {
+                if (active) setLoading(false);
+            }
+        };
+        load();
+        return () => { active = false; };
+    }, []);
+
+    if (loading) return <div className="text-sm text-[var(--text-muted)] p-8 text-center">Cargando picks oficiales...</div>;
+    if (error) return <div className="bg-[var(--red-10)] border border-[var(--red-30)] text-[var(--red)] rounded-2xl p-5 text-sm">{error}</div>;
+    if (picks.length === 0) return <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-10 text-center"><ShieldCheck size={34} className="mx-auto text-[var(--accent)] mb-3"/><h3 className="font-bold text-[var(--text-main)]">Aún no hay picks oficiales</h3><p className="text-sm text-[var(--text-muted)] mt-2">Cuando Money Tips publique uno, aparecerá aquí con su hora de publicación verificable.</p></div>;
+
+    return <div className="space-y-4">
+        {picks.map((pick) => {
+            const copied = copiedPickIds.has(pick.id);
+            const cannotCopy = !currentBank || currentBank.isBalance;
+            return <article key={pick.id} className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 md:p-6 shadow-sm">
+                <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-3"><span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-[var(--accent-10)] text-[var(--accent)] border border-[var(--accent-20)]"><ShieldCheck size={12} className="inline mr-1"/>Pick oficial</span><span className="text-xs text-[var(--text-muted)]">Publicado: {formatOfficialDateTime(pick.publishedAt)}</span></div>
+                        <h3 className="text-lg md:text-xl font-extrabold text-[var(--text-main)]">{pick.event.homeTeam} <span className="text-[var(--text-muted)] font-medium">vs</span> {pick.event.awayTeam}</h3>
+                        <p className="text-sm text-[var(--text-muted)] mt-1">{pick.event.competition} · Inicio: {formatOfficialDateTime(pick.event.kickoffAt)}</p>
+                        <div className="mt-4 grid grid-cols-2 gap-3 max-w-lg"><div className="bg-[var(--bg-input)] rounded-xl p-3"><p className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-muted)]">Mercado</p><p className="font-bold text-[var(--text-main)] text-sm mt-1">{pick.bet.market}</p><p className="text-[var(--accent)] text-sm mt-1">{pick.bet.selection}</p></div><div className="bg-[var(--bg-input)] rounded-xl p-3"><p className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-muted)]">Cuota publicada</p><p className="font-extrabold text-[var(--accent)] text-xl mt-1">@{Number(pick.bet.oddsAtPublication).toFixed(2)}</p><p className="text-[10px] text-[var(--text-muted)] mt-1">Sistema {pick.system.id} · {pick.system.version}</p></div></div>
+                    </div>
+                    <div className="flex flex-col gap-2 shrink-0 md:w-52"><a href={buildOfficialPickLink(pick.id)} target="_blank" rel="noreferrer" className="text-center px-4 py-2.5 rounded-xl border border-[var(--border)] text-sm font-bold text-[var(--text-main)] hover:bg-[var(--bg-hover)]">Ver comprobante</a><button onClick={() => onCopy(pick)} disabled={copied || cannotCopy || copyingPickId === pick.id} className="px-4 py-3 rounded-xl text-sm font-extrabold bg-[var(--accent)] text-[var(--accent-fg)] disabled:opacity-50 disabled:cursor-not-allowed">{copied ? 'Añadido a tu banca' : copyingPickId === pick.id ? 'Añadiendo...' : 'Añadir a mi banca'}</button>{cannotCopy && <p className="text-[10px] text-[var(--text-muted)] text-center">Selecciona una banca individual para copiarlo.</p>}<p className="text-[10px] text-[var(--text-muted)] text-center">Copia al 1% de la banca; podrás editarla.</p></div>
+                </div>
+            </article>;
+        })}
+    </div>;
+};
+
+const OfficialPickPublicPage = ({ pickId, theme }) => {
+    const [pick, setPick] = useState(null);
+    const [events, setEvents] = useState([]);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        let active = true;
+        const load = async () => {
+            try {
+                const response = await fetch(`/api/official-picks?pick=${encodeURIComponent(pickId)}`);
+                const isJson = response.headers.get('content-type')?.includes('application/json');
+                if (!isJson) throw new Error('El comprobante no está disponible en esta vista local.');
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'El comprobante no está disponible.');
+                if (active) {
+                    setPick(data.pick || null);
+                    setEvents(Array.isArray(data.events) ? data.events : []);
+                }
+            } catch (requestError) {
+                if (active) setError(requestError.message || 'El comprobante no está disponible.');
+            }
+        };
+        load();
+        return () => { active = false; };
+    }, [pickId]);
+
+    return <><style>{getGlobalStyles(theme)}</style><LiquidBackground theme={theme}/><main className="min-h-screen p-4 md:p-8 flex items-center justify-center"><section className="w-full max-w-2xl bg-[var(--bg-card)] border border-[var(--border)] rounded-[2rem] shadow-[var(--shadow-glow-md)] overflow-hidden"><header className="p-6 md:p-8 border-b border-[var(--border)]"><div className="flex items-center gap-2 text-[var(--accent)] font-bold text-xs uppercase tracking-widest"><ShieldCheck size={16}/> Comprobante oficial Money Tips</div><h1 className="mt-3 text-2xl md:text-3xl font-extrabold text-[var(--text-main)]">{pick ? `${pick.event.homeTeam} vs ${pick.event.awayTeam}` : 'Verificando pick'}</h1><p className="text-sm text-[var(--text-muted)] mt-2">Registro sellado por servidor. Este documento no se puede editar desde la aplicación.</p></header><div className="p-6 md:p-8">{error ? <div className="text-[var(--red)] bg-[var(--red-10)] border border-[var(--red-30)] rounded-2xl p-5 text-sm">{error}</div> : !pick ? <div className="text-center text-[var(--text-muted)] py-10">Cargando comprobante...</div> : <div className="space-y-6"><div className="grid sm:grid-cols-2 gap-4"><div className="bg-[var(--bg-input)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Pronóstico</p><p className="font-bold text-[var(--text-main)] mt-2">{pick.bet.market}</p><p className="text-[var(--accent)] font-bold mt-1">{pick.bet.selection} · @{Number(pick.bet.oddsAtPublication).toFixed(2)}</p></div><div className="bg-[var(--bg-input)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Horario</p><p className="font-bold text-[var(--text-main)] mt-2">Inicio: {formatOfficialDateTime(pick.event.kickoffAt)}</p><p className="text-[var(--accent)] text-sm mt-1">Publicado: {formatOfficialDateTime(pick.publishedAt)}</p></div></div><div className="border border-[var(--border)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Evidencia</p><p className="text-sm text-[var(--text-main)] mt-2">Sistema: {pick.system.id} · versión {pick.system.version}</p><p className="text-xs font-mono break-all text-[var(--text-muted)] mt-2">SHA-256: {pick.source.evidenceHash}</p></div><div><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Historial del registro</p><div className="space-y-2">{events.map((event) => <div key={event.id} className="flex items-center justify-between gap-3 text-sm bg-[var(--bg-input)] rounded-xl px-4 py-3"><span className="font-bold text-[var(--text-main)]">{event.type}</span><span className="text-[var(--text-muted)] text-xs">{formatOfficialDateTime(event.createdAt)}</span></div>)}</div></div></div>}</div><footer className="p-6 border-t border-[var(--border)]"><a href={window.location.pathname} className="block text-center bg-[var(--accent)] text-[var(--accent-fg)] rounded-xl py-3 font-bold">Abrir MoneyTracKING</a></footer></section></main></>;
+};
+
 // --- APP PRINCIPAL ---
 export default function App() {
     const [initialShare] = useState(() => {
         if (typeof window === 'undefined') return { mode: 'personal', uid: null, bid: null, shareId: null, isEmbed: false };
         const params = new URLSearchParams(window.location.search);
         const publicShareId = params.get('p');
+        const officialPickId = params.get('pick');
         const sData = params.get('s');
         const isEmbed = params.get('embed') === 'true'; 
+        if (officialPickId && /^[A-Za-z0-9_-]{16,100}$/.test(officialPickId)) {
+            return { mode: 'official-pick', uid: null, bid: null, shareId: officialPickId, isEmbed: false };
+        }
         if (publicShareId && /^[A-Za-z0-9_-]{16,80}$/.test(publicShareId)) {
             return { mode: 'visiting', uid: null, bid: null, shareId: publicShareId, isEmbed };
         }
@@ -396,6 +506,7 @@ export default function App() {
     
     const [isScanning, setIsScanning] = useState(false);
     const [aiMessage, setAiMessage] = useState(''); 
+    const [copyingOfficialPickId, setCopyingOfficialPickId] = useState('');
 
     // --- ESTADOS PARA FILTROS DEL DASHBOARD ---
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
@@ -903,6 +1014,14 @@ export default function App() {
         };
     }, [activeBetsData, activeBankData]);
 
+    const copiedOfficialPickIds = useMemo(() => new Set(
+        bets.map((bet) => String(bet.officialPickId || '')).filter(Boolean)
+    ), [bets]);
+
+    if (viewMode === 'official-pick') {
+        return <OfficialPickPublicPage pickId={publicShareId} theme={theme} />;
+    }
+
     const handleAuth = async (e) => {
         e.preventDefault();
         setAuthError('');
@@ -942,6 +1061,66 @@ export default function App() {
 
     const handleLogout = async () => {
         await signOut(auth);
+    };
+
+    const handleCopyOfficialPick = async (pick) => {
+        if (!currentUser) return showAlert('Inicia sesión para añadir este pick a tu banca.');
+        if (!activeBankData || activeBankData.isBalance) return showAlert('Selecciona una banca individual antes de añadir el pick.');
+        if (copiedOfficialPickIds.has(pick.id)) return showAlert('Este pick ya está añadido a esta cuenta.');
+        const betCountInBank = bets.filter((bet) => bet.bankId === activeBankData.id).length;
+        if (betCountInBank >= accountLimits.maxBetsPerBank) return showAlert(`Límite de ${accountLimits.maxBetsPerBank} apuestas por banca alcanzado.`);
+
+        const { date, time } = getOfficialBetDateParts(pick.event.kickoffAt);
+        const capital = Number(activeBankData.initialCapital) || 0;
+        const amount = Math.max(0, Number((capital * 0.01).toFixed(2)));
+        const betData = {
+            date,
+            time,
+            bookmaker: 'Money Tips',
+            betMode: 'simple',
+            title: `${pick.event.homeTeam} vs ${pick.event.awayTeam}`,
+            selection: pick.bet.selection,
+            status: 'pending',
+            category: 'Money Tips',
+            odds: Number(pick.bet.oddsAtPublication),
+            amount,
+            stake: 1,
+            analysis: `Pick oficial Money Tips. Publicado: ${formatOfficialDateTime(pick.publishedAt)}. Comprobante: ${buildOfficialPickLink(pick.id)}`,
+            bankId: activeBankData.id,
+            createdAt: new Date().toISOString(),
+            copiedAt: serverTimestamp(),
+            officialPickId: pick.id,
+            officialPublishedAt: pick.publishedAt,
+            copiedOdds: Number(pick.bet.oddsAtPublication),
+            isOfficialPickCopy: true,
+            isBack: true,
+            isLive: false,
+            isFreebet: false,
+            isEachWay: false,
+            isHidden: false,
+            selections: [{
+                id: `official-${pick.id}`,
+                title: `${pick.event.homeTeam} vs ${pick.event.awayTeam}`,
+                selection: pick.bet.selection,
+                sport: 'Fútbol',
+                status: 'pending',
+                category: 'Money Tips',
+                competition: pick.event.competition,
+                odds: Number(pick.bet.oddsAtPublication),
+                isOpen: true
+            }]
+        };
+
+        setCopyingOfficialPickId(pick.id);
+        try {
+            await addDoc(collection(db, 'users', currentUser.uid, 'bets'), betData);
+            showAlert(`Pick añadido a ${activeBankData.name} con stake inicial del 1%. Puedes editarlo antes de apostar.`);
+        } catch (error) {
+            console.error('Error copiando pick oficial:', error);
+            showAlert('No se pudo añadir el pick a tu banca. Inténtalo de nuevo.');
+        } finally {
+            setCopyingOfficialPickId('');
+        }
     };
 
     const showAlert = (message) => setFeedbackModal({ isOpen: true, type: 'alert', message, onConfirm: null });
@@ -1648,6 +1827,7 @@ export default function App() {
                         <nav className="space-y-2 w-full">
                             <MobileMenuItem icon={LayoutDashboard} label="Dashboard" tabId="dashboard" />
                             <MobileMenuItem icon={List} label="Mis Apuestas" tabId="bets" />
+                            <MobileMenuItem icon={ShieldCheck} label="Picks Money Tips" tabId="official-picks" />
                             <MobileMenuItem icon={Layers} label="Balances" tabId="balances" />
                             <div className="pt-6 pb-2 px-4 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Configuración</div>
                             <MobileMenuItem icon={Settings} label="Configuración" tabId="settings" />
@@ -1675,6 +1855,7 @@ export default function App() {
                     <><nav className="p-4 space-y-2 flex-1 w-full">
                         <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'dashboard' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><LayoutDashboard size={18}/> Dashboard</button>
                         <button onClick={() => setActiveTab('bets')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'bets' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><List size={18}/> Mis Apuestas</button>
+                        <button onClick={() => setActiveTab('official-picks')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'official-picks' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><ShieldCheck size={18}/> Picks Money Tips</button>
                         <button onClick={() => setActiveTab('balances')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'balances' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><Layers size={18}/> Balances</button>
                         <div className="pt-6 pb-2 px-4 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Configuración</div>
                         <button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === 'settings' ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}><Settings size={18}/> Configuración</button>
@@ -1701,7 +1882,7 @@ export default function App() {
                         <h2 className="text-xl font-bold text-[var(--text-main)] tracking-tight">
                             {viewMode === 'visiting' 
                                 ? <span className="text-indigo-500 dark:text-indigo-300 flex items-center gap-2 drop-shadow-sm"><Eye size={20}/> Visitando: {activeBankData?.name}</span> 
-                                : (activeTab === 'dashboard' ? 'Panel de Control' : activeTab === 'bets' ? 'Mis Apuestas' : activeTab === 'customization' ? 'Personalización' : activeTab === 'balances' ? 'Balances' : 'Configuración')}
+                                : (activeTab === 'dashboard' ? 'Panel de Control' : activeTab === 'bets' ? 'Mis Apuestas' : activeTab === 'official-picks' ? 'Picks Money Tips' : activeTab === 'customization' ? 'Personalización' : activeTab === 'balances' ? 'Balances' : 'Configuración')}
                         </h2>
                     </div>
                     <div className="flex items-center gap-3">
@@ -1942,6 +2123,13 @@ export default function App() {
                         ))}
                     </div>}
                     </div>
+                )}
+
+                {activeTab === 'official-picks' && viewMode === 'personal' && (
+                    <section className="space-y-6 w-full">
+                        <div><h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">Picks oficiales de Money Tips</h3><p className="text-sm text-[var(--text-muted)] mt-2 max-w-2xl">Cada pick se publica desde el servidor y mantiene un comprobante con su hora, cuota y evidencia. Añádelo a la banca seleccionada con stake inicial del 1%.</p></div>
+                        <OfficialPicksPanel currentBank={activeBankData} copiedPickIds={copiedOfficialPickIds} copyingPickId={copyingOfficialPickId} onCopy={handleCopyOfficialPick} />
+                    </section>
                 )}
 
                 {activeTab === 'balances' && viewMode === 'personal' && (
