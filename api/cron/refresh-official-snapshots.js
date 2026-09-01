@@ -1,5 +1,5 @@
 import { refreshOfficialSnapshots } from '../lib/official-snapshots.js';
-import { dispatchDueOfficialPicks } from '../lib/official-pick-queue.js';
+import { dispatchDueOfficialPicks } from '../../server/official-pick-queue.js';
 
 const hasDispatcherAuthorization = (req) => {
     const secret = process.env.OFFICIAL_PICKS_DISPATCHER_SECRET;

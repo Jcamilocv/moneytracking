@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { normalizePublicationPolicy, scheduledAtForOfficialPick } from './official-pick-scheduling.js';
+import { normalizePublicationPolicy, scheduledAtForOfficialPick } from '../../server/official-pick-scheduling.js';
 
 const MAX_TEXT_LENGTH = 160;
 

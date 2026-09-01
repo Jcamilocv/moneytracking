@@ -1,4 +1,4 @@
-import { queueOfficialPick } from '../lib/official-pick-queue.js';
+import { queueOfficialPick } from '../../server/official-pick-queue.js';
 import { getAdminAuth } from '../lib/firebase-admin.js';
 
 const hasSecretAuthorization = (req) => {
