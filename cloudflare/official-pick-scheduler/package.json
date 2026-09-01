@@ -1,0 +1,12 @@
+{
+  "name": "money-tips-official-pick-scheduler",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/**/*.test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.72.0"
+  }
+}
