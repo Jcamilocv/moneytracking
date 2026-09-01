@@ -527,7 +527,7 @@ const OfficialPicksAdminPanel = ({ currentUser }) => {
         setIsPublishing(true);
         try {
             const token = await currentUser.getIdToken();
-            const response = await fetch('/api/admin/official-pick-queue', {
+        const response = await fetch('/api/admin/official-picks', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                 body: JSON.stringify({

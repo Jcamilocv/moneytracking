@@ -3,7 +3,7 @@ import test from 'node:test';
 import { dispatchOfficialPicks } from '../src/index.js';
 
 const env = {
-    DISPATCH_ENDPOINT: 'https://app.pronosticosmoneytips.com/api/internal/dispatch-official-picks',
+    DISPATCH_ENDPOINT: 'https://app.pronosticosmoneytips.com/api/cron/refresh-official-snapshots?job=official-picks',
     OFFICIAL_PICKS_DISPATCHER_SECRET: 'test-secret'
 };
 
@@ -24,7 +24,7 @@ test('calls the protected dispatcher with its secret', async () => {
 
 test('rejects a non-HTTPS dispatcher endpoint', async () => {
     await assert.rejects(
-        () => dispatchOfficialPicks({ ...env, DISPATCH_ENDPOINT: 'http://localhost:3000/api/internal/dispatch-official-picks' }),
+        () => dispatchOfficialPicks({ ...env, DISPATCH_ENDPOINT: 'http://localhost:3000/api/cron/refresh-official-snapshots?job=official-picks' }),
         /HTTPS/
     );
 });

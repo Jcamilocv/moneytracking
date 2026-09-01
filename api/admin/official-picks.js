@@ -1,4 +1,4 @@
-import { publishOfficialPick } from '../lib/official-picks.js';
+import { queueOfficialPick } from '../lib/official-pick-queue.js';
 import { getAdminAuth } from '../lib/firebase-admin.js';
 
 const hasSecretAuthorization = (req) => {
@@ -30,10 +30,10 @@ export default async function handler(req, res) {
     if (req.method === 'GET') return res.status(200).json({ authorized: true });
 
     try {
-        const result = await publishOfficialPick(req.body);
+        const result = await queueOfficialPick(req.body);
         return res.status(result.created ? 201 : 200).json({ ok: true, ...result });
     } catch (error) {
-        console.error('No se pudo publicar el pick oficial:', error);
-        return res.status(400).json({ error: error.message || 'No se pudo publicar el pick oficial' });
+        console.error('No se pudo encolar el pick oficial:', error);
+        return res.status(400).json({ error: error.message || 'No se pudo preparar el pick oficial' });
     }
 }
