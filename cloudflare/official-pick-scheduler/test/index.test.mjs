@@ -19,7 +19,23 @@ test('calls the protected dispatcher with its secret', async () => {
     assert.equal(request.url, env.DISPATCH_ENDPOINT);
     assert.equal(request.init.method, 'POST');
     assert.equal(request.init.headers.authorization, 'Bearer test-secret');
+    assert.equal(request.init.headers['x-money-tips-dispatch-mode'], 'live');
     assert.equal(result.ok, true);
+    assert.equal(result.mode, 'live');
+});
+
+test('uses dry-run mode only when explicitly configured', async () => {
+    let request;
+    const result = await dispatchOfficialPicks({ ...env, DISPATCH_MODE: 'dry-run' }, async (_url, init) => {
+        request = init;
+        return new Response(JSON.stringify({ ok: true, mode: 'dry_run', dueCount: 0 }), {
+            headers: { 'content-type': 'application/json', 'content-length': '44' }
+        });
+    });
+
+    assert.equal(request.headers['x-money-tips-dispatch-mode'], 'dry-run');
+    assert.equal(result.mode, 'dry_run');
+    assert.equal(result.dueCount, 0);
 });
 
 test('rejects a non-HTTPS dispatcher endpoint', async () => {

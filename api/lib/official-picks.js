@@ -43,20 +43,18 @@ export const publishOfficialPick = async (input) => {
     const snapshot = await pickRef.get();
     const pick = toPublicOfficialPick(snapshot);
 
-    if (created) {
-        try {
-            const telegram = await publishOfficialPickToTelegram(pick);
-            if (telegram.configured) {
-                await pickRef.collection('events').doc('telegram_anchor').set({
-                    type: 'telegram_anchor',
-                    chatId: telegram.chatId,
-                    messageId: telegram.messageId,
-                    permalink: telegram.permalink,
-                    createdAt: FieldValue.serverTimestamp()
-                });
-            }
-        } catch (error) {
-            console.error('No se pudo anclar el pick oficial en Telegram:', error.message);
+    const telegramAnchorRef = pickRef.collection('events').doc('telegram_anchor');
+    const telegramAnchor = await telegramAnchorRef.get();
+    if (!telegramAnchor.exists) {
+        const telegram = await publishOfficialPickToTelegram(pick);
+        if (telegram.configured) {
+            await telegramAnchorRef.set({
+                type: 'telegram_anchor',
+                chatId: telegram.chatId,
+                messageId: telegram.messageId,
+                permalink: telegram.permalink,
+                createdAt: FieldValue.serverTimestamp()
+            });
         }
     }
 

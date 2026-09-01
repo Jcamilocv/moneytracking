@@ -1,10 +1,12 @@
 import { refreshOfficialSnapshots } from '../lib/official-snapshots.js';
-import { dispatchDueOfficialPicks } from '../../server/official-pick-queue.js';
+import { dispatchDueOfficialPicks, inspectDueOfficialPicks } from '../../server/official-pick-queue.js';
 
 const hasDispatcherAuthorization = (req) => {
     const secret = process.env.OFFICIAL_PICKS_DISPATCHER_SECRET;
     return Boolean(secret) && req.headers.authorization === `Bearer ${secret}`;
 };
+
+const isDryRun = (req) => req.headers['x-money-tips-dispatch-mode'] === 'dry-run';
 
 export default async function handler(req, res) {
     const job = req.query?.job;
@@ -13,7 +15,10 @@ export default async function handler(req, res) {
         if (!hasDispatcherAuthorization(req)) return res.status(401).json({ error: 'No autorizado' });
 
         try {
-            return res.status(200).json({ ok: true, ...await dispatchDueOfficialPicks({ limit: req.query?.limit }) });
+            const result = isDryRun(req)
+                ? await inspectDueOfficialPicks({ limit: req.query?.limit })
+                : await dispatchDueOfficialPicks({ limit: req.query?.limit });
+            return res.status(200).json({ ok: true, ...result });
         } catch (error) {
             console.error('No se pudo ejecutar el publicador de picks:', error);
             return res.status(500).json({ error: 'No se pudo ejecutar el publicador de picks' });

@@ -8,7 +8,8 @@
     "crons": ["* * * * *"]
   },
   "vars": {
-    "DISPATCH_ENDPOINT": "https://app.pronosticosmoneytips.com/api/cron/refresh-official-snapshots?job=official-picks"
+    "DISPATCH_ENDPOINT": "https://app.pronosticosmoneytips.com/api/cron/refresh-official-snapshots?job=official-picks",
+    "DISPATCH_MODE": "dry-run"
   },
   "observability": {
     "enabled": true,

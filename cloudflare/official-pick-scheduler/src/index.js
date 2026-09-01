@@ -23,11 +23,13 @@ const dispatchEndpoint = (value) => {
 export const dispatchOfficialPicks = async (env, fetcher = fetch) => {
     if (!env.OFFICIAL_PICKS_DISPATCHER_SECRET) throw new Error('Falta OFFICIAL_PICKS_DISPATCHER_SECRET');
 
+    const mode = env.DISPATCH_MODE === 'dry-run' ? 'dry-run' : 'live';
     const response = await fetcher(dispatchEndpoint(env.DISPATCH_ENDPOINT), {
         method: 'POST',
         headers: {
             ...jsonHeaders,
-            authorization: `Bearer ${env.OFFICIAL_PICKS_DISPATCHER_SECRET}`
+            authorization: `Bearer ${env.OFFICIAL_PICKS_DISPATCHER_SECRET}`,
+            'x-money-tips-dispatch-mode': mode
         }
     });
     const result = await safeJson(response);
@@ -35,7 +37,7 @@ export const dispatchOfficialPicks = async (env, fetcher = fetch) => {
     if (!response.ok) {
         throw new Error(`El dispatcher respondió ${response.status}${result?.error ? `: ${result.error}` : ''}`);
     }
-    return result;
+    return { mode, ...result };
 };
 
 const runScheduledDispatch = async (env) => {
@@ -55,9 +57,13 @@ export default {
     async scheduled(_controller, env, ctx) {
         ctx.waitUntil(runScheduledDispatch(env));
     },
-    async fetch(request) {
+    async fetch(request, env) {
         if (new URL(request.url).pathname === '/health') {
-            return Response.json({ ok: true, service: 'money-tips-official-pick-scheduler' });
+            return Response.json({
+                ok: true,
+                service: 'money-tips-official-pick-scheduler',
+                mode: env.DISPATCH_MODE === 'dry-run' ? 'dry-run' : 'live'
+            });
         }
         return new Response('Not found', { status: 404 });
     }

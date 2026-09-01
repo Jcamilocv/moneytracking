@@ -170,3 +170,22 @@ export const dispatchDueOfficialPicks = async ({ now = new Date(), limit } = {})
     for (const snapshot of due.docs) results.push(await dispatchQueuedOfficialPick({ pickId: snapshot.id, now }));
     return { checkedAt: now.toISOString(), results };
 };
+
+// Reads the same indexed queue slice as the dispatcher without leasing,
+// publishing, or sending anything to Telegram.
+export const inspectDueOfficialPicks = async ({ now = new Date(), limit } = {}) => {
+    const db = getAdminDb();
+    const due = await db.collection('officialPickQueue')
+        .where('status', '==', 'queued')
+        .where('nextAttemptAt', '<=', asTimestamp(now))
+        .orderBy('nextAttemptAt', 'asc')
+        .limit(safeLimit(limit))
+        .get();
+
+    return {
+        checkedAt: now.toISOString(),
+        mode: 'dry_run',
+        dueCount: due.size,
+        queueIds: due.docs.map((snapshot) => snapshot.id)
+    };
+};
