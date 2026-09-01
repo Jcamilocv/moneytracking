@@ -448,7 +448,7 @@ const OfficialPickPublicPage = ({ pickId, theme }) => {
 
 const emptyOfficialPickForm = () => ({
     sourceEventId: '', competition: '', homeTeam: '', awayTeam: '', kickoffAt: '',
-    market: '', selection: '', oddsAtPublication: '', systemId: '', systemVersion: 'v1', sourceProvider: 'money-tips-owned'
+    market: '', selection: '', oddsAtPublication: '', systemId: '', systemVersion: 'v1', sourceProvider: 'money-tips-owned', publicationPolicy: 't_minus_5'
 });
 
 const OfficialPickReportsAdminPanel = ({ currentUser }) => {
@@ -511,18 +511,23 @@ const OfficialPicksAdminPanel = ({ currentUser }) => {
     const [isPublishing, setIsPublishing] = useState(false);
     const [error, setError] = useState('');
     const [publishedPick, setPublishedPick] = useState(null);
+    const [queueMessage, setQueueMessage] = useState('');
 
     const update = (field, value) => setForm((current) => ({ ...current, [field]: value }));
     const handleSubmit = async (event) => {
         event.preventDefault();
         setError('');
         setPublishedPick(null);
-        if (!window.confirm('Este pick se publicará de inmediato y no podrá editarse ni eliminarse. ¿Has revisado evento, mercado, cuota y hora?')) return;
+        setQueueMessage('');
+        const willPublishImmediately = form.publicationPolicy === 'immediate';
+        if (!window.confirm(willPublishImmediately
+            ? 'Este pick se publicará de inmediato y no podrá editarse ni eliminarse. ¿Has revisado evento, mercado, cuota y hora?'
+            : 'Este pick quedará sellado en cola y se publicará automáticamente cinco minutos antes del inicio. ¿Has revisado evento, mercado, cuota y hora?')) return;
 
         setIsPublishing(true);
         try {
             const token = await currentUser.getIdToken();
-            const response = await fetch('/api/admin/official-picks', {
+            const response = await fetch('/api/admin/official-pick-queue', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                 body: JSON.stringify({
@@ -535,15 +540,17 @@ const OfficialPicksAdminPanel = ({ currentUser }) => {
                     },
                     bet: { market: form.market, selection: form.selection, oddsAtPublication: Number(form.oddsAtPublication) },
                     system: { id: form.systemId, version: form.systemVersion },
-                    source: { provider: form.sourceProvider, observedAt: new Date().toISOString() }
+                    source: { provider: form.sourceProvider, observedAt: new Date().toISOString() },
+                    publicationPolicy: form.publicationPolicy
                 })
             });
             const data = await response.json();
-            if (!response.ok) throw new Error(data.error || 'No se pudo publicar el pick.');
-            setPublishedPick(data.pick);
+            if (!response.ok) throw new Error(data.error || 'No se pudo preparar el pick.');
+            if (data.pick?.id) setPublishedPick(data.pick);
+            else setQueueMessage('Pick sellado en cola. Se publicará automáticamente cinco minutos antes del inicio.');
             setForm(emptyOfficialPickForm());
         } catch (requestError) {
-            setError(requestError.message || 'No se pudo publicar el pick.');
+            setError(requestError.message || 'No se pudo preparar el pick.');
         } finally {
             setIsPublishing(false);
         }
@@ -558,13 +565,15 @@ const OfficialPicksAdminPanel = ({ currentUser }) => {
     ];
 
     return <section className="space-y-6 w-full">
-        <div><div className="flex items-center gap-2 text-[var(--accent)] text-xs font-bold uppercase tracking-widest"><ShieldCheck size={15}/> Acceso exclusivo de propietario</div><h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight mt-2">Publicar pick oficial</h3><p className="text-sm text-[var(--text-muted)] mt-2 max-w-2xl">La aplicación nunca recibe un secreto. Tu sesión Firebase se valida otra vez en el servidor y el registro resultante queda sellado.</p></div>
+        <div><div className="flex items-center gap-2 text-[var(--accent)] text-xs font-bold uppercase tracking-widest"><ShieldCheck size={15}/> Acceso exclusivo de propietario</div><h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight mt-2">Preparar pick oficial</h3><p className="text-sm text-[var(--text-muted)] mt-2 max-w-2xl">La aplicación nunca recibe un secreto. Tu sesión Firebase se valida otra vez en el servidor y el registro resultante queda sellado.</p></div>
         <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-4 text-sm text-[var(--text-main)]"><strong>Publicación irreversible.</strong> Revisa la cuota real disponible y la hora de inicio antes de confirmar. Esta pantalla es solo para picks cuya distribución esté autorizada.</div>
         <form onSubmit={handleSubmit} className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 md:p-7 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <label className="md:col-span-2"><span className="block text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-2">Política de publicación</span><select value={form.publicationPolicy} onChange={(event) => update('publicationPolicy', event.target.value)} className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-3 text-[var(--text-main)] outline-none focus:border-[var(--accent)]"><option value="t_minus_5">Cinco minutos antes del inicio (requiere cuota)</option><option value="immediate">En cuanto llega el pick (sin requisito de cuota)</option></select></label>
             {fields.map(([field, label, type]) => <label key={field} className={field === 'competition' || field === 'market' || field === 'selection' ? 'md:col-span-2' : ''}><span className="block text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-2">{label}</span><input required type={type} step={type === 'number' ? '0.01' : undefined} min={type === 'number' ? '1.01' : undefined} max={type === 'number' ? '1000' : undefined} value={form[field]} onChange={(e) => update(field, e.target.value)} className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-3 text-[var(--text-main)] outline-none focus:border-[var(--accent)]" /></label>)}
-            <div className="md:col-span-2 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between pt-2"><p className="text-xs text-[var(--text-muted)]">La hora prevista se calcula a cinco minutos antes del inicio; el comprobante conserva la hora real del servidor.</p><button disabled={isPublishing} type="submit" className="shrink-0 px-5 py-3 rounded-xl bg-[var(--accent)] text-[var(--accent-fg)] font-extrabold disabled:opacity-50 flex items-center gap-2"><Send size={16}/>{isPublishing ? 'Publicando...' : 'Publicar pick'}</button></div>
+            <div className="md:col-span-2 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between pt-2"><p className="text-xs text-[var(--text-muted)]">{form.publicationPolicy === 'immediate' ? 'El registro se publicará y quedará sellado en cuanto llegue al servidor.' : 'El registro quedará en cola y se publicará cinco minutos antes del inicio; el comprobante conserva la hora real del servidor.'}</p><button disabled={isPublishing} type="submit" className="shrink-0 px-5 py-3 rounded-xl bg-[var(--accent)] text-[var(--accent-fg)] font-extrabold disabled:opacity-50 flex items-center gap-2"><Send size={16}/>{isPublishing ? 'Preparando...' : form.publicationPolicy === 'immediate' ? 'Publicar pick' : 'Encolar pick'}</button></div>
         </form>
         {error && <div className="bg-[var(--red-10)] border border-[var(--red-30)] text-[var(--red)] rounded-2xl p-4 text-sm">{error}</div>}
+        {queueMessage && <div className="bg-yellow-500/10 border border-yellow-500/30 text-[var(--text-main)] rounded-2xl p-4 text-sm">{queueMessage}</div>}
         {publishedPick && <div className="bg-[var(--accent-10)] border border-[var(--accent-30)] rounded-2xl p-5"><p className="font-bold text-[var(--accent)]">{publishedPick.created ? 'Pick publicado y sellado.' : 'Este pick ya existía; no se duplicó.'}</p><a className="inline-block mt-3 font-bold underline text-[var(--text-main)]" href={buildOfficialPickLink(publishedPick.id)} target="_blank" rel="noreferrer">Abrir comprobante público</a></div>}
         <OfficialPickReportsAdminPanel currentUser={currentUser} />
     </section>;
