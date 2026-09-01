@@ -4,6 +4,7 @@
   "main": "src/index.js",
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
+  "preview_urls": false,
   "triggers": {
     "crons": ["* * * * *"]
   },
@@ -17,8 +18,8 @@
       "head_sampling_rate": 1
     },
     "traces": {
-      "enabled": true,
-      "head_sampling_rate": 0.1
+      "enabled": false,
+      "head_sampling_rate": 1
     }
   }
 }
