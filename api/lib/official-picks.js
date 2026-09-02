@@ -13,6 +13,12 @@ const toPlainValue = (value) => {
 
 export const toPublicOfficialPick = (snapshot) => ({ id: snapshot.id, ...toPlainValue(snapshot.data()) });
 
+// Technical checks remain immutable in the ledger, but must never be promoted
+// alongside real Money Tips recommendations in the public feed.
+export const isPublicOfficialPickData = (data = {}) => (
+    data.status === 'published' && !String(data.source?.provider || '').startsWith('test-')
+);
+
 export const publishOfficialPick = async (input) => {
     const normalized = normalizeOfficialPickInput(input);
     const db = getAdminDb();
@@ -63,9 +69,11 @@ export const publishOfficialPick = async (input) => {
 
 export const listOfficialPicks = async (limit = 20) => {
     const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
-    const snapshot = await getAdminDb().collection('officialPicks').orderBy('publishedAt', 'desc').limit(safeLimit).get();
+    const scanLimit = Math.min(safeLimit + 10, 50);
+    const snapshot = await getAdminDb().collection('officialPicks').orderBy('publishedAt', 'desc').limit(scanLimit).get();
     const picks = snapshot.docs
-        .filter((document) => document.data().status === 'published')
+        .filter((document) => isPublicOfficialPickData(document.data()))
+        .slice(0, safeLimit)
         .map(toPublicOfficialPick);
     return attachOfficialPickReviewSummaries(picks);
 };

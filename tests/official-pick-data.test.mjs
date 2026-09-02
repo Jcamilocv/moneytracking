@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { normalizeOfficialPickInput, publicPickIdFor } from '../api/lib/official-pick-data.js';
+import { isPublicOfficialPickData } from '../api/lib/official-picks.js';
 
 const validPick = {
     event: {
@@ -41,4 +42,10 @@ test('un pick oficial rechaza una política de publicación desconocida', () => 
 test('un pick oficial rechaza una cuota o fecha inválida', () => {
     assert.throws(() => normalizeOfficialPickInput({ ...validPick, bet: { ...validPick.bet, oddsAtPublication: 1 } }), /cuota/i);
     assert.throws(() => normalizeOfficialPickInput({ ...validPick, event: { ...validPick.event, kickoffAt: 'no-date' } }), /fecha/i);
+});
+
+test('los registros técnicos no aparecen en el feed público de picks', () => {
+    assert.equal(isPublicOfficialPickData({ status: 'published', source: { provider: 'money-tips-owned' } }), true);
+    assert.equal(isPublicOfficialPickData({ status: 'published', source: { provider: 'test-authorized' } }), false);
+    assert.equal(isPublicOfficialPickData({ status: 'queued', source: { provider: 'money-tips-owned' } }), false);
 });
