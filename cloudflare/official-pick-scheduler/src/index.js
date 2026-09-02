@@ -24,12 +24,14 @@ export const dispatchOfficialPicks = async (env, fetcher = fetch) => {
     if (!env.OFFICIAL_PICKS_DISPATCHER_SECRET) throw new Error('Falta OFFICIAL_PICKS_DISPATCHER_SECRET');
 
     const mode = env.DISPATCH_MODE === 'dry-run' ? 'dry-run' : 'live';
+    const discoverOperationsChannel = env.DISCOVER_OPERATIONS_CHANNEL === 'true';
     const response = await fetcher(dispatchEndpoint(env.DISPATCH_ENDPOINT), {
         method: 'POST',
         headers: {
             ...jsonHeaders,
             authorization: `Bearer ${env.OFFICIAL_PICKS_DISPATCHER_SECRET}`,
-            'x-money-tips-dispatch-mode': mode
+            'x-money-tips-dispatch-mode': mode,
+            ...(discoverOperationsChannel ? { 'x-money-tips-operations-discovery': 'true' } : {})
         }
     });
     const result = await safeJson(response);

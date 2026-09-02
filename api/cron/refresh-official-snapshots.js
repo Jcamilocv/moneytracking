@@ -1,5 +1,6 @@
 import { refreshOfficialSnapshots } from '../lib/official-snapshots.js';
 import { dispatchDueOfficialPicks, inspectDueOfficialPicks } from '../../server/official-pick-queue.js';
+import { discoverOperationsTelegramChannel, notifyOperations } from '../lib/operations-alerts.js';
 
 const hasDispatcherAuthorization = (req) => {
     const secret = process.env.OFFICIAL_PICKS_DISPATCHER_SECRET;
@@ -7,6 +8,7 @@ const hasDispatcherAuthorization = (req) => {
 };
 
 const isDryRun = (req) => req.headers['x-money-tips-dispatch-mode'] === 'dry-run';
+const shouldDiscoverOperationsChannel = (req) => req.headers['x-money-tips-operations-discovery'] === 'true';
 
 export default async function handler(req, res) {
     const job = req.query?.job;
@@ -15,12 +17,23 @@ export default async function handler(req, res) {
         if (!hasDispatcherAuthorization(req)) return res.status(401).json({ error: 'No autorizado' });
 
         try {
+            const operations = shouldDiscoverOperationsChannel(req) && isDryRun(req)
+                ? await discoverOperationsTelegramChannel()
+                : null;
             const result = isDryRun(req)
                 ? await inspectDueOfficialPicks({ limit: req.query?.limit })
                 : await dispatchDueOfficialPicks({ limit: req.query?.limit });
-            return res.status(200).json({ ok: true, ...result });
+            return res.status(200).json({ ok: true, ...result, ...(operations ? { operations } : {}) });
         } catch (error) {
             console.error('No se pudo ejecutar el publicador de picks:', error);
+            try {
+                await notifyOperations({
+                    key: 'official-pick-dispatcher-failure',
+                    text: '⚠️ Money Tips Ops\n\nEl publicador automático de picks ha detectado un fallo. La cola conservará los picks y reintentará la publicación cuando corresponda. Revisa Cloudflare o Vercel.'
+                });
+            } catch (notificationError) {
+                console.error('No se pudo enviar el aviso operativo:', notificationError);
+            }
             return res.status(500).json({ error: 'No se pudo ejecutar el publicador de picks' });
         }
     }
