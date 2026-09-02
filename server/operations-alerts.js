@@ -12,7 +12,17 @@ const asDate = (value) => value?.toDate && typeof value.toDate === 'function' ? 
 export const matchingOperationsChannel = (updates, title = operationsChannelTitle()) => {
     const expected = title.trim().toLocaleLowerCase('es-ES');
     const candidates = updates
-        .map((update) => update?.channel_post?.chat || update?.edited_channel_post?.chat)
+        .flatMap((update) => [
+            update?.channel_post?.chat,
+            update?.edited_channel_post?.chat,
+            // A private channel may not surface a channel_post to the bot in
+            // every setup. A user can safely forward one post to the bot; only
+            // the forward's channel metadata is considered here.
+            update?.message?.forward_from_chat,
+            update?.edited_message?.forward_from_chat,
+            update?.message?.forward_origin?.chat,
+            update?.edited_message?.forward_origin?.chat
+        ])
         .filter((chat) => chat?.type === 'channel' && typeof chat.title === 'string')
         .filter((chat) => chat.title.trim().toLocaleLowerCase('es-ES') === expected);
     return candidates.at(-1) || null;

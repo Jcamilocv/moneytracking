@@ -17,3 +17,14 @@ test('no acepta actualizaciones de canales con título diferente', () => {
         { channel_post: { chat: { id: 3, type: 'channel', title: 'Money Tips Público' } } }
     ]), null);
 });
+
+test('reconoce los metadatos de un canal reenviado al bot sin usar el contenido', () => {
+    const channel = matchingOperationsChannel([{
+        message: {
+            text: 'contenido que no debe usarse',
+            forward_origin: { chat: { id: 4, type: 'channel', title: 'Money Tips Ops' } }
+        }
+    }]);
+
+    assert.deepEqual(channel, { id: 4, type: 'channel', title: 'Money Tips Ops' });
+});
