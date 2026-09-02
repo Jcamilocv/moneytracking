@@ -1,6 +1,6 @@
 import { FieldValue } from 'firebase-admin/firestore';
-import { getAdminDb } from './firebase-admin.js';
-import { getTelegramUpdates, sendTelegramOperationsMessage } from './telegram.js';
+import { getAdminDb } from '../api/lib/firebase-admin.js';
+import { getTelegramUpdates, sendTelegramOperationsMessage } from '../api/lib/telegram.js';
 
 const CONFIG_COLLECTION = 'systemConfiguration';
 const CONFIG_DOCUMENT = 'telegramOperations';

@@ -1,6 +1,6 @@
 import { refreshOfficialSnapshots } from '../lib/official-snapshots.js';
 import { dispatchDueOfficialPicks, inspectDueOfficialPicks } from '../../server/official-pick-queue.js';
-import { discoverOperationsTelegramChannel, notifyOperations } from '../lib/operations-alerts.js';
+import { discoverOperationsTelegramChannel, notifyOperations } from '../../server/operations-alerts.js';
 
 const hasDispatcherAuthorization = (req) => {
     const secret = process.env.OFFICIAL_PICKS_DISPATCHER_SECRET;

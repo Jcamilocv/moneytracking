@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { matchingOperationsChannel } from '../api/lib/operations-alerts.js';
+import { matchingOperationsChannel } from '../server/operations-alerts.js';
 
 test('identifica solo el canal privado operativo por tipo y título', () => {
     const channel = matchingOperationsChannel([
