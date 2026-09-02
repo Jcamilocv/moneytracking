@@ -9,6 +9,7 @@ const hasDispatcherAuthorization = (req) => {
 
 const isDryRun = (req) => req.headers['x-money-tips-dispatch-mode'] === 'dry-run';
 const shouldDiscoverOperationsChannel = (req) => req.headers['x-money-tips-operations-discovery'] === 'true';
+const shouldSendOperationsTest = (req) => req.headers['x-money-tips-operations-test'] === 'true';
 
 export default async function handler(req, res) {
     const job = req.query?.job;
@@ -23,7 +24,18 @@ export default async function handler(req, res) {
             const result = isDryRun(req)
                 ? await inspectDueOfficialPicks({ limit: req.query?.limit })
                 : await dispatchDueOfficialPicks({ limit: req.query?.limit });
-            return res.status(200).json({ ok: true, ...result, ...(operations ? { operations } : {}) });
+            const operationsTest = shouldSendOperationsTest(req) && isDryRun(req)
+                ? await notifyOperations({
+                    key: 'official-pick-dispatcher-test',
+                    text: '✅ Money Tips Ops\n\nPrueba correcta: el canal privado de operaciones ya puede recibir alertas del publicador automático. No se ha publicado ningún pick.'
+                })
+                : null;
+            return res.status(200).json({
+                ok: true,
+                ...result,
+                ...(operations ? { operations } : {}),
+                ...(operationsTest ? { operationsTest } : {})
+            });
         } catch (error) {
             console.error('No se pudo ejecutar el publicador de picks:', error);
             try {
