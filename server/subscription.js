@@ -1,4 +1,4 @@
-import { getAdminDb } from './firebase-admin.js';
+import { getAdminDb } from '../api/lib/firebase-admin.js';
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing']);
 

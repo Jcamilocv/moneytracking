@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { hasActivePremiumSubscription } from '../api/lib/subscription.js';
+import { hasActivePremiumSubscription } from '../server/subscription.js';
 
 const now = new Date('2026-09-03T10:00:00.000Z');
 

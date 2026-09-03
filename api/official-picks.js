@@ -1,6 +1,6 @@
 import { getOfficialPick, listOfficialPicks } from './lib/official-picks.js';
 import { getAdminAuth } from './lib/firebase-admin.js';
-import { getPremiumSubscription } from './lib/subscription.js';
+import { getPremiumSubscription } from '../server/subscription.js';
 import { listOfficialPickReportsForAdmin, resolveOfficialPickReports, submitOfficialPickReport } from './lib/official-pick-reports.js';
 
 const isValidPickId = (value) => typeof value === 'string' && /^op_[a-f0-9]{40}$/.test(value);
