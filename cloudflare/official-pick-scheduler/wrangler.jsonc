@@ -1,0 +1,27 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "money-tips-official-pick-scheduler",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "preview_urls": false,
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
+  "vars": {
+    "DISPATCH_ENDPOINT": "https://app.pronosticosmoneytips.com/api/cron/refresh-official-snapshots?job=official-picks",
+    "DISPATCH_MODE": "dry-run",
+    "DISCOVER_OPERATIONS_CHANNEL": "false",
+    "SEND_OPERATIONS_TEST_ALERT": "false"
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": false,
+      "head_sampling_rate": 1
+    }
+  }
+}

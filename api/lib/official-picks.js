@@ -33,6 +33,12 @@ export const pickForAudience = (pick, { canViewActiveDetails = false, now = new 
     };
 };
 
+// Technical checks remain immutable in the ledger, but must never be promoted
+// alongside real Money Tips recommendations in the public feed.
+export const isPublicOfficialPickData = (data = {}) => (
+    data.status === 'published' && !String(data.source?.provider || '').startsWith('test-')
+);
+
 export const publishOfficialPick = async (input) => {
     const normalized = normalizeOfficialPickInput(input);
     const db = getAdminDb();
@@ -63,20 +69,18 @@ export const publishOfficialPick = async (input) => {
     const snapshot = await pickRef.get();
     const pick = toPublicOfficialPick(snapshot);
 
-    if (created) {
-        try {
-            const telegram = await publishOfficialPickToTelegram(pick);
-            if (telegram.configured) {
-                await pickRef.collection('events').doc('telegram_anchor').set({
-                    type: 'telegram_anchor',
-                    chatId: telegram.chatId,
-                    messageId: telegram.messageId,
-                    permalink: telegram.permalink,
-                    createdAt: FieldValue.serverTimestamp()
-                });
-            }
-        } catch (error) {
-            console.error('No se pudo anclar el pick oficial en Telegram:', error.message);
+    const telegramAnchorRef = pickRef.collection('events').doc('telegram_anchor');
+    const telegramAnchor = await telegramAnchorRef.get();
+    if (!telegramAnchor.exists) {
+        const telegram = await publishOfficialPickToTelegram(pick);
+        if (telegram.configured) {
+            await telegramAnchorRef.set({
+                type: 'telegram_anchor',
+                chatId: telegram.chatId,
+                messageId: telegram.messageId,
+                permalink: telegram.permalink,
+                createdAt: FieldValue.serverTimestamp()
+            });
         }
     }
 
@@ -85,9 +89,11 @@ export const publishOfficialPick = async (input) => {
 
 export const listOfficialPicks = async (limit = 20, audience = {}) => {
     const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
-    const snapshot = await getAdminDb().collection('officialPicks').orderBy('publishedAt', 'desc').limit(safeLimit).get();
+    const scanLimit = Math.min(safeLimit + 10, 50);
+    const snapshot = await getAdminDb().collection('officialPicks').orderBy('publishedAt', 'desc').limit(scanLimit).get();
     const picks = snapshot.docs
-        .filter((document) => document.data().status === 'published')
+        .filter((document) => isPublicOfficialPickData(document.data()))
+        .slice(0, safeLimit)
         .map(toPublicOfficialPick);
     const reviewed = await attachOfficialPickReviewSummaries(picks);
     return reviewed.map((pick) => pickForAudience(pick, audience));

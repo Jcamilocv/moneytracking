@@ -16,7 +16,14 @@ La fuente será sustituible. La parte pública de Money TracKING no debe conocer
 
 ## Objetivo
 
-Publicar de forma automática un pick oficial exactamente cinco minutos antes del inicio, con una prueba verificable de cuándo y con qué datos se publicó; notificar a los usuarios y permitirles añadirlo con un clic a una de sus bancas.
+Publicar un pick oficial según una política explícita, con una prueba verificable de cuándo y con qué datos se publicó; notificar a los usuarios y permitirles añadirlo con un clic a una de sus bancas.
+
+### Políticas de publicación
+
+1. `t_minus_5`: para sistemas cuya cuota de entrada debe comprobarse cerca del inicio. El candidato se publica cinco minutos antes del partido.
+2. `immediate`: para sistemas sin un requisito de cuota. El candidato se publica en cuanto llega desde una fuente autorizada, siempre antes del inicio del partido.
+
+La política se conserva en el registro oficial y nunca se deduce a posteriori a partir del resultado.
 
 ## Separación de responsabilidades
 
@@ -45,8 +52,8 @@ Planificador T-5 -> validación final -> Official Pick Ledger (servidor)
 
 1. El ingestor observa la fuente autorizada y crea un `candidatePick`; nunca publica directamente.
 2. Cada candidato incluye el inicio en UTC, mercado, selección, cuota fuente, probabilidad, `systemId`, `systemVersion`, hora observada y un hash SHA-256 de la evidencia normalizada.
-3. El planificador calcula `scheduledAt = kickoffAt - 5 minutos`.
-4. En `scheduledAt`, el publicador vuelve a consultar la fuente y exige coincidencia exacta con el candidato. Si falta, cambia, llega tarde o el monitor ha fallado, **no publica**.
+3. El planificador calcula `scheduledAt = kickoffAt - 5 minutos` para `t_minus_5`; para `immediate`, el candidato queda listo en su hora de observación.
+4. En `scheduledAt` o al recibir un candidato `immediate`, el publicador aplica la validación disponible para la fuente autorizada. Si falta, cambia, llega tarde o el monitor ha fallado, **no publica**.
 5. La escritura del pick oficial es transaccional e idempotente mediante la clave `eventId + market + selection + systemVersion`. Una repetición nunca crea un segundo pick.
 6. Solo tras confirmar la escritura, se envían las notificaciones. Si el envío falla, se reintenta sin modificar el registro oficial.
 7. Las correcciones, anulaciones y resultados son eventos nuevos que enlazan al pick original; no se reescribe el registro publicado.
@@ -129,9 +136,9 @@ La cuota de la copia es la cuota que el usuario introduzca/obtenga al apostar; n
 
 Obtener del proveedor una confirmación escrita de API/webhook o autorización de automatización y distribución. Sin esto se puede avanzar únicamente con fuente propia o de un proveedor licenciado.
 
-### Fase 1 — ledger y ficha pública
+### Fase 1 — ledger, cola y ficha pública
 
-Crear `officialPicks`, sus reglas de solo servidor, vista pública de prueba y acción “Añadir a mi banca”. Pruebas con picks sintéticos, sin notificar a usuarios.
+Crear `officialPicks`, una cola privada con políticas `t_minus_5` e `immediate`, sus reglas de solo servidor, vista pública de prueba y acción “Añadir a mi banca”. Pruebas con picks sintéticos, sin notificar a usuarios.
 
 ### Fase 2 — shadow mode
 

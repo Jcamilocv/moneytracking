@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { normalizePublicationPolicy, scheduledAtForOfficialPick } from '../../server/official-pick-scheduling.js';
 
 const MAX_TEXT_LENGTH = 160;
 
@@ -33,7 +34,6 @@ export const hashOfficialPickPayload = (value) => createHash('sha256').update(st
 
 export const normalizeOfficialPickInput = (input = {}) => {
     const kickoffAt = cleanDate(input?.event?.kickoffAt, 'event.kickoffAt');
-    const scheduledAt = input?.scheduledAt ? cleanDate(input.scheduledAt, 'scheduledAt') : new Date(kickoffAt.getTime() - (5 * 60 * 1000));
     const sourceEventId = cleanText(input?.event?.sourceEventId, 'event.sourceEventId');
     const market = cleanText(input?.bet?.market, 'bet.market');
     const selection = cleanText(input?.bet?.selection, 'bet.selection');
@@ -41,6 +41,10 @@ export const normalizeOfficialPickInput = (input = {}) => {
     const systemVersion = cleanText(input?.system?.version, 'system.version');
     const sourceProvider = cleanText(input?.source?.provider || 'money-tips-owned', 'source.provider');
     const observedAt = input?.source?.observedAt ? cleanDate(input.source.observedAt, 'source.observedAt') : new Date();
+    const publicationPolicy = normalizePublicationPolicy(input?.publicationPolicy);
+    const scheduledAt = input?.scheduledAt
+        ? cleanDate(input.scheduledAt, 'scheduledAt')
+        : scheduledAtForOfficialPick({ policy: publicationPolicy, kickoffAt, observedAt });
 
     const normalized = {
         schemaVersion: 1,
@@ -60,6 +64,7 @@ export const normalizeOfficialPickInput = (input = {}) => {
         },
         system: { id: systemId, version: systemVersion },
         source: { provider: sourceProvider, observedAt },
+        publicationPolicy,
         scheduledAt
     };
 
@@ -81,4 +86,3 @@ export const normalizeOfficialPickInput = (input = {}) => {
 };
 
 export const publicPickIdFor = (normalizedPick) => `op_${normalizedPick.idempotencyKey.slice(0, 40)}`;
-
