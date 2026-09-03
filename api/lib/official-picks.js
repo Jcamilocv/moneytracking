@@ -13,6 +13,26 @@ const toPlainValue = (value) => {
 
 export const toPublicOfficialPick = (snapshot) => ({ id: snapshot.id, ...toPlainValue(snapshot.data()) });
 
+const isPickStillActive = (pick, now = new Date()) => {
+    const kickoffAt = new Date(pick?.event?.kickoffAt);
+    return !Number.isNaN(kickoffAt.getTime()) && kickoffAt.getTime() > now.getTime();
+};
+
+// La prueba de existencia (evento, hora, hash) permanece pública. Los detalles
+// accionables se reservan para Premium hasta que comienza el partido.
+export const pickForAudience = (pick, { canViewActiveDetails = false, now = new Date() } = {}) => {
+    if (!isPickStillActive(pick, now) || canViewActiveDetails) {
+        return { ...pick, isLocked: false };
+    }
+
+    return {
+        ...pick,
+        isLocked: true,
+        bet: { market: null, selection: null, oddsAtPublication: null },
+        system: { id: null, version: null }
+    };
+};
+
 export const publishOfficialPick = async (input) => {
     const normalized = normalizeOfficialPickInput(input);
     const db = getAdminDb();
@@ -63,23 +83,24 @@ export const publishOfficialPick = async (input) => {
     return { created, pick };
 };
 
-export const listOfficialPicks = async (limit = 20) => {
+export const listOfficialPicks = async (limit = 20, audience = {}) => {
     const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
     const snapshot = await getAdminDb().collection('officialPicks').orderBy('publishedAt', 'desc').limit(safeLimit).get();
     const picks = snapshot.docs
         .filter((document) => document.data().status === 'published')
         .map(toPublicOfficialPick);
-    return attachOfficialPickReviewSummaries(picks);
+    const reviewed = await attachOfficialPickReviewSummaries(picks);
+    return reviewed.map((pick) => pickForAudience(pick, audience));
 };
 
-export const getOfficialPick = async (pickId) => {
+export const getOfficialPick = async (pickId, audience = {}) => {
     const db = getAdminDb();
     const pickSnapshot = await db.collection('officialPicks').doc(pickId).get();
     if (!pickSnapshot.exists || pickSnapshot.data().status !== 'published') return null;
     const eventsSnapshot = await pickSnapshot.ref.collection('events').orderBy('createdAt', 'asc').get();
     const [pick] = await attachOfficialPickReviewSummaries([toPublicOfficialPick(pickSnapshot)]);
     return {
-        pick,
+        pick: pickForAudience(pick, audience),
         events: eventsSnapshot.docs.map(toPublicOfficialPick)
     };
 };

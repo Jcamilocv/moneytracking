@@ -1,5 +1,6 @@
 import { getOfficialPick, listOfficialPicks } from './lib/official-picks.js';
 import { getAdminAuth } from './lib/firebase-admin.js';
+import { getPremiumSubscription } from './lib/subscription.js';
 import { listOfficialPickReportsForAdmin, resolveOfficialPickReports, submitOfficialPickReport } from './lib/official-pick-reports.js';
 
 const isValidPickId = (value) => typeof value === 'string' && /^op_[a-f0-9]{40}$/.test(value);
@@ -17,6 +18,14 @@ const getTokenUid = async (req) => {
 const isOwner = async (req) => {
     const ownerUid = process.env.OFFICIAL_SNAPSHOT_OWNER_UID;
     return Boolean(ownerUid) && await getTokenUid(req) === ownerUid;
+};
+
+const getAudience = async (req) => {
+    const uid = await getTokenUid(req);
+    if (!uid) return { canViewActiveDetails: false };
+    if (uid === process.env.OFFICIAL_SNAPSHOT_OWNER_UID) return { canViewActiveDetails: true };
+    const subscription = await getPremiumSubscription(uid);
+    return { canViewActiveDetails: subscription.active };
 };
 
 const handleReport = async (req, res) => {
@@ -48,17 +57,18 @@ export default async function handler(req, res) {
         if (req.query.mode === 'report') return await handleReport(req, res);
         if (req.query.mode === 'admin-reports') return await handleAdminReports(req, res);
         if (req.method !== 'GET') return res.status(405).json({ error: 'Método no permitido' });
+        const audience = await getAudience(req);
         const pickId = req.query.pick;
         if (pickId) {
             if (!isValidPickId(pickId)) return res.status(400).json({ error: 'Identificador de pick no válido' });
-            const result = await getOfficialPick(pickId);
+            const result = await getOfficialPick(pickId, audience);
             if (!result) return res.status(404).json({ error: 'El comprobante no existe o no es público' });
-            res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+            res.setHeader('Cache-Control', audience.canViewActiveDetails ? 'private, no-store' : 'public, s-maxage=60, stale-while-revalidate=300');
             return res.status(200).json({ schemaVersion: 1, ...result });
         }
 
-        res.setHeader('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120');
-        return res.status(200).json({ schemaVersion: 1, picks: await listOfficialPicks(req.query.limit) });
+        res.setHeader('Cache-Control', audience.canViewActiveDetails ? 'private, no-store' : 'public, s-maxage=30, stale-while-revalidate=120');
+        return res.status(200).json({ schemaVersion: 1, picks: await listOfficialPicks(req.query.limit, audience) });
     } catch (error) {
         if (req.query.mode === 'report') return res.status(400).json({ error: error.message || 'No se pudo registrar la incidencia.' });
         if (req.query.mode === 'admin-reports') return res.status(400).json({ error: error.message || 'No se pudo resolver la incidencia.' });

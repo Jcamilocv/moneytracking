@@ -333,7 +333,7 @@ const OfficialReviewStatus = ({ review }) => {
     </div>;
 };
 
-const OfficialPicksPanel = ({ currentBank, currentUser, copiedPickIds, copyingPickId, onCopy }) => {
+const OfficialPicksPanel = ({ currentBank, currentUser, isPremium, copiedPickIds, copyingPickId, onCopy }) => {
     const [picks, setPicks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -346,7 +346,8 @@ const OfficialPicksPanel = ({ currentBank, currentUser, copiedPickIds, copyingPi
         let active = true;
         const load = async () => {
             try {
-                const response = await fetch('/api/official-picks?limit=20');
+                const token = await currentUser.getIdToken();
+                const response = await fetch('/api/official-picks?limit=20', { headers: { Authorization: `Bearer ${token}` } });
                 const isJson = response.headers.get('content-type')?.includes('application/json');
                 if (!isJson) throw new Error('El servicio de picks oficiales no está disponible en esta vista local.');
                 const data = await response.json();
@@ -360,7 +361,7 @@ const OfficialPicksPanel = ({ currentBank, currentUser, copiedPickIds, copyingPi
         };
         load();
         return () => { active = false; };
-    }, []);
+    }, [currentUser, isPremium]);
 
     const submitReport = async (event) => {
         event.preventDefault();
@@ -391,19 +392,20 @@ const OfficialPicksPanel = ({ currentBank, currentUser, copiedPickIds, copyingPi
     if (picks.length === 0) return <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-10 text-center"><ShieldCheck size={34} className="mx-auto text-[var(--accent)] mb-3"/><h3 className="font-bold text-[var(--text-main)]">Aún no hay picks oficiales</h3><p className="text-sm text-[var(--text-muted)] mt-2">Cuando Money Tips publique uno, aparecerá aquí con su hora de publicación verificable.</p></div>;
 
     return <div className="space-y-4">
+        {!isPremium && <div className="rounded-2xl border border-[var(--accent-30)] bg-[var(--accent-5)] p-4 text-sm text-[var(--text-main)]"><p className="font-extrabold flex items-center gap-2"><Crown size={17} className="text-[var(--accent)]"/>Acceso Money Tips Premium</p><p className="mt-1 text-[var(--text-muted)]">Los picks activos conservan su sello público, pero mercado, selección y cuota se muestran solo a miembros Premium hasta el inicio del partido.</p><a href="https://pronosticosmoneytips.com/#premium" className="inline-flex mt-3 text-[var(--accent)] font-bold">Conocer Premium <ArrowUpRight size={15} className="ml-1"/></a></div>}
         {picks.map((pick) => {
             const copied = copiedPickIds.has(pick.id);
-            const cannotCopy = !currentBank || currentBank.isBalance;
+            const cannotCopy = !currentBank || currentBank.isBalance || pick.isLocked;
             return <article key={pick.id} className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 md:p-6 shadow-sm">
                 <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
                     <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2 mb-3"><span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-[var(--accent-10)] text-[var(--accent)] border border-[var(--accent-20)]"><ShieldCheck size={12} className="inline mr-1"/>Pick oficial</span><span className="text-xs text-[var(--text-muted)]">Publicado: {formatOfficialDateTime(pick.publishedAt)}</span></div>
                         <h3 className="text-lg md:text-xl font-extrabold text-[var(--text-main)]">{pick.event.homeTeam} <span className="text-[var(--text-muted)] font-medium">vs</span> {pick.event.awayTeam}</h3>
                         <p className="text-sm text-[var(--text-muted)] mt-1">{pick.event.competition} · Inicio: {formatOfficialDateTime(pick.event.kickoffAt)}</p>
-                        <div className="mt-4 grid grid-cols-2 gap-3 max-w-lg"><div className="bg-[var(--bg-input)] rounded-xl p-3"><p className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-muted)]">Mercado</p><p className="font-bold text-[var(--text-main)] text-sm mt-1">{pick.bet.market}</p><p className="text-[var(--accent)] text-sm mt-1">{pick.bet.selection}</p></div><div className="bg-[var(--bg-input)] rounded-xl p-3"><p className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-muted)]">Cuota publicada</p><p className="font-extrabold text-[var(--accent)] text-xl mt-1">@{Number(pick.bet.oddsAtPublication).toFixed(2)}</p><p className="text-[10px] text-[var(--text-muted)] mt-1">Sistema {pick.system.id} · {pick.system.version}</p></div></div>
+                        <div className="mt-4 grid grid-cols-2 gap-3 max-w-lg"><div className="bg-[var(--bg-input)] rounded-xl p-3"><p className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-muted)]">Mercado</p>{pick.isLocked ? <p className="font-bold text-[var(--text-muted)] text-sm mt-1">Disponible en Premium</p> : <><p className="font-bold text-[var(--text-main)] text-sm mt-1">{pick.bet.market}</p><p className="text-[var(--accent)] text-sm mt-1">{pick.bet.selection}</p></>}</div><div className="bg-[var(--bg-input)] rounded-xl p-3"><p className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-muted)]">Cuota publicada</p>{pick.isLocked ? <p className="font-extrabold text-[var(--text-muted)] text-xl mt-1">—</p> : <><p className="font-extrabold text-[var(--accent)] text-xl mt-1">@{Number(pick.bet.oddsAtPublication).toFixed(2)}</p><p className="text-[10px] text-[var(--text-muted)] mt-1">Sistema {pick.system.id} · {pick.system.version}</p></>}</div></div>
                         <OfficialReviewStatus review={pick.review} />
                     </div>
-                    <div className="flex flex-col gap-2 shrink-0 md:w-52"><a href={buildOfficialPickLink(pick.id)} target="_blank" rel="noreferrer" className="text-center px-4 py-2.5 rounded-xl border border-[var(--border)] text-sm font-bold text-[var(--text-main)] hover:bg-[var(--bg-hover)]">Ver comprobante</a><button onClick={() => onCopy(pick)} disabled={copied || cannotCopy || copyingPickId === pick.id} className="px-4 py-3 rounded-xl text-sm font-extrabold bg-[var(--accent)] text-[var(--accent-fg)] disabled:opacity-50 disabled:cursor-not-allowed">{copied ? 'Añadido a tu banca' : copyingPickId === pick.id ? 'Añadiendo...' : 'Añadir a mi banca'}</button><button onClick={() => { setReportPick(pick); setReportCategory(''); setReportError(''); }} className="px-4 py-2.5 rounded-xl border border-yellow-500/30 text-sm font-bold text-[var(--text-main)] hover:bg-yellow-500/10">Reportar incidencia</button>{cannotCopy && <p className="text-[10px] text-[var(--text-muted)] text-center">Selecciona una banca individual para copiarlo.</p>}<p className="text-[10px] text-[var(--text-muted)] text-center">Copia al 1% de la banca; podrás editarla.</p></div>
+                    <div className="flex flex-col gap-2 shrink-0 md:w-52"><a href={buildOfficialPickLink(pick.id)} target="_blank" rel="noreferrer" className="text-center px-4 py-2.5 rounded-xl border border-[var(--border)] text-sm font-bold text-[var(--text-main)] hover:bg-[var(--bg-hover)]">Ver comprobante</a><button onClick={() => onCopy(pick)} disabled={copied || cannotCopy || copyingPickId === pick.id} className="px-4 py-3 rounded-xl text-sm font-extrabold bg-[var(--accent)] text-[var(--accent-fg)] disabled:opacity-50 disabled:cursor-not-allowed">{pick.isLocked ? 'Acceso Premium necesario' : copied ? 'Añadido a tu banca' : copyingPickId === pick.id ? 'Añadiendo...' : 'Añadir a mi banca'}</button>{!pick.isLocked && <button onClick={() => { setReportPick(pick); setReportCategory(''); setReportError(''); }} className="px-4 py-2.5 rounded-xl border border-yellow-500/30 text-sm font-bold text-[var(--text-main)] hover:bg-yellow-500/10">Reportar incidencia</button>}{cannotCopy && !pick.isLocked && <p className="text-[10px] text-[var(--text-muted)] text-center">Selecciona una banca individual para copiarlo.</p>}{pick.isLocked ? <p className="text-[10px] text-[var(--text-muted)] text-center">El sello se revelará públicamente al inicio.</p> : <p className="text-[10px] text-[var(--text-muted)] text-center">Copia al 1% de la banca; podrás editarla.</p>}</div>
                 </div>
             </article>;
         })}
@@ -443,7 +445,7 @@ const OfficialPickPublicPage = ({ pickId, theme }) => {
         return OFFICIAL_REVIEW_LABELS[event.type] || event.type;
     };
 
-    return <><style>{getGlobalStyles(theme)}</style><LiquidBackground theme={theme}/><main className="min-h-screen p-4 md:p-8 flex items-center justify-center"><section className="w-full max-w-2xl bg-[var(--bg-card)] border border-[var(--border)] rounded-[2rem] shadow-[var(--shadow-glow-md)] overflow-hidden"><header className="p-6 md:p-8 border-b border-[var(--border)]"><div className="flex items-center gap-2 text-[var(--accent)] font-bold text-xs uppercase tracking-widest"><ShieldCheck size={16}/> Comprobante oficial Money Tips</div><h1 className="mt-3 text-2xl md:text-3xl font-extrabold text-[var(--text-main)]">{pick ? `${pick.event.homeTeam} vs ${pick.event.awayTeam}` : 'Verificando pick'}</h1><p className="text-sm text-[var(--text-muted)] mt-2">Registro sellado por servidor. Este documento no se puede editar desde la aplicación.</p></header><div className="p-6 md:p-8">{error ? <div className="text-[var(--red)] bg-[var(--red-10)] border border-[var(--red-30)] rounded-2xl p-5 text-sm">{error}</div> : !pick ? <div className="text-center text-[var(--text-muted)] py-10">Cargando comprobante...</div> : <div className="space-y-6"><div className="grid sm:grid-cols-2 gap-4"><div className="bg-[var(--bg-input)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Pronóstico</p><p className="font-bold text-[var(--text-main)] mt-2">{pick.bet.market}</p><p className="text-[var(--accent)] font-bold mt-1">{pick.bet.selection} · @{Number(pick.bet.oddsAtPublication).toFixed(2)}</p></div><div className="bg-[var(--bg-input)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Horario</p><p className="font-bold text-[var(--text-main)] mt-2">Inicio: {formatOfficialDateTime(pick.event.kickoffAt)}</p><p className="text-[var(--accent)] text-sm mt-1">Publicado: {formatOfficialDateTime(pick.publishedAt)}</p></div></div><div className="border border-[var(--border)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Evidencia</p><p className="text-sm text-[var(--text-main)] mt-2">Sistema: {pick.system.id} · versión {pick.system.version}</p><p className="text-xs font-mono break-all text-[var(--text-muted)] mt-2">SHA-256: {pick.source.evidenceHash}</p></div><OfficialReviewStatus review={pick.review} /><div><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Historial del registro</p><div className="space-y-2">{events.map((event) => <div key={event.id} className="flex items-center justify-between gap-3 text-sm bg-[var(--bg-input)] rounded-xl px-4 py-3"><div><p className="font-bold text-[var(--text-main)]">{eventLabel(event)}</p>{event.message && <p className="text-xs text-[var(--text-muted)] mt-1">{event.message}</p>}{event.permalink && <a href={event.permalink} target="_blank" rel="noreferrer" className="inline-block text-xs text-[var(--accent)] font-bold mt-1">Ver mensaje de Telegram</a>}</div><span className="text-[var(--text-muted)] text-xs shrink-0">{formatOfficialDateTime(event.createdAt)}</span></div>)}</div></div></div>}</div><footer className="p-6 border-t border-[var(--border)]"><a href={window.location.pathname} className="block text-center bg-[var(--accent)] text-[var(--accent-fg)] rounded-xl py-3 font-bold">Abrir MoneyTracKING</a></footer></section></main></>;
+    return <><style>{getGlobalStyles(theme)}</style><LiquidBackground theme={theme}/><main className="min-h-screen p-4 md:p-8 flex items-center justify-center"><section className="w-full max-w-2xl bg-[var(--bg-card)] border border-[var(--border)] rounded-[2rem] shadow-[var(--shadow-glow-md)] overflow-hidden"><header className="p-6 md:p-8 border-b border-[var(--border)]"><div className="flex items-center gap-2 text-[var(--accent)] font-bold text-xs uppercase tracking-widest"><ShieldCheck size={16}/> Comprobante oficial Money Tips</div><h1 className="mt-3 text-2xl md:text-3xl font-extrabold text-[var(--text-main)]">{pick ? `${pick.event.homeTeam} vs ${pick.event.awayTeam}` : 'Verificando pick'}</h1><p className="text-sm text-[var(--text-muted)] mt-2">Registro sellado por servidor. Este documento no se puede editar desde la aplicación.</p></header><div className="p-6 md:p-8">{error ? <div className="text-[var(--red)] bg-[var(--red-10)] border border-[var(--red-30)] rounded-2xl p-5 text-sm">{error}</div> : !pick ? <div className="text-center text-[var(--text-muted)] py-10">Cargando comprobante...</div> : <div className="space-y-6"><div className="grid sm:grid-cols-2 gap-4"><div className="bg-[var(--bg-input)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Pronóstico</p>{pick.isLocked ? <><p className="font-bold text-[var(--text-main)] mt-2">Detalle reservado para Premium</p><p className="text-sm text-[var(--text-muted)] mt-1">Se revelará públicamente al inicio del partido.</p></> : <><p className="font-bold text-[var(--text-main)] mt-2">{pick.bet.market}</p><p className="text-[var(--accent)] font-bold mt-1">{pick.bet.selection} · @{Number(pick.bet.oddsAtPublication).toFixed(2)}</p></>}</div><div className="bg-[var(--bg-input)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Horario</p><p className="font-bold text-[var(--text-main)] mt-2">Inicio: {formatOfficialDateTime(pick.event.kickoffAt)}</p><p className="text-[var(--accent)] text-sm mt-1">Publicado: {formatOfficialDateTime(pick.publishedAt)}</p></div></div><div className="border border-[var(--border)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Evidencia</p>{!pick.isLocked && <p className="text-sm text-[var(--text-main)] mt-2">Sistema: {pick.system.id} · versión {pick.system.version}</p>}<p className="text-xs font-mono break-all text-[var(--text-muted)] mt-2">SHA-256: {pick.source.evidenceHash}</p><p className="text-xs text-[var(--text-muted)] mt-2">Este hash queda publicado antes del inicio y permite comprobar el registro cuando el detalle se revele.</p></div><OfficialReviewStatus review={pick.review} /><div><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Historial del registro</p><div className="space-y-2">{events.map((event) => <div key={event.id} className="flex items-center justify-between gap-3 text-sm bg-[var(--bg-input)] rounded-xl px-4 py-3"><div><p className="font-bold text-[var(--text-main)]">{eventLabel(event)}</p>{event.message && <p className="text-xs text-[var(--text-muted)] mt-1">{event.message}</p>}{event.permalink && <a href={event.permalink} target="_blank" rel="noreferrer" className="inline-block text-xs text-[var(--accent)] font-bold mt-1">Ver mensaje de Telegram</a>}</div><span className="text-[var(--text-muted)] text-xs shrink-0">{formatOfficialDateTime(event.createdAt)}</span></div>)}</div></div></div>}</div><footer className="p-6 border-t border-[var(--border)]"><a href={window.location.pathname} className="block text-center bg-[var(--accent)] text-[var(--accent-fg)] rounded-xl py-3 font-bold">Abrir MoneyTracKING</a></footer></section></main></>;
 };
 
 const emptyOfficialPickForm = () => ({
@@ -694,6 +696,8 @@ export default function App() {
     const [aiMessage, setAiMessage] = useState(''); 
     const [copyingOfficialPickId, setCopyingOfficialPickId] = useState('');
     const [isOfficialPicksAdmin, setIsOfficialPicksAdmin] = useState(false);
+    const [hasPremiumAccess, setHasPremiumAccess] = useState(false);
+    const canUsePremium = hasPremiumAccess || isOfficialPicksAdmin;
 
     // --- ESTADOS PARA FILTROS DEL DASHBOARD ---
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
@@ -897,6 +901,24 @@ export default function App() {
         };
         checkAdminAccess();
         return () => { active = false; };
+    }, [currentUser, viewMode]);
+
+    useEffect(() => {
+        if (!currentUser || viewMode !== 'personal') {
+            setHasPremiumAccess(false);
+            return undefined;
+        }
+
+        const subscriptionRef = doc(db, 'users', currentUser.uid, 'entitlements', 'subscription');
+        return onSnapshot(subscriptionRef, (snapshot) => {
+            const data = snapshot.exists() ? snapshot.data() : null;
+            const expiresAt = data?.accessUntil?.toDate?.();
+            const isActive = data?.status === 'active' || data?.status === 'trialing';
+            setHasPremiumAccess(Boolean(isActive && expiresAt && expiresAt.getTime() > Date.now()));
+        }, (error) => {
+            console.error('Error cargando acceso Premium:', error);
+            setHasPremiumAccess(false);
+        });
     }, [currentUser, viewMode]);
 
     useEffect(() => {
@@ -1282,6 +1304,8 @@ export default function App() {
 
     const handleCopyOfficialPick = async (pick) => {
         if (!currentUser) return showAlert('Inicia sesión para añadir este pick a tu banca.');
+        if (!canUsePremium) return showAlert('Necesitas Money Tips Premium para añadir picks activos a tu banca.');
+        if (pick.isLocked || !pick.bet?.selection || !pick.bet?.oddsAtPublication) return showAlert('Este pick aún no está disponible para tu acceso.');
         if (!activeBankData || activeBankData.isBalance) return showAlert('Selecciona una banca individual antes de añadir el pick.');
         if (copiedOfficialPickIds.has(pick.id)) return showAlert(`Este pick ya está añadido a ${activeBankData.name}.`);
         const betCountInBank = bets.filter((bet) => bet.bankId === activeBankData.id).length;
@@ -2347,7 +2371,7 @@ export default function App() {
                 {activeTab === 'official-picks' && viewMode === 'personal' && (
                     <section className="space-y-6 w-full">
                         <div><h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">Picks oficiales de Money Tips</h3><p className="text-sm text-[var(--text-muted)] mt-2 max-w-2xl">Cada pick se publica desde el servidor y mantiene un comprobante con su hora, cuota y evidencia. Añádelo a la banca seleccionada con stake inicial del 1%.</p></div>
-                        <OfficialPicksPanel currentBank={activeBankData} currentUser={currentUser} copiedPickIds={copiedOfficialPickIds} copyingPickId={copyingOfficialPickId} onCopy={handleCopyOfficialPick} />
+                        <OfficialPicksPanel currentBank={activeBankData} currentUser={currentUser} isPremium={canUsePremium} copiedPickIds={copiedOfficialPickIds} copyingPickId={copyingOfficialPickId} onCopy={handleCopyOfficialPick} />
                     </section>
                 )}
 

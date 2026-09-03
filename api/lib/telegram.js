@@ -15,14 +15,12 @@ export const publishOfficialPickToTelegram = async (pick) => {
     });
     const proof = `${appUrl()}/?pick=${encodeURIComponent(pick.id)}`;
     const text = [
-        '✅ PICK OFICIAL MONEY TIPS',
+        '✅ REGISTRO OFICIAL MONEY TIPS',
         '',
         `${pick.event.homeTeam} vs ${pick.event.awayTeam}`,
         `${pick.event.competition}`,
-        `Mercado: ${pick.bet.market}`,
-        `Selección: ${pick.bet.selection} @${Number(pick.bet.oddsAtPublication).toFixed(2)}`,
         `Inicio: ${kickoff}`,
-        `Sistema: ${pick.system.id} · ${pick.system.version}`,
+        'El detalle del pick está disponible para miembros Premium hasta el inicio.',
         '',
         `Comprobante: ${proof}`,
         `SHA-256: ${pick.source.evidenceHash}`
