@@ -571,11 +571,50 @@ const OfficialPickReportsAdminPanel = ({ currentUser }) => {
 const OfficialPicksAdminPanel = ({ currentUser }) => {
     const [form, setForm] = useState(emptyOfficialPickForm);
     const [isPublishing, setIsPublishing] = useState(false);
+    const [isValidating, setIsValidating] = useState(false);
+    const [validationPreview, setValidationPreview] = useState(null);
     const [error, setError] = useState('');
     const [publishedPick, setPublishedPick] = useState(null);
     const [queueMessage, setQueueMessage] = useState('');
 
     const update = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+
+    const runValidation = async () => {
+        setError('');
+        setValidationPreview(null);
+        setIsValidating(true);
+        const observedAt = new Date();
+        const kickoffAt = new Date(observedAt.getTime() + (2 * 60 * 60 * 1000));
+
+        try {
+            const token = await currentUser.getIdToken();
+            const response = await fetch('/api/admin/official-picks?mode=validate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                    event: {
+                        sourceEventId: `validation-${observedAt.getTime()}`,
+                        competition: 'Prueba interna Money Tips',
+                        homeTeam: 'Equipo local de prueba',
+                        awayTeam: 'Equipo visitante de prueba',
+                        kickoffAt: kickoffAt.toISOString()
+                    },
+                    bet: { market: 'Resultado de prueba', selection: 'Validación local', oddsAtPublication: 1.80 },
+                    system: { id: 'test-validation', version: 'v1' },
+                    source: { provider: 'test-authorized', observedAt: observedAt.toISOString() },
+                    publicationPolicy: 'immediate'
+                })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'No se pudo validar la prueba.');
+            setValidationPreview(data.preview);
+        } catch (requestError) {
+            setError(requestError.message || 'No se pudo validar la prueba.');
+        } finally {
+            setIsValidating(false);
+        }
+    };
+
     const handleSubmit = async (event) => {
         event.preventDefault();
         setError('');
@@ -629,6 +668,8 @@ const OfficialPicksAdminPanel = ({ currentUser }) => {
     return <section className="space-y-6 w-full">
         <div><div className="flex items-center gap-2 text-[var(--accent)] text-xs font-bold uppercase tracking-widest"><ShieldCheck size={15}/> Acceso exclusivo de propietario</div><h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight mt-2">Preparar pick oficial</h3><p className="text-sm text-[var(--text-muted)] mt-2 max-w-2xl">La aplicación nunca recibe un secreto. Tu sesión Firebase se valida otra vez en el servidor y el registro resultante queda sellado.</p></div>
         <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-4 text-sm text-[var(--text-main)]"><strong>Publicación irreversible.</strong> Revisa la cuota real disponible y la hora de inicio antes de confirmar. Esta pantalla es solo para picks cuya distribución esté autorizada.</div>
+        <section className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 md:p-6 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between"><div><h4 className="font-extrabold text-[var(--text-main)]">Comprobar validación segura</h4><p className="text-sm text-[var(--text-muted)] mt-1 max-w-2xl">Genera un payload sintético y verifica la identidad, programación y evidencia en el servidor. No escribe en Firestore, no encola el pick y no envía Telegram.</p></div><button type="button" disabled={isValidating} onClick={runValidation} className="shrink-0 px-5 py-3 rounded-xl border border-[var(--accent-30)] text-[var(--text-main)] font-extrabold disabled:opacity-50">{isValidating ? 'Validando…' : 'Validar prueba'}</button></section>
+        {validationPreview && <div className="bg-[var(--accent-10)] border border-[var(--accent-30)] rounded-2xl p-4 text-sm text-[var(--text-main)]"><p className="font-extrabold text-[var(--accent)]">Validación correcta. No se ha creado ni publicado ningún pick.</p><dl className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-2 text-xs"><div><dt className="text-[var(--text-muted)]">Política</dt><dd className="font-bold">{validationPreview.publicationPolicy}</dd></div><div><dt className="text-[var(--text-muted)]">Programación</dt><dd className="font-bold">{new Date(validationPreview.scheduledAt).toLocaleString('es-ES')}</dd></div><div className="sm:col-span-2"><dt className="text-[var(--text-muted)]">Identidad comprobada</dt><dd className="font-mono break-all">{validationPreview.queueId}</dd></div></dl></div>}
         <form onSubmit={handleSubmit} className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 md:p-7 grid grid-cols-1 md:grid-cols-2 gap-4">
             <label className="md:col-span-2"><span className="block text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-2">Política de publicación</span><select value={form.publicationPolicy} onChange={(event) => update('publicationPolicy', event.target.value)} className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-3 text-[var(--text-main)] outline-none focus:border-[var(--accent)]"><option value="t_minus_5">Cinco minutos antes del inicio (requiere cuota)</option><option value="immediate">En cuanto llega el pick (sin requisito de cuota)</option></select></label>
             {fields.map(([field, label, type]) => <label key={field} className={field === 'competition' || field === 'market' || field === 'selection' ? 'md:col-span-2' : ''}><span className="block text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-2">{label}</span><input required type={type} step={type === 'number' ? '0.01' : undefined} min={type === 'number' ? '1.01' : undefined} max={type === 'number' ? '1000' : undefined} value={form[field]} onChange={(e) => update(field, e.target.value)} className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-3 text-[var(--text-main)] outline-none focus:border-[var(--accent)]" /></label>)}
