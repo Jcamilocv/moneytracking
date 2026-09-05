@@ -1,5 +1,6 @@
 import { queueOfficialPick } from '../../server/official-pick-queue.js';
 import { getAdminAuth } from '../lib/firebase-admin.js';
+import { normalizeOfficialPickInput, publicPickIdFor } from '../lib/official-pick-data.js';
 
 const hasSecretAuthorization = (req) => {
     const secret = process.env.OFFICIAL_PICKS_ADMIN_SECRET;
@@ -23,6 +24,17 @@ const hasOwnerTokenAuthorization = async (req) => {
 
 const isAuthorized = async (req) => hasSecretAuthorization(req) || hasOwnerTokenAuthorization(req);
 
+const validationPreview = (input) => {
+    const normalized = normalizeOfficialPickInput(input);
+    return {
+        queueId: publicPickIdFor(normalized),
+        publicationPolicy: normalized.publicationPolicy,
+        scheduledAt: normalized.scheduledAt.toISOString(),
+        kickoffAt: normalized.event.kickoffAt.toISOString(),
+        evidenceHash: normalized.source.evidenceHash
+    };
+};
+
 export default async function handler(req, res) {
     if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: 'Método no permitido' });
     if (!await isAuthorized(req)) return res.status(401).json({ error: 'No autorizado' });
@@ -30,6 +42,11 @@ export default async function handler(req, res) {
     if (req.method === 'GET') return res.status(200).json({ authorized: true });
 
     try {
+        // Esta ruta permite ensayar el contrato desde un puente local sin crear
+        // documentos, publicar picks ni enviar nada a Telegram.
+        if (req.query?.mode === 'validate') {
+            return res.status(200).json({ ok: true, mode: 'validation', preview: validationPreview(req.body) });
+        }
         const result = await queueOfficialPick(req.body);
         return res.status(result.created ? 201 : 200).json({ ok: true, ...result });
     } catch (error) {

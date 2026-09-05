@@ -39,6 +39,10 @@ export const isPublicOfficialPickData = (data = {}) => (
     data.status === 'published' && !String(data.source?.provider || '').startsWith('test-')
 );
 
+// Los picks sintéticos sirven para probar el ledger y la cola, pero nunca deben
+// dejar el entorno de pruebas ni aparecer como una recomendación real.
+export const shouldNotifyTelegramForOfficialPick = (pick) => isPublicOfficialPickData(pick);
+
 export const publishOfficialPick = async (input) => {
     const normalized = normalizeOfficialPickInput(input);
     const db = getAdminDb();
@@ -71,7 +75,7 @@ export const publishOfficialPick = async (input) => {
 
     const telegramAnchorRef = pickRef.collection('events').doc('telegram_anchor');
     const telegramAnchor = await telegramAnchorRef.get();
-    if (!telegramAnchor.exists) {
+    if (shouldNotifyTelegramForOfficialPick(pick) && !telegramAnchor.exists) {
         const telegram = await publishOfficialPickToTelegram(pick);
         if (telegram.configured) {
             await telegramAnchorRef.set({
