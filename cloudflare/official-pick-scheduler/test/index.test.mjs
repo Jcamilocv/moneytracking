@@ -38,6 +38,18 @@ test('uses dry-run mode only when explicitly configured', async () => {
     assert.equal(result.dueCount, 0);
 });
 
+test('adds the synthetic-only guard when configured', async () => {
+    let request;
+    await dispatchOfficialPicks({ ...env, DISPATCH_TEST_ONLY: 'true' }, async (_url, init) => {
+        request = init;
+        return new Response(JSON.stringify({ ok: true }), {
+            headers: { 'content-type': 'application/json', 'content-length': '11' }
+        });
+    });
+
+    assert.equal(request.headers['x-money-tips-dispatch-test-only'], 'true');
+});
+
 test('rejects a non-HTTPS dispatcher endpoint', async () => {
     await assert.rejects(
         () => dispatchOfficialPicks({ ...env, DISPATCH_ENDPOINT: 'http://localhost:3000/api/cron/refresh-official-snapshots?job=official-picks' }),

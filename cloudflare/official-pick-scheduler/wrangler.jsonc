@@ -11,6 +11,7 @@
   "vars": {
     "DISPATCH_ENDPOINT": "https://app.pronosticosmoneytips.com/api/cron/refresh-official-snapshots?job=official-picks",
     "DISPATCH_MODE": "dry-run",
+    "DISPATCH_TEST_ONLY": "true",
     "DISCOVER_OPERATIONS_CHANNEL": "false",
     "SEND_OPERATIONS_TEST_ALERT": "false"
   },

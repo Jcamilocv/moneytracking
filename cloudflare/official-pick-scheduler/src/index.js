@@ -26,12 +26,14 @@ export const dispatchOfficialPicks = async (env, fetcher = fetch) => {
     const mode = env.DISPATCH_MODE === 'dry-run' ? 'dry-run' : 'live';
     const discoverOperationsChannel = env.DISCOVER_OPERATIONS_CHANNEL === 'true';
     const sendOperationsTest = env.SEND_OPERATIONS_TEST_ALERT === 'true';
+    const dispatchSyntheticTestsOnly = env.DISPATCH_TEST_ONLY === 'true';
     const response = await fetcher(dispatchEndpoint(env.DISPATCH_ENDPOINT), {
         method: 'POST',
         headers: {
             ...jsonHeaders,
             authorization: `Bearer ${env.OFFICIAL_PICKS_DISPATCHER_SECRET}`,
             'x-money-tips-dispatch-mode': mode,
+            ...(dispatchSyntheticTestsOnly ? { 'x-money-tips-dispatch-test-only': 'true' } : {}),
             ...(discoverOperationsChannel ? { 'x-money-tips-operations-discovery': 'true' } : {}),
             ...(sendOperationsTest ? { 'x-money-tips-operations-test': 'true' } : {})
         }
@@ -41,7 +43,7 @@ export const dispatchOfficialPicks = async (env, fetcher = fetch) => {
     if (!response.ok) {
         throw new Error(`El dispatcher respondió ${response.status}${result?.error ? `: ${result.error}` : ''}`);
     }
-    return { mode, ...result };
+    return { mode, testOnly: dispatchSyntheticTestsOnly, ...result };
 };
 
 const runScheduledDispatch = async (env) => {

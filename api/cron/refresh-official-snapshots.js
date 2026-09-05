@@ -1,5 +1,5 @@
 import { refreshOfficialSnapshots } from '../lib/official-snapshots.js';
-import { dispatchDueOfficialPicks, inspectDueOfficialPicks } from '../../server/official-pick-queue.js';
+import { dispatchDueOfficialPicks, dispatchDueSyntheticTestPicks, inspectDueOfficialPicks } from '../../server/official-pick-queue.js';
 import { discoverOperationsTelegramChannel, notifyOperations } from '../../server/operations-alerts.js';
 
 const hasDispatcherAuthorization = (req) => {
@@ -10,6 +10,7 @@ const hasDispatcherAuthorization = (req) => {
 const isDryRun = (req) => req.headers['x-money-tips-dispatch-mode'] === 'dry-run';
 const shouldDiscoverOperationsChannel = (req) => req.headers['x-money-tips-operations-discovery'] === 'true';
 const shouldSendOperationsTest = (req) => req.headers['x-money-tips-operations-test'] === 'true';
+const shouldDispatchSyntheticTestsOnly = (req) => req.headers['x-money-tips-dispatch-test-only'] === 'true';
 
 export default async function handler(req, res) {
     const job = req.query?.job;
@@ -23,7 +24,9 @@ export default async function handler(req, res) {
                 : null;
             const result = isDryRun(req)
                 ? await inspectDueOfficialPicks({ limit: req.query?.limit })
-                : await dispatchDueOfficialPicks({ limit: req.query?.limit });
+                : shouldDispatchSyntheticTestsOnly(req)
+                    ? await dispatchDueSyntheticTestPicks({ limit: req.query?.limit })
+                    : await dispatchDueOfficialPicks({ limit: req.query?.limit });
             const operationsTest = shouldSendOperationsTest(req) && isDryRun(req)
                 ? await notifyOperations({
                     key: 'official-pick-dispatcher-test',
@@ -33,6 +36,7 @@ export default async function handler(req, res) {
             return res.status(200).json({
                 ok: true,
                 ...result,
+                ...(shouldDispatchSyntheticTestsOnly(req) ? { testOnly: true } : {}),
                 ...(operations ? { operations } : {}),
                 ...(operationsTest ? { operationsTest } : {})
             });

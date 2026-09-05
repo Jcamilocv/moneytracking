@@ -11,6 +11,7 @@ const RETRY_DELAYS_MS = [60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000];
 const asDate = (value) => value?.toDate && typeof value.toDate === 'function' ? value.toDate() : new Date(value);
 const asTimestamp = (value) => Timestamp.fromDate(value instanceof Date ? value : new Date(value));
 const safeLimit = (value) => Math.min(Math.max(Number(value) || MAX_DISPATCH_BATCH, 1), MAX_DISPATCH_BATCH);
+const isSyntheticTestPick = (candidate = {}) => String(candidate.source?.provider || '').startsWith('test-');
 
 const retryAtFor = ({ attempts, now }) => {
     const delay = RETRY_DELAYS_MS[Math.min(Math.max(attempts - 1, 0), RETRY_DELAYS_MS.length - 1)];
@@ -157,30 +158,44 @@ export const dispatchQueuedOfficialPick = async ({ pickId, now = new Date() }) =
     }
 };
 
-export const dispatchDueOfficialPicks = async ({ now = new Date(), limit } = {}) => {
+const dueOfficialPickQueue = async ({ now, limit }) => {
     const db = getAdminDb();
-    const due = await db.collection('officialPickQueue')
+    return db.collection('officialPickQueue')
         .where('status', '==', 'queued')
         .where('nextAttemptAt', '<=', asTimestamp(now))
         .orderBy('nextAttemptAt', 'asc')
         .limit(safeLimit(limit))
         .get();
+};
 
+const dispatchQueueSnapshots = async ({ snapshots, now }) => {
     const results = [];
-    for (const snapshot of due.docs) results.push(await dispatchQueuedOfficialPick({ pickId: snapshot.id, now }));
+    for (const snapshot of snapshots) results.push(await dispatchQueuedOfficialPick({ pickId: snapshot.id, now }));
     return { checkedAt: now.toISOString(), results };
+};
+
+export const dispatchDueOfficialPicks = async ({ now = new Date(), limit } = {}) => {
+    const due = await dueOfficialPickQueue({ now, limit });
+
+    return dispatchQueueSnapshots({ snapshots: due.docs, now });
+};
+
+// This guard is deliberately separate from the normal dispatcher. It lets us
+// validate the live scheduler path with synthetic picks while making it
+// impossible for the same run to publish a real recommendation.
+export const dispatchDueSyntheticTestPicks = async ({ now = new Date(), limit } = {}) => {
+    const due = await dueOfficialPickQueue({ now, limit });
+
+    return dispatchQueueSnapshots({
+        snapshots: due.docs.filter((snapshot) => isSyntheticTestPick(snapshot.data())),
+        now
+    });
 };
 
 // Reads the same indexed queue slice as the dispatcher without leasing,
 // publishing, or sending anything to Telegram.
 export const inspectDueOfficialPicks = async ({ now = new Date(), limit } = {}) => {
-    const db = getAdminDb();
-    const due = await db.collection('officialPickQueue')
-        .where('status', '==', 'queued')
-        .where('nextAttemptAt', '<=', asTimestamp(now))
-        .orderBy('nextAttemptAt', 'asc')
-        .limit(safeLimit(limit))
-        .get();
+    const due = await dueOfficialPickQueue({ now, limit });
 
     return {
         checkedAt: now.toISOString(),
