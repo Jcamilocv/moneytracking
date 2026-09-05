@@ -12,6 +12,10 @@
   },
   "rewrites": [
     {
+      "source": "/api/internal/futbolbrain-local-picks",
+      "destination": "/api/admin/official-picks?mode=futbolbrain-local"
+    },
+    {
       "source": "/api/official-pick-reports",
       "destination": "/api/official-picks?mode=report"
     },
