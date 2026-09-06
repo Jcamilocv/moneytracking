@@ -56,6 +56,17 @@ const cleanOdds = (value) => {
     return Number(odds.toFixed(2));
 };
 
+const madridDateKey = (date) => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Madrid',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).formatToParts(date);
+    const value = (type) => parts.find((part) => part.type === type)?.value;
+    return `${value('year')}-${value('month')}-${value('day')}`;
+};
+
 export const approvedFutbolBrainSystems = () => Object.keys(SYSTEMS);
 
 // Converts the small, visible-table contract into the canonical server-side
@@ -77,6 +88,9 @@ export const normalizeFutbolBrainOwnerCandidate = (input = {}, { now = new Date(
     const kickoffAt = cleanDate(input?.event?.kickoffAt, 'event.kickoffAt');
     if (kickoffAt.getTime() <= now.getTime() + 60 * 1000) {
         throw new Error('El inicio debe ser al menos un minuto posterior a la recepción');
+    }
+    if (madridDateKey(kickoffAt) !== madridDateKey(now)) {
+        throw new Error('Solo se admiten picks activos del día actual en horario de Madrid');
     }
 
     const observedAt = input?.source?.observedAt

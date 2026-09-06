@@ -44,3 +44,12 @@ test('rejects unapproved systems, mismatched markets, and incomplete timing', ()
     assert.throws(() => normalizeFutbolBrainOwnerCandidate(visibleCandidate({ visiblePick: { selection: 'Over 2.5', odds: 1.5 } }), { now: NOW }), /no coincide/i);
     assert.throws(() => normalizeFutbolBrainOwnerCandidate(visibleCandidate({ event: { ...visibleCandidate().event, kickoffAt: '2026-09-06T10:00:30.000Z' } }), { now: NOW }), /al menos un minuto/i);
 });
+
+test('rejects future-day picks even if a browser exposes a time', () => {
+    assert.throws(
+        () => normalizeFutbolBrainOwnerCandidate(visibleCandidate({
+            event: { ...visibleCandidate().event, kickoffAt: '2026-09-12T14:00:00.000Z' }
+        }), { now: NOW }),
+        /día actual/i
+    );
+});
