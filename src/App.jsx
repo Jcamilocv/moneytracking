@@ -568,6 +568,44 @@ const OfficialPickReportsAdminPanel = ({ currentUser }) => {
     return <section className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 md:p-7 space-y-4"><div className="flex items-start justify-between gap-4"><div><h4 className="font-extrabold text-[var(--text-main)]">Incidencias abiertas</h4><p className="text-sm text-[var(--text-muted)] mt-1">Los usuarios solo ven el estado agregado. Aquí cierras la revisión y dejas la resolución pública.</p></div><button onClick={loadReports} className="px-3 py-2 rounded-xl border border-[var(--border)] text-xs font-bold text-[var(--text-main)]">Actualizar</button></div>{loading ? <p className="text-sm text-[var(--text-muted)]">Cargando incidencias…</p> : error ? <p className="text-sm text-[var(--red)]">{error}</p> : Object.keys(groupedReports).length === 0 ? <p className="text-sm text-[var(--text-muted)]">No hay incidencias abiertas.</p> : <div className="space-y-4">{Object.entries(groupedReports).map(([pickId, pickReports]) => <article key={pickId} className="rounded-2xl bg-[var(--bg-input)] border border-[var(--border)] p-4"><p className="font-mono text-xs text-[var(--text-muted)] break-all">{pickId}</p><p className="mt-2 text-sm font-bold text-[var(--text-main)]">{pickReports.length} {pickReports.length === 1 ? 'reporte' : 'reportes'}: {pickReports.map((report) => OFFICIAL_REPORT_CATEGORY_LABELS[report.category]).join(' · ')}</p><textarea value={messages[pickId] || ''} onChange={(event) => setMessages((current) => ({ ...current, [pickId]: event.target.value }))} maxLength={240} placeholder="Resolución pública opcional (máx. 240 caracteres)" className="w-full mt-3 min-h-20 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-[var(--accent)]"/><div className="flex flex-col sm:flex-row gap-2 mt-3"><button disabled={resolvingPickId === pickId} onClick={() => resolve(pickId, 'confirmed')} className="px-3 py-2.5 rounded-xl border border-[var(--accent-30)] text-sm font-bold text-[var(--text-main)] disabled:opacity-50">Confirmar resultado</button><button disabled={resolvingPickId === pickId} onClick={() => resolve(pickId, 'correction_published')} className="px-3 py-2.5 rounded-xl bg-[var(--accent)] text-[var(--accent-fg)] text-sm font-extrabold disabled:opacity-50">Publicar corrección</button></div></article>)}</div>}</section>;
 };
 
+const PremiumAccessAdminPanel = ({ currentUser }) => {
+    const [email, setEmail] = useState('');
+    const [plan, setPlan] = useState('monthly');
+    const [paymentReference, setPaymentReference] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+    const [result, setResult] = useState(null);
+
+    const updateAccess = async (action) => {
+        const normalizedEmail = email.trim().toLowerCase();
+        if (!normalizedEmail) return setError('Introduce el correo con el que el cliente creó su cuenta.');
+        const verb = action === 'grant' ? 'activar o renovar' : 'retirar';
+        if (!window.confirm(`Vas a ${verb} el acceso Premium de ${normalizedEmail}. ¿Confirmas que el pago o la solicitud ya están comprobados?`)) return;
+
+        setBusy(true);
+        setError('');
+        setResult(null);
+        try {
+            const token = await currentUser.getIdToken();
+            const response = await fetch('/api/admin/premium-access', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ action, email: normalizedEmail, plan, paymentReference })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'No se pudo actualizar el acceso Premium.');
+            setResult(data);
+            if (action === 'grant') setPaymentReference('');
+        } catch (requestError) {
+            setError(requestError.message || 'No se pudo actualizar el acceso Premium.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return <section className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 md:p-7 space-y-4"><div><div className="flex items-center gap-2 text-[var(--accent)] text-xs font-bold uppercase tracking-widest"><Crown size={15}/> Operativa Premium</div><h4 className="mt-2 font-extrabold text-[var(--text-main)]">Alta manual tras pago confirmado</h4><p className="text-sm text-[var(--text-muted)] mt-1 max-w-2xl">Hasta conectar PremiumPay, confirma el pago fuera de la app y activa el acceso aquí. El cliente debe haber creado primero su cuenta con este mismo correo. No se guardan tarjetas ni datos de cobro.</p></div><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><label className="md:col-span-2"><span className="block text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-2">Correo de la cuenta MoneyTracKING</span><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="cliente@correo.com" className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-3 text-[var(--text-main)] outline-none focus:border-[var(--accent)]" /></label><label><span className="block text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-2">Plan</span><select value={plan} onChange={(event) => setPlan(event.target.value)} className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-3 text-[var(--text-main)] outline-none focus:border-[var(--accent)]"><option value="monthly">Mensual · 31 días</option><option value="annual">Anual · 366 días</option></select></label><label><span className="block text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-2">Referencia de pago (opcional)</span><input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} maxLength={120} placeholder="Ej. PP-12345" className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-3 text-[var(--text-main)] outline-none focus:border-[var(--accent)]" /></label></div><div className="flex flex-col sm:flex-row gap-3"><button disabled={busy} onClick={() => updateAccess('grant')} className="px-4 py-3 rounded-xl bg-[var(--accent)] text-[var(--accent-fg)] text-sm font-extrabold disabled:opacity-50">{busy ? 'Actualizando…' : 'Activar o renovar acceso'}</button><button disabled={busy} onClick={() => updateAccess('revoke')} className="px-4 py-3 rounded-xl border border-[var(--red-30)] text-[var(--red)] text-sm font-bold disabled:opacity-50">Retirar acceso</button></div>{error && <p className="text-sm text-[var(--red)]">{error}</p>}{result && <div className="rounded-2xl bg-[var(--accent-10)] border border-[var(--accent-30)] p-4 text-sm text-[var(--text-main)]"><p className="font-extrabold text-[var(--accent)]">{result.action === 'grant' ? 'Acceso Premium activo.' : 'Acceso Premium retirado.'}</p><p className="mt-1">{result.email}{result.action === 'grant' && result.accessUntil ? ` · válido hasta ${formatOfficialDateTime(result.accessUntil)}` : ''}</p></div>}</section>;
+};
+
 const OfficialPicksAdminPanel = ({ currentUser }) => {
     const [form, setForm] = useState(emptyOfficialPickForm);
     const [isPublishing, setIsPublishing] = useState(false);
@@ -678,6 +716,7 @@ const OfficialPicksAdminPanel = ({ currentUser }) => {
         {error && <div className="bg-[var(--red-10)] border border-[var(--red-30)] text-[var(--red)] rounded-2xl p-4 text-sm">{error}</div>}
         {queueMessage && <div className="bg-yellow-500/10 border border-yellow-500/30 text-[var(--text-main)] rounded-2xl p-4 text-sm">{queueMessage}</div>}
         {publishedPick && <div className="bg-[var(--accent-10)] border border-[var(--accent-30)] rounded-2xl p-5"><p className="font-bold text-[var(--accent)]">{publishedPick.created ? 'Pick publicado y sellado.' : 'Este pick ya existía; no se duplicó.'}</p><a className="inline-block mt-3 font-bold underline text-[var(--text-main)]" href={buildOfficialPickLink(publishedPick.id)} target="_blank" rel="noreferrer">Abrir comprobante público</a></div>}
+        <PremiumAccessAdminPanel currentUser={currentUser} />
         <OfficialPickReportsAdminPanel currentUser={currentUser} />
     </section>;
 };
