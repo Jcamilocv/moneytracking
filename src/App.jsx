@@ -587,7 +587,7 @@ const PremiumAccessAdminPanel = ({ currentUser }) => {
         setResult(null);
         try {
             const token = await currentUser.getIdToken();
-            const response = await fetch('/api/admin/premium-access', {
+            const response = await fetch('/api/admin/official-picks?mode=premium-access', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                 body: JSON.stringify({ action, email: normalizedEmail, plan, paymentReference })

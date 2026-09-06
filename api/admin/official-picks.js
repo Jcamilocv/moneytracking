@@ -1,8 +1,13 @@
 import { timingSafeEqual } from 'node:crypto';
 import { queueOfficialPick } from '../../server/official-pick-queue.js';
-import { getAdminAuth } from '../lib/firebase-admin.js';
+import { getAdminAuth, getAdminDb } from '../lib/firebase-admin.js';
 import { normalizeOfficialPickInput, publicPickIdFor } from '../lib/official-pick-data.js';
 import { normalizeFutbolBrainOwnerCandidate } from '../../server/futbolbrain-local-ingest.js';
+import {
+    entitlementForManualGrant,
+    entitlementForRevocation,
+    normalizePremiumAccessRequest
+} from '../../server/premium-access.js';
 
 const hasSecretAuthorization = (req) => {
     const secret = process.env.OFFICIAL_PICKS_ADMIN_SECRET;
@@ -26,6 +31,52 @@ const hasOwnerTokenAuthorization = async (req) => {
 
 const isAuthorized = async (req) => hasSecretAuthorization(req) || hasOwnerTokenAuthorization(req);
 
+const dateFromFirestoreValue = (value) => {
+    if (value?.toDate && typeof value.toDate === 'function') return value.toDate();
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const handlePremiumAccess = async (req, res) => {
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
+    // Esta ruta nunca acepta el secreto de automatización: solo la sesión del propietario.
+    if (!await hasOwnerTokenAuthorization(req)) return res.status(401).json({ error: 'No autorizado' });
+
+    const request = normalizePremiumAccessRequest(req.body);
+    const auth = getAdminAuth();
+    let user;
+    try {
+        user = await auth.getUserByEmail(request.email);
+    } catch (error) {
+        if (error?.code === 'auth/user-not-found') {
+            return res.status(404).json({ error: 'Ese correo aún no ha creado una cuenta en MoneyTracKING.' });
+        }
+        throw error;
+    }
+
+    const entitlementRef = getAdminDb().collection('users').doc(user.uid).collection('entitlements').doc('subscription');
+    const snapshot = await entitlementRef.get();
+    const previous = snapshot.exists ? snapshot.data() : {};
+    const now = new Date();
+    const previousAccessUntil = dateFromFirestoreValue(previous.accessUntil);
+    const renewalStartsAt = previous.status === 'active' && previousAccessUntil && previousAccessUntil > now
+        ? previousAccessUntil
+        : now;
+    const entitlement = request.action === 'grant'
+        ? entitlementForManualGrant({ plan: request.plan, paymentReference: request.paymentReference, now, startsAt: renewalStartsAt })
+        : entitlementForRevocation({ previous, now });
+
+    await entitlementRef.set(entitlement);
+    return res.status(200).json({
+        ok: true,
+        action: request.action,
+        email: request.email,
+        status: entitlement.status,
+        plan: entitlement.plan || request.plan,
+        accessUntil: entitlement.accessUntil?.toISOString?.() || null
+    });
+};
+
 const hasValidFutbolBrainDeviceToken = (req) => {
     const expected = process.env.FUTBOLBRAIN_LOCAL_INGEST_SECRET;
     const received = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
@@ -48,6 +99,15 @@ const validationPreview = (input) => {
 
 export default async function handler(req, res) {
     if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: 'Método no permitido' });
+
+    if (req.query?.mode === 'premium-access') {
+        try {
+            return await handlePremiumAccess(req, res);
+        } catch (error) {
+            console.error('No se pudo actualizar el acceso Premium:', error);
+            return res.status(400).json({ error: error.message || 'No se pudo actualizar el acceso Premium.' });
+        }
+    }
 
     // The local browser bridge has an isolated device token. It does not share
     // the owner UI credential and can only submit server-normalized allow-list
