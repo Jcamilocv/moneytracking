@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { normalizeOfficialPickInput, publicPickIdFor } from '../api/lib/official-pick-data.js';
 import { isPublicOfficialPickData, shouldNotifyTelegramForOfficialPick } from '../api/lib/official-picks.js';
+import { formatOfficialTelegramMessage } from '../api/lib/telegram.js';
 
 const validPick = {
     event: {
@@ -53,4 +54,19 @@ test('los registros técnicos no aparecen en el feed público de picks', () => {
 test('un pick sintético nunca puede desencadenar una notificación de Telegram', () => {
     assert.equal(shouldNotifyTelegramForOfficialPick({ status: 'published', source: { provider: 'test-authorized' } }), false);
     assert.equal(shouldNotifyTelegramForOfficialPick({ status: 'published', source: { provider: 'money-tips-owned' } }), true);
+});
+
+test('el mensaje de Telegram muestra el comprobante como enlace corto y no revela mercado ni cuota', () => {
+    const text = formatOfficialTelegramMessage({
+        id: 'op_123',
+        event: { homeTeam: 'Equipo <Local>', awayTeam: 'Visitante', competition: 'Liga & Copa', kickoffAt: '2026-09-08T19:00:00.000Z' },
+        bet: { market: 'Más de 2,5 goles', selection: 'Over 2.5', oddsAtPublication: 1.85 },
+        source: { evidenceHash: 'abcde12345ffedcba987654321' }
+    });
+
+    assert.match(text, /PICK OFICIAL/);
+    assert.match(text, /<a href="https:\/\/app\.pronosticosmoneytips\.com\/\?pick=op_123">Ver comprobante verificable<\/a>/);
+    assert.match(text, /#ABCDE12345/);
+    assert.doesNotMatch(text, /Más de 2,5|Over 2\.5|1\.85/);
+    assert.match(text, /Equipo &lt;Local&gt;/);
 });
