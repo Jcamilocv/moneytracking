@@ -26,29 +26,44 @@ const channelLink = (messageId) => {
     return username ? `https://t.me/${username}/${messageId}` : null;
 };
 
-export const publishOfficialPickToTelegram = async (pick) => {
-    const chatId = process.env.TELEGRAM_PUBLIC_CHANNEL_ID;
-    if (!chatId) return { configured: false };
+const escapeTelegramHtml = (value) => String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 
+export const formatOfficialTelegramMessage = (pick) => {
     const kickoff = new Date(pick.event.kickoffAt).toLocaleString('es-ES', {
         dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Madrid'
     });
     const proof = `${appUrl()}/?pick=${encodeURIComponent(pick.id)}`;
-    const text = [
-        '✅ REGISTRO OFICIAL MONEY TIPS',
+    const reference = String(pick.source?.evidenceHash || '').slice(0, 10).toUpperCase();
+
+    return [
+        '🎯 <b>PICK OFICIAL · MONEY TIPS</b>',
         '',
-        `${pick.event.homeTeam} vs ${pick.event.awayTeam}`,
-        `${pick.event.competition}`,
-        `Inicio: ${kickoff}`,
-        'El detalle del pick está disponible para miembros Premium hasta el inicio.',
+        `<b>${escapeTelegramHtml(pick.event.homeTeam)} vs ${escapeTelegramHtml(pick.event.awayTeam)}</b>`,
+        `🏆 ${escapeTelegramHtml(pick.event.competition)}`,
+        `⏰ Inicio: ${kickoff}`,
         '',
-        `Comprobante: ${proof}`,
-        `SHA-256: ${pick.source.evidenceHash}`
+        '🔒 Selección y cuota disponibles para miembros Premium hasta el inicio.',
+        '',
+        `<a href="${proof}">Ver comprobante verificable</a>`,
+        `Referencia: <code>#${reference}</code>`
     ].join('\n');
+};
+
+export const publishOfficialPickToTelegram = async (pick) => {
+    const chatId = process.env.TELEGRAM_PUBLIC_CHANNEL_ID;
+    if (!chatId) return { configured: false };
 
     const telegram = await telegramRequest({
         method: 'sendMessage',
-        payload: { chat_id: chatId, text, disable_web_page_preview: true }
+        payload: {
+            chat_id: chatId,
+            text: formatOfficialTelegramMessage(pick),
+            parse_mode: 'HTML',
+            disable_web_page_preview: true
+        }
     });
     if (!telegram.configured) return telegram;
 

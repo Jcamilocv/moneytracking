@@ -18,17 +18,23 @@ const isPickStillActive = (pick, now = new Date()) => {
     return !Number.isNaN(kickoffAt.getTime()) && kickoffAt.getTime() > now.getTime();
 };
 
-// La prueba de existencia (evento, hora, hash) permanece pública. Los detalles
-// accionables se reservan para Premium hasta que comienza el partido.
+// El público puede auditar la existencia, el evento, la hora y, tras el inicio,
+// la cuota registrada. Mercado, selección y sistema permanecen reservados para
+// Premium para que el histórico no revele mecánicamente picks futuros.
 export const pickForAudience = (pick, { canViewActiveDetails = false, now = new Date() } = {}) => {
-    if (!isPickStillActive(pick, now) || canViewActiveDetails) {
-        return { ...pick, isLocked: false };
-    }
+    if (canViewActiveDetails) return { ...pick, isLocked: false, isPublicSummary: false };
+
+    const isActive = isPickStillActive(pick, now);
 
     return {
         ...pick,
-        isLocked: true,
-        bet: { market: null, selection: null, oddsAtPublication: null },
+        isLocked: isActive,
+        isPublicSummary: true,
+        bet: {
+            market: null,
+            selection: null,
+            oddsAtPublication: isActive ? null : pick.bet?.oddsAtPublication ?? null
+        },
         system: { id: null, version: null }
     };
 };
