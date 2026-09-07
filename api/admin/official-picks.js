@@ -37,6 +37,64 @@ const dateFromFirestoreValue = (value) => {
     return Number.isNaN(date.getTime()) ? null : date;
 };
 
+// This is intentionally not a generic delete endpoint. It exists solely to
+// remove the one pre-launch test record that was created before the official
+// publishing flow existed. Keeping it narrow avoids giving normal operations
+// a way to rewrite the public history.
+const KNOWN_TEST_PICK = {
+    id: 'op_a25e114b58ce96741d8f3f3edf8a8b757e3eaeaa',
+    confirmation: 'ELIMINAR PRUEBA',
+    event: { homeTeam: 'Barcelona', awayTeam: 'Madrid', competition: 'La Liga Española' },
+    bet: { market: 'Ambos equipos marcan', selection: 'SI', oddsAtPublication: 1.7 }
+};
+
+const isKnownTestPick = (pick = {}) => (
+    pick.event?.homeTeam === KNOWN_TEST_PICK.event.homeTeam
+    && pick.event?.awayTeam === KNOWN_TEST_PICK.event.awayTeam
+    && pick.event?.competition === KNOWN_TEST_PICK.event.competition
+    && pick.bet?.market === KNOWN_TEST_PICK.bet.market
+    && pick.bet?.selection === KNOWN_TEST_PICK.bet.selection
+    && Number(pick.bet?.oddsAtPublication) === KNOWN_TEST_PICK.bet.oddsAtPublication
+);
+
+const removeKnownTestPick = async (req, res) => {
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
+    if (!await hasOwnerTokenAuthorization(req)) return res.status(401).json({ error: 'No autorizado' });
+
+    const requestedId = String(req.body?.pickId || '');
+    const confirmation = String(req.body?.confirmation || '').trim().toUpperCase();
+    if (requestedId !== KNOWN_TEST_PICK.id || confirmation !== KNOWN_TEST_PICK.confirmation) {
+        return res.status(400).json({ error: 'La confirmación no corresponde al registro de prueba autorizado.' });
+    }
+
+    const db = getAdminDb();
+    const pickRef = db.collection('officialPicks').doc(KNOWN_TEST_PICK.id);
+    const queueRef = db.collection('officialPickQueue').doc(KNOWN_TEST_PICK.id);
+    const [pickSnapshot, eventsSnapshot, reportsSnapshot, queueSnapshot] = await Promise.all([
+        pickRef.get(),
+        pickRef.collection('events').get(),
+        db.collection('officialPickReports').where('pickId', '==', KNOWN_TEST_PICK.id).get(),
+        queueRef.get()
+    ]);
+
+    if (!pickSnapshot.exists) return res.status(404).json({ error: 'El registro de prueba ya no existe.' });
+    if (!isKnownTestPick(pickSnapshot.data())) {
+        return res.status(409).json({ error: 'El registro no coincide con la prueba autorizada y no se ha tocado.' });
+    }
+    if (eventsSnapshot.docs.some((event) => event.id === 'telegram_anchor')) {
+        return res.status(409).json({ error: 'Este registro tiene un mensaje de Telegram y requiere una retirada revisada.' });
+    }
+
+    const batch = db.batch();
+    eventsSnapshot.docs.forEach((event) => batch.delete(event.ref));
+    reportsSnapshot.docs.forEach((report) => batch.delete(report.ref));
+    if (queueSnapshot.exists) batch.delete(queueRef);
+    batch.delete(pickRef);
+    await batch.commit();
+
+    return res.status(200).json({ ok: true, removedPickId: KNOWN_TEST_PICK.id });
+};
+
 const handlePremiumAccess = async (req, res) => {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
     // Esta ruta nunca acepta el secreto de automatización: solo la sesión del propietario.
@@ -106,6 +164,15 @@ export default async function handler(req, res) {
         } catch (error) {
             console.error('No se pudo actualizar el acceso Premium:', error);
             return res.status(400).json({ error: error.message || 'No se pudo actualizar el acceso Premium.' });
+        }
+    }
+
+    if (req.query?.mode === 'remove-known-test-pick') {
+        try {
+            return await removeKnownTestPick(req, res);
+        } catch (error) {
+            console.error('No se pudo retirar el registro de prueba:', error);
+            return res.status(400).json({ error: error.message || 'No se pudo retirar el registro de prueba.' });
         }
     }
 

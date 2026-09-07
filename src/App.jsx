@@ -641,6 +641,8 @@ const OfficialPicksAdminPanel = ({ currentUser }) => {
     const [error, setError] = useState('');
     const [publishedPick, setPublishedPick] = useState(null);
     const [queueMessage, setQueueMessage] = useState('');
+    const [isRemovingTestPick, setIsRemovingTestPick] = useState(false);
+    const [testPickRemovalMessage, setTestPickRemovalMessage] = useState('');
 
     const update = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
@@ -722,6 +724,34 @@ const OfficialPicksAdminPanel = ({ currentUser }) => {
         }
     };
 
+    const removeKnownTestPick = async () => {
+        const typedConfirmation = window.prompt('Esta acción elimina únicamente el registro de prueba Barcelona vs Madrid de la aplicación. Escribe ELIMINAR PRUEBA para continuar.');
+        if (typedConfirmation !== 'ELIMINAR PRUEBA') return;
+        if (!window.confirm('Última confirmación: se eliminará únicamente ese registro de prueba. No se podrá deshacer.')) return;
+
+        setError('');
+        setTestPickRemovalMessage('');
+        setIsRemovingTestPick(true);
+        try {
+            const token = await currentUser.getIdToken();
+            const response = await fetch('/api/admin/official-picks?mode=remove-known-test-pick', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                    pickId: 'op_a25e114b58ce96741d8f3f3edf8a8b757e3eaeaa',
+                    confirmation: typedConfirmation
+                })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'No se pudo retirar el registro de prueba.');
+            setTestPickRemovalMessage('Registro de prueba retirado de MoneyTracKING. No había mensaje de Telegram asociado.');
+        } catch (requestError) {
+            setError(requestError.message || 'No se pudo retirar el registro de prueba.');
+        } finally {
+            setIsRemovingTestPick(false);
+        }
+    };
+
     const fields = [
         ['sourceEventId', 'ID único del evento', 'text'], ['competition', 'Competición', 'text'],
         ['homeTeam', 'Equipo local', 'text'], ['awayTeam', 'Equipo visitante', 'text'],
@@ -743,6 +773,7 @@ const OfficialPicksAdminPanel = ({ currentUser }) => {
         {error && <div className="bg-[var(--red-10)] border border-[var(--red-30)] text-[var(--red)] rounded-2xl p-4 text-sm">{error}</div>}
         {queueMessage && <div className="bg-yellow-500/10 border border-yellow-500/30 text-[var(--text-main)] rounded-2xl p-4 text-sm">{queueMessage}</div>}
         {publishedPick && <div className="bg-[var(--accent-10)] border border-[var(--accent-30)] rounded-2xl p-5"><p className="font-bold text-[var(--accent)]">{publishedPick.created ? 'Pick publicado y sellado.' : 'Este pick ya existía; no se duplicó.'}</p><a className="inline-block mt-3 font-bold underline text-[var(--text-main)]" href={buildOfficialPickLink(publishedPick.id)} target="_blank" rel="noreferrer">Abrir comprobante público</a></div>}
+        <section className="bg-[var(--red-10)] border border-[var(--red-30)] rounded-3xl p-5 md:p-6"><h4 className="font-extrabold text-[var(--text-main)]">Limpieza excepcional</h4><p className="text-sm text-[var(--text-muted)] mt-1 max-w-2xl">Retira únicamente el registro de prueba Barcelona vs Madrid creado antes del flujo oficial. No muestra ni permite borrar ningún otro pick.</p><button type="button" disabled={isRemovingTestPick || Boolean(testPickRemovalMessage)} onClick={removeKnownTestPick} className="mt-4 px-4 py-3 rounded-xl border border-[var(--red-30)] text-[var(--red)] text-sm font-extrabold disabled:opacity-50">{isRemovingTestPick ? 'Retirando…' : testPickRemovalMessage ? 'Registro retirado' : 'Retirar registro de prueba'}</button>{testPickRemovalMessage && <p className="mt-3 text-sm font-bold text-[var(--accent)]">{testPickRemovalMessage}</p>}</section>
         <PremiumAccessAdminPanel currentUser={currentUser} />
         <OfficialPickReportsAdminPanel currentUser={currentUser} />
     </section>;
