@@ -2,6 +2,8 @@ import { timingSafeEqual } from 'node:crypto';
 import { queueOfficialPick } from '../../server/official-pick-queue.js';
 import { getAdminAuth, getAdminDb } from '../lib/firebase-admin.js';
 import { normalizeOfficialPickInput, publicPickIdFor } from '../lib/official-pick-data.js';
+import { toPublicOfficialPick } from '../lib/official-picks.js';
+import { editOfficialPickTelegramMessage } from '../lib/telegram.js';
 import { normalizeFutbolBrainOwnerCandidate } from '../../server/futbolbrain-local-ingest.js';
 import {
     entitlementForManualGrant,
@@ -36,6 +38,10 @@ const dateFromFirestoreValue = (value) => {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? null : date;
 };
+
+const madridDateKey = (value) => new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit'
+}).format(dateFromFirestoreValue(value));
 
 // This is intentionally not a generic delete endpoint. It exists solely to
 // remove the one pre-launch test record that was created before the official
@@ -93,6 +99,42 @@ const removeKnownTestPick = async (req, res) => {
     await batch.commit();
 
     return res.status(200).json({ ok: true, removedPickId: KNOWN_TEST_PICK.id });
+};
+
+const refreshTodayTelegramPosts = async (req, res) => {
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
+    if (!await hasOwnerTokenAuthorization(req)) return res.status(401).json({ error: 'No autorizado' });
+    if (req.body?.action !== 'refresh-today-telegram-posts') {
+        return res.status(400).json({ error: 'La acción solicitada no es válida.' });
+    }
+
+    const db = getAdminDb();
+    const today = madridDateKey(new Date());
+    const snapshot = await db.collection('officialPicks').orderBy('publishedAt', 'desc').limit(50).get();
+    const todayPicks = snapshot.docs.filter((document) => {
+        const pick = document.data();
+        return pick.status === 'published' && pick.publishedAt && madridDateKey(pick.publishedAt) === today;
+    });
+    const results = [];
+
+    for (const document of todayPicks) {
+        const anchorRef = document.ref.collection('events').doc('telegram_anchor');
+        const anchor = await anchorRef.get();
+        if (!anchor.exists) continue;
+
+        try {
+            await editOfficialPickTelegramMessage(toPublicOfficialPick(document), anchor.data());
+            await anchorRef.set({ messageFormat: 'compact_v2', editedAt: new Date() }, { merge: true });
+            results.push({ id: document.id, updated: true });
+        } catch (error) {
+            console.error(`No se pudo actualizar el mensaje Telegram del pick ${document.id}:`, error);
+            results.push({ id: document.id, updated: false });
+        }
+    }
+
+    const updated = results.filter((result) => result.updated).length;
+    const failed = results.length - updated;
+    return res.status(200).json({ ok: true, date: today, found: results.length, updated, failed });
 };
 
 const handlePremiumAccess = async (req, res) => {
@@ -173,6 +215,15 @@ export default async function handler(req, res) {
         } catch (error) {
             console.error('No se pudo retirar el registro de prueba:', error);
             return res.status(400).json({ error: error.message || 'No se pudo retirar el registro de prueba.' });
+        }
+    }
+
+    if (req.query?.mode === 'refresh-today-telegram-posts') {
+        try {
+            return await refreshTodayTelegramPosts(req, res);
+        } catch (error) {
+            console.error('No se pudieron actualizar los mensajes de Telegram:', error);
+            return res.status(400).json({ error: error.message || 'No se pudieron actualizar los mensajes de Telegram.' });
         }
     }
 

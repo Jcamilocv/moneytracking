@@ -75,6 +75,26 @@ export const publishOfficialPickToTelegram = async (pick) => {
     };
 };
 
+export const editOfficialPickTelegramMessage = async (pick, anchor = {}) => {
+    const chatId = String(anchor.chatId || '');
+    const messageId = Number(anchor.messageId);
+    if (!chatId || !Number.isInteger(messageId) || messageId < 1) {
+        throw new Error('El mensaje oficial no tiene un anclaje de Telegram válido.');
+    }
+
+    const telegram = await telegramRequest({
+        method: 'editMessageText',
+        payload: {
+            chat_id: chatId,
+            message_id: messageId,
+            text: formatOfficialTelegramMessage(pick),
+            parse_mode: 'HTML',
+            disable_web_page_preview: true
+        }
+    });
+    return { configured: telegram.configured, chatId, messageId };
+};
+
 // The operations channel is private and its id is never returned by public APIs.
 export const sendTelegramOperationsMessage = async ({ chatId, text }) => {
     const telegram = await telegramRequest({
