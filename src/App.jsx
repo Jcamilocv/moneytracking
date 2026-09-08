@@ -877,6 +877,7 @@ export default function App() {
     }, []);
 
     const [currentUser, setCurrentUser] = useState(null);
+    const [authResolved, setAuthResolved] = useState(false);
     
     // Estado del Avatar de Usuario
     const [userAvatar, setUserAvatar] = useState(null);
@@ -1105,12 +1106,30 @@ export default function App() {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             setCurrentUser(user);
+            setAuthResolved(true);
             setAccountLimits(DEFAULT_LIMITS);
             setScanCount(0);
             if (!user && viewMode === 'personal') { setLoading(false); setBanks([]); setBets([]); setBalances([]); }
         });
         return () => unsubscribe();
     }, [viewMode]);
+
+    // A Telegram proof link is still useful to a visitor, but a user who
+    // already has an authenticated MoneyTracKING session should not be kept in
+    // the public receipt view. Move that same pick into their private flow as
+    // soon as Firebase restores the existing browser session.
+    useEffect(() => {
+        if (!authResolved || !currentUser || viewMode !== 'official-pick' || !publicShareId) return;
+        setPendingOfficialPickId(publicShareId);
+        setViewMode('personal');
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            params.delete('pick');
+            params.set('addPick', publicShareId);
+            const query = params.toString();
+            window.history.replaceState({}, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
+        }
+    }, [authResolved, currentUser, publicShareId, viewMode]);
 
     useEffect(() => {
         let active = true;
@@ -1512,6 +1531,9 @@ export default function App() {
     ), [bets, activeBankData?.id]);
 
     if (viewMode === 'official-pick') {
+        if (!authResolved || currentUser) {
+            return <><style>{getGlobalStyles(theme)}</style><LiquidBackground theme={theme}/><main className="min-h-screen flex items-center justify-center p-6"><p className="text-sm font-bold text-[var(--text-main)]">Abriendo tu pick…</p></main></>;
+        }
         return <OfficialPickPublicPage pickId={publicShareId} theme={theme} />;
     }
 
