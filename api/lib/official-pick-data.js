@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { normalizePublicationPolicy, scheduledAtForOfficialPick } from '../../server/official-pick-scheduling.js';
+import { stakeRecommendationForOfficialPick } from '../../server/money-tips-stake-policy.js';
 
 const MAX_TEXT_LENGTH = 160;
 
@@ -42,12 +43,14 @@ export const normalizeOfficialPickInput = (input = {}) => {
     const sourceProvider = cleanText(input?.source?.provider || 'money-tips-owned', 'source.provider');
     const observedAt = input?.source?.observedAt ? cleanDate(input.source.observedAt, 'source.observedAt') : new Date();
     const publicationPolicy = normalizePublicationPolicy(input?.publicationPolicy);
+    const oddsAtPublication = cleanOdds(input?.bet?.oddsAtPublication);
+    const stakeRecommendation = stakeRecommendationForOfficialPick({ systemId, oddsAtPublication });
     const scheduledAt = input?.scheduledAt
         ? cleanDate(input.scheduledAt, 'scheduledAt')
         : scheduledAtForOfficialPick({ policy: publicationPolicy, kickoffAt, observedAt });
 
     const normalized = {
-        schemaVersion: 1,
+        schemaVersion: 2,
         status: 'published',
         event: {
             sourceEventId,
@@ -59,8 +62,9 @@ export const normalizeOfficialPickInput = (input = {}) => {
         bet: {
             market,
             selection,
-            oddsAtPublication: cleanOdds(input?.bet?.oddsAtPublication),
-            stakeUnits: 1
+            oddsAtPublication,
+            stakeUnits: 1,
+            ...stakeRecommendation
         },
         system: { id: systemId, version: systemVersion },
         source: { provider: sourceProvider, observedAt },

@@ -192,12 +192,49 @@ const getBetDisplayTitle = (bet = {}) => {
 };
 
 const getBetDisplaySelection = (bet = {}) => {
+    const officialMarket = typeof bet.officialPickSnapshot?.bet?.market === 'string' ? bet.officialPickSnapshot.bet.market.trim() : '';
+    const officialSelection = typeof bet.officialPickSnapshot?.bet?.selection === 'string' ? bet.officialPickSnapshot.bet.selection.trim() : '';
+    if (officialMarket && officialSelection) return `${officialMarket} · ${officialSelection}`;
     const selection = typeof bet.selection === 'string' ? bet.selection.trim() : '';
     if (selection) return selection;
     if (bet.selections?.length > 1) return 'Múltiple';
     const firstSelection = typeof bet.selections?.[0]?.selection === 'string' ? bet.selections[0].selection.trim() : '';
     return firstSelection || 'Sin pronóstico';
 };
+
+const recommendedStakePctForPick = (pick = {}) => {
+    const stake = Number(pick?.bet?.recommendedStakePct);
+    return Number.isFinite(stake) && stake >= 0 ? stake : 0;
+};
+
+const officialPickSnapshotForBank = (pick = {}) => ({
+    schemaVersion: 1,
+    officialPickId: String(pick.id || ''),
+    event: {
+        competition: String(pick?.event?.competition || ''),
+        homeTeam: String(pick?.event?.homeTeam || ''),
+        awayTeam: String(pick?.event?.awayTeam || ''),
+        kickoffAt: String(pick?.event?.kickoffAt || '')
+    },
+    bet: {
+        market: String(pick?.bet?.market || ''),
+        selection: String(pick?.bet?.selection || ''),
+        oddsAtPublication: Number(pick?.bet?.oddsAtPublication || 0),
+        recommendedStakePct: recommendedStakePctForPick(pick),
+        baseStakePct: Number(pick?.bet?.baseStakePct || 0),
+        confidenceFactor: Number(pick?.bet?.confidenceFactor || 0),
+        policyVersion: String(pick?.bet?.policyVersion || '')
+    },
+    system: {
+        id: String(pick?.system?.id || ''),
+        version: String(pick?.system?.version || '')
+    },
+    proof: {
+        publishedAt: String(pick?.publishedAt || ''),
+        evidenceHash: String(pick?.source?.evidenceHash || ''),
+        url: buildOfficialPickLink(String(pick.id || ''))
+    }
+});
 
 const COMMON_BOOKMAKERS = ["Bet365", "William Hill", "Betfair", "Bwin", "888sport", "Betway", "Marathonbet", "Sportium", "Codere", "Kirolbet", "Retabet", "Luckia", "Paf", "LeoVegas", "TonyBet", "Pinnacle", "1xBet", "Winamax", "Coolbet"].sort();
 
@@ -303,6 +340,53 @@ const getOfficialBetDateParts = (value) => {
     });
     const values = Object.fromEntries(formatter.formatToParts(date).map((part) => [part.type, part.value]));
     return { date: `${values.year}-${values.month}-${values.day}`, time: `${values.hour}:${values.minute}` };
+};
+
+const officialBetFieldsForBank = (pick = {}, initialCapital = 0) => {
+    const { date, time } = getOfficialBetDateParts(pick?.event?.kickoffAt);
+    const stake = recommendedStakePctForPick(pick);
+    const odds = Number(pick?.bet?.oddsAtPublication);
+    const homeTeam = String(pick?.event?.homeTeam || '');
+    const awayTeam = String(pick?.event?.awayTeam || '');
+
+    return {
+        date,
+        time,
+        bookmaker: 'Money Tips',
+        betMode: 'simple',
+        title: `${homeTeam} vs ${awayTeam}`,
+        market: String(pick?.bet?.market || ''),
+        selection: String(pick?.bet?.selection || ''),
+        status: 'pending',
+        category: 'Money Tips',
+        odds,
+        amount: Math.max(0, Number((Number(initialCapital || 0) * stake / 100).toFixed(2))),
+        stake,
+        analysis: `Pick oficial Money Tips. Publicado: ${formatOfficialDateTime(pick?.publishedAt)}. Comprobante: ${buildOfficialPickLink(pick.id)}`,
+        officialPickId: String(pick.id || ''),
+        officialPublishedAt: pick.publishedAt,
+        officialRecommendedStakePct: stake,
+        officialPickSnapshot: officialPickSnapshotForBank(pick),
+        copiedOdds: odds,
+        isOfficialPickCopy: true,
+        isBack: true,
+        isLive: false,
+        isFreebet: false,
+        isEachWay: false,
+        isHidden: false,
+        selections: [{
+            id: `official-${pick.id}`,
+            title: `${homeTeam} vs ${awayTeam}`,
+            selection: String(pick?.bet?.selection || ''),
+            market: String(pick?.bet?.market || ''),
+            sport: 'Fútbol',
+            status: 'pending',
+            category: 'Money Tips',
+            competition: String(pick?.event?.competition || ''),
+            odds,
+            isOpen: true
+        }]
+    };
 };
 
 const buildOfficialPickLink = (pickId) => `${window.location.origin}${window.location.pathname}?pick=${encodeURIComponent(pickId)}`;
@@ -444,6 +528,7 @@ const OfficialPicksPanel = ({ currentBank, currentUser, isPremium, copiedPickIds
                                     ? <p className="font-extrabold text-[var(--accent)] text-xl mt-1">@{Number(pick.bet.oddsAtPublication).toFixed(2)}</p>
                                     : <p className="font-extrabold text-[var(--text-muted)] text-xl mt-1">—</p>}
                                 {hasFullPickDetails && <p className="text-[10px] text-[var(--text-muted)] mt-1">Sistema {pick.system.id} · {pick.system.version}</p>}
+                                {hasFullPickDetails && <p className="text-[10px] text-[var(--accent)] font-bold mt-1">Stake recomendado: {recommendedStakePctForPick(pick)}%</p>}
                             </div>
                         </div>
                         <OfficialReviewStatus review={pick.review} />
@@ -938,6 +1023,7 @@ export default function App() {
     const [isScanning, setIsScanning] = useState(false);
     const [aiMessage, setAiMessage] = useState(''); 
     const [copyingOfficialPickId, setCopyingOfficialPickId] = useState('');
+    const [isSynchronizingOfficialPicks, setIsSynchronizingOfficialPicks] = useState(false);
     const [isOfficialPicksAdmin, setIsOfficialPicksAdmin] = useState(false);
     const [hasPremiumAccess, setHasPremiumAccess] = useState(false);
     const canUsePremium = hasPremiumAccess || isOfficialPicksAdmin;
@@ -1530,6 +1616,17 @@ export default function App() {
             .filter(Boolean)
     ), [bets, activeBankData?.id]);
 
+    // Legacy copies created before the official snapshot existed can be
+    // enriched once in their current bank. Other seasons and manual bets are
+    // intentionally outside this narrowly scoped migration.
+    const legacyOfficialCopiesInActiveBank = useMemo(() => bets.filter((bet) => (
+        bet.bankId === activeBankData?.id
+        && bet.isOfficialPickCopy === true
+        && Boolean(bet.officialPickId)
+        && !bet.officialPickSnapshot
+        && getBetStatus(bet) === 'pending'
+    )), [bets, activeBankData?.id]);
+
     if (viewMode === 'official-pick') {
         if (!authResolved || currentUser) {
             return <><style>{getGlobalStyles(theme)}</style><LiquidBackground theme={theme}/><main className="min-h-screen flex items-center justify-center p-6"><p className="text-sm font-bold text-[var(--text-main)]">Abriendo tu pick…</p></main></>;
@@ -1586,57 +1683,64 @@ export default function App() {
         const betCountInBank = bets.filter((bet) => bet.bankId === activeBankData.id).length;
         if (betCountInBank >= accountLimits.maxBetsPerBank) return showAlert(`Límite de ${accountLimits.maxBetsPerBank} apuestas por banca alcanzado.`);
 
-        const { date, time } = getOfficialBetDateParts(pick.event.kickoffAt);
         const capital = Number(activeBankData.initialCapital) || 0;
-        const amount = Math.max(0, Number((capital * 0.01).toFixed(2)));
         const betData = {
-            date,
-            time,
-            bookmaker: 'Money Tips',
-            betMode: 'simple',
-            title: `${pick.event.homeTeam} vs ${pick.event.awayTeam}`,
-            selection: pick.bet.selection,
-            status: 'pending',
-            category: 'Money Tips',
-            odds: Number(pick.bet.oddsAtPublication),
-            amount,
-            stake: 1,
-            analysis: `Pick oficial Money Tips. Publicado: ${formatOfficialDateTime(pick.publishedAt)}. Comprobante: ${buildOfficialPickLink(pick.id)}`,
+            ...officialBetFieldsForBank(pick, capital),
             bankId: activeBankData.id,
             createdAt: new Date().toISOString(),
-            copiedAt: serverTimestamp(),
-            officialPickId: pick.id,
-            officialPublishedAt: pick.publishedAt,
-            copiedOdds: Number(pick.bet.oddsAtPublication),
-            isOfficialPickCopy: true,
-            isBack: true,
-            isLive: false,
-            isFreebet: false,
-            isEachWay: false,
-            isHidden: false,
-            selections: [{
-                id: `official-${pick.id}`,
-                title: `${pick.event.homeTeam} vs ${pick.event.awayTeam}`,
-                selection: pick.bet.selection,
-                sport: 'Fútbol',
-                status: 'pending',
-                category: 'Money Tips',
-                competition: pick.event.competition,
-                odds: Number(pick.bet.oddsAtPublication),
-                isOpen: true
-            }]
+            copiedAt: serverTimestamp()
         };
 
         setCopyingOfficialPickId(pick.id);
         try {
             await addDoc(collection(db, 'users', currentUser.uid, 'bets'), betData);
             if (pick.id === pendingOfficialPickId) clearPendingOfficialPick();
-            showAlert(`Pick añadido a ${activeBankData.name} con stake inicial del 1%. Puedes editarlo antes de apostar.`);
+            showAlert(`Pick añadido a ${activeBankData.name} con stake recomendado del ${recommendedStakePctForPick(pick)}%.`);
         } catch (error) {
             console.error('Error copiando pick oficial:', error);
             showAlert('No se pudo añadir el pick a tu banca. Inténtalo de nuevo.');
         } finally {
             setCopyingOfficialPickId('');
+        }
+    };
+
+    const synchronizeLegacyOfficialPicks = async () => {
+        if (!currentUser || !activeBankData || activeBankData.isBalance) return;
+        if (legacyOfficialCopiesInActiveBank.length === 0) {
+            showAlert('No hay registros oficiales pendientes de sincronización en esta banca.');
+            return;
+        }
+
+        setIsSynchronizingOfficialPicks(true);
+        try {
+            const token = await currentUser.getIdToken();
+            const response = await fetch('/api/official-picks?limit=50', { headers: { Authorization: `Bearer ${token}` } });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'No se pudieron leer los picks oficiales.');
+
+            const picksById = new Map((Array.isArray(data.picks) ? data.picks : []).map((pick) => [pick.id, pick]));
+            const batch = writeBatch(db);
+            let synchronized = 0;
+
+            for (const bet of legacyOfficialCopiesInActiveBank) {
+                const pick = picksById.get(bet.officialPickId);
+                if (!pick?.bet?.market || !pick?.bet?.selection || !Number.isFinite(Number(pick?.bet?.oddsAtPublication))) continue;
+                batch.update(doc(db, 'users', currentUser.uid, 'bets', bet.id), officialBetFieldsForBank(pick, activeBankData.initialCapital));
+                synchronized += 1;
+            }
+
+            if (synchronized === 0) {
+                showAlert('No se encontró ningún registro oficial compatible para sincronizar.');
+                return;
+            }
+
+            await batch.commit();
+            showAlert(`${synchronized} pick${synchronized === 1 ? '' : 's'} actualizado${synchronized === 1 ? '' : 's'} con su mercado, comprobante y stake oficial.`);
+        } catch (error) {
+            console.error('Error sincronizando picks oficiales:', error);
+            showAlert(error.message || 'No se pudieron sincronizar los picks oficiales.');
+        } finally {
+            setIsSynchronizingOfficialPicks(false);
         }
     };
 
@@ -2637,7 +2741,7 @@ export default function App() {
                                                                 </td>
                                                             )}
                                                         </tr>
-                                                        {isExp&&(<tr className="bg-[var(--bg-input)]/50 w-full"><td colSpan={viewMode==='personal'?7:6} className="p-5 border-b border-[var(--border)] w-full"><div className="space-y-4 w-full"><div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs w-full"><div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm w-full"><span className="block text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1 font-bold">Casa</span><span className="text-[var(--text-main)] font-bold">{b.bookmaker}</span></div><div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm w-full"><span className="block text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1 font-bold">Hora</span><span className="text-[var(--text-main)] font-bold">{b.time}</span></div>{b.commission&&<div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm w-full"><span className="block text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1 font-bold">Comisión</span><span className="text-[var(--text-main)] font-bold">{b.commission}%</span></div>}</div>{b.selections&&b.selections.map((s,i)=>(<div className="bg-[var(--bg-card)] p-4 rounded-xl border border-[var(--border)] shadow-sm flex justify-between items-center hover:bg-[var(--bg-hover)] transition-colors w-full" key={i}><div className="flex-1 min-w-0 pr-4"><div className="text-[var(--text-main)] text-sm font-bold tracking-wide truncate">{s.title}</div><div className="text-[var(--accent)] text-xs font-medium mt-1 truncate">{s.selection}</div><div className="text-[10px] text-[var(--text-muted)] mt-1 uppercase tracking-wider truncate">{s.competition} • {s.category}</div></div><div className="text-right shrink-0"><div className="text-[var(--accent)] font-extrabold text-lg">@{parseFloat(s.odds).toFixed(2)}</div><div className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider font-bold mt-1">{s.bookmaker}</div></div></div>))}{b.analysis&&(<div className="bg-[var(--accent-5)] p-4 rounded-xl border border-[var(--accent-20)] w-full"><h4 className="text-[var(--accent)] font-bold mb-2 flex items-center gap-2 text-xs uppercase tracking-wider"><FileText size={14}/> Análisis</h4><p className="text-[var(--text-muted)] text-sm leading-relaxed whitespace-pre-wrap">{b.analysis}</p></div>)}</div></td></tr>)}
+                                                        {isExp&&(<tr className="bg-[var(--bg-input)]/50 w-full"><td colSpan={viewMode==='personal'?7:6} className="p-5 border-b border-[var(--border)] w-full"><div className="space-y-4 w-full"><div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs w-full"><div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm w-full"><span className="block text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1 font-bold">Casa</span><span className="text-[var(--text-main)] font-bold">{b.bookmaker}</span></div><div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm w-full"><span className="block text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1 font-bold">Hora</span><span className="text-[var(--text-main)] font-bold">{b.time}</span></div>{b.officialPickSnapshot&&<div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--accent-20)] shadow-sm w-full"><span className="block text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1 font-bold">Cuota oficial</span><span className="text-[var(--accent)] font-bold">@{Number(b.officialPickSnapshot.bet?.oddsAtPublication || b.odds).toFixed(2)} · {b.officialPickSnapshot.bet?.recommendedStakePct}%</span></div>}{b.commission&&<div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] shadow-sm w-full"><span className="block text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-1 font-bold">Comisión</span><span className="text-[var(--text-main)] font-bold">{b.commission}%</span></div>}</div>{b.selections&&b.selections.map((s,i)=>(<div className="bg-[var(--bg-card)] p-4 rounded-xl border border-[var(--border)] shadow-sm flex justify-between items-center hover:bg-[var(--bg-hover)] transition-colors w-full" key={i}><div className="flex-1 min-w-0 pr-4"><div className="text-[var(--text-main)] text-sm font-bold tracking-wide truncate">{s.title}</div><div className="text-[var(--accent)] text-xs font-medium mt-1 truncate">{b.officialPickSnapshot?.bet?.market ? `${b.officialPickSnapshot.bet.market} · ${s.selection}` : s.selection}</div><div className="text-[10px] text-[var(--text-muted)] mt-1 uppercase tracking-wider truncate">{s.competition} • {s.category}</div></div><div className="text-right shrink-0"><div className="text-[var(--accent)] font-extrabold text-lg">@{parseFloat(s.odds).toFixed(2)}</div><div className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider font-bold mt-1">{s.bookmaker}</div></div></div>))}{b.analysis&&(<div className="bg-[var(--accent-5)] p-4 rounded-xl border border-[var(--accent-20)] w-full"><h4 className="text-[var(--accent)] font-bold mb-2 flex items-center gap-2 text-xs uppercase tracking-wider"><FileText size={14}/> Análisis</h4><p className="text-[var(--text-muted)] text-sm leading-relaxed whitespace-pre-wrap">{b.analysis}</p></div>)}</div></td></tr>)}
                                                     </React.Fragment>
                                                 );
                                             })}
@@ -2653,7 +2757,8 @@ export default function App() {
 
                 {activeTab === 'official-picks' && viewMode === 'personal' && (
                     <section className="space-y-6 w-full">
-                        <div><h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">Picks oficiales de Money Tips</h3><p className="text-sm text-[var(--text-muted)] mt-2 max-w-2xl">Cada pick se publica desde el servidor y mantiene un comprobante con su hora, cuota y evidencia. Añádelo a la banca seleccionada con stake inicial del 1%.</p></div>
+                        <div><h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">Picks oficiales de Money Tips</h3><p className="text-sm text-[var(--text-muted)] mt-2 max-w-2xl">Cada pick conserva su comprobante, cuota y stake recomendado según la política vigente del sistema. Al añadirlo, la banca recibe una copia completa y trazable.</p></div>
+                        {legacyOfficialCopiesInActiveBank.length > 0 && <div className="rounded-2xl border border-[var(--yellow)]/40 bg-yellow-500/10 p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><p className="font-extrabold text-[var(--text-main)]">Hay {legacyOfficialCopiesInActiveBank.length} picks antiguos por sincronizar</p><p className="text-sm text-[var(--text-muted)] mt-1">Se completarán mercado, comprobante y stake recomendado solo en la banca seleccionada. No modifica temporadas anteriores ni apuestas ya resueltas.</p></div><button onClick={synchronizeLegacyOfficialPicks} disabled={isSynchronizingOfficialPicks || !canUsePremium} className="shrink-0 px-4 py-3 rounded-xl bg-[var(--accent)] text-[var(--accent-fg)] text-sm font-extrabold disabled:opacity-50">{isSynchronizingOfficialPicks ? 'Sincronizando…' : 'Sincronizar ahora'}</button></div>}
                         <OfficialPicksPanel currentBank={activeBankData} currentUser={currentUser} isPremium={canUsePremium} copiedPickIds={copiedOfficialPickIds} copyingPickId={copyingOfficialPickId} onCopy={handleCopyOfficialPick} focusPickId={pendingOfficialPickId} onCreateFirstBank={openAddBankModal} />
                     </section>
                 )}

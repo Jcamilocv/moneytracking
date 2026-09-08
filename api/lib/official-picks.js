@@ -3,6 +3,7 @@ import { getAdminDb } from './firebase-admin.js';
 import { normalizeOfficialPickInput, publicPickIdFor } from './official-pick-data.js';
 import { attachOfficialPickReviewSummaries } from './official-pick-reports.js';
 import { publishOfficialPickToTelegram } from './telegram.js';
+import { stakeRecommendationForOfficialPick } from '../../server/money-tips-stake-policy.js';
 
 const toPlainValue = (value) => {
     if (value?.toDate && typeof value.toDate === 'function') return value.toDate().toISOString();
@@ -12,6 +13,27 @@ const toPlainValue = (value) => {
 };
 
 export const toPublicOfficialPick = (snapshot) => ({ id: snapshot.id, ...toPlainValue(snapshot.data()) });
+
+// Picks published before the stake-policy launch have no recommendation stored
+// in Firestore. Derive it only in the response, so their original ledger and
+// evidence remain untouched while the owner can safely synchronise their bank.
+const withStakeRecommendation = (pick) => {
+    if (!pick?.bet || Number.isFinite(Number(pick.bet.recommendedStakePct))) return pick;
+    try {
+        return {
+            ...pick,
+            bet: {
+                ...pick.bet,
+                ...stakeRecommendationForOfficialPick({
+                    systemId: pick.system?.id,
+                    oddsAtPublication: pick.bet.oddsAtPublication
+                })
+            }
+        };
+    } catch {
+        return pick;
+    }
+};
 
 const isPickStillActive = (pick, now = new Date()) => {
     const kickoffAt = new Date(pick?.event?.kickoffAt);
@@ -77,7 +99,7 @@ export const publishOfficialPick = async (input) => {
     });
 
     const snapshot = await pickRef.get();
-    const pick = toPublicOfficialPick(snapshot);
+    const pick = withStakeRecommendation(toPublicOfficialPick(snapshot));
 
     const telegramAnchorRef = pickRef.collection('events').doc('telegram_anchor');
     const telegramAnchor = await telegramAnchorRef.get();
@@ -104,7 +126,7 @@ export const listOfficialPicks = async (limit = 20, audience = {}) => {
     const picks = snapshot.docs
         .filter((document) => isPublicOfficialPickData(document.data()))
         .slice(0, safeLimit)
-        .map(toPublicOfficialPick);
+        .map((document) => withStakeRecommendation(toPublicOfficialPick(document)));
     const reviewed = await attachOfficialPickReviewSummaries(picks);
     return reviewed.map((pick) => pickForAudience(pick, audience));
 };
@@ -114,7 +136,7 @@ export const getOfficialPick = async (pickId, audience = {}) => {
     const pickSnapshot = await db.collection('officialPicks').doc(pickId).get();
     if (!pickSnapshot.exists || pickSnapshot.data().status !== 'published') return null;
     const eventsSnapshot = await pickSnapshot.ref.collection('events').orderBy('createdAt', 'asc').get();
-    const [pick] = await attachOfficialPickReviewSummaries([toPublicOfficialPick(pickSnapshot)]);
+    const [pick] = await attachOfficialPickReviewSummaries([withStakeRecommendation(toPublicOfficialPick(pickSnapshot))]);
     return {
         pick: pickForAudience(pick, audience),
         events: eventsSnapshot.docs.map(toPublicOfficialPick)

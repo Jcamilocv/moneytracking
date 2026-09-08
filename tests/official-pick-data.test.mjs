@@ -3,6 +3,7 @@ import test from 'node:test';
 import { normalizeOfficialPickInput, publicPickIdFor } from '../api/lib/official-pick-data.js';
 import { isPublicOfficialPickData, shouldNotifyTelegramForOfficialPick } from '../api/lib/official-picks.js';
 import { formatOfficialTelegramMessage } from '../api/lib/telegram.js';
+import { stakeRecommendationForOfficialPick } from '../server/money-tips-stake-policy.js';
 
 const validPick = {
     event: {
@@ -27,6 +28,18 @@ test('un pick oficial normalizado tiene una identidad y evidencia deterministas'
     assert.match(publicPickIdFor(first), /^op_[a-f0-9]{40}$/);
     assert.equal(first.scheduledAt.toISOString(), '2026-08-30T17:55:00.000Z');
     assert.equal(first.publicationPolicy, 't_minus_5');
+    assert.equal(first.bet.recommendedStakePct, 0);
+    assert.equal(first.bet.policyVersion, '2026-27-forward-v1');
+});
+
+test('la política de stake aplica el factor inicial de producción controlada', () => {
+    assert.deepEqual(
+        stakeRecommendationForOfficialPick({ systemId: 'MT - ENG2 - v1.0', oddsAtPublication: 1.3 }),
+        { policyVersion: '2026-27-forward-v1', systemState: 'production_controlled', baseStakePct: 1.5, confidenceFactor: 0.75, recommendedStakePct: 1.125 }
+    );
+    assert.equal(stakeRecommendationForOfficialPick({ systemId: 'MT - ENG2 - v1.0', oddsAtPublication: 2.2 }).recommendedStakePct, 0.75);
+    assert.equal(stakeRecommendationForOfficialPick({ systemId: 'MT - ENG2 - v1.0', oddsAtPublication: 3.2 }).recommendedStakePct, 0.375);
+    assert.equal(stakeRecommendationForOfficialPick({ systemId: 'MT-UNKNOWN', oddsAtPublication: 2.2 }).recommendedStakePct, 0);
 });
 
 test('un sistema inmediato queda listo en el momento observado, no en T-5', () => {
