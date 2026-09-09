@@ -1,6 +1,6 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { getAdminDb } from '../api/lib/firebase-admin.js';
-import { normalizeOfficialPickInput, publicPickIdFor } from '../api/lib/official-pick-data.js';
+import { normalizeOfficialPickInput, publicPickIdFor, semanticOfficialPickKey } from '../api/lib/official-pick-data.js';
 import { PUBLICATION_POLICIES } from './official-pick-scheduling.js';
 import { publishOfficialPick, toPublicOfficialPick } from '../api/lib/official-picks.js';
 
@@ -31,6 +31,7 @@ const queueDocumentFor = (normalized) => ({
     schemaVersion: 1,
     status: 'queued',
     idempotencyKey: normalized.idempotencyKey,
+    semanticDuplicateKey: normalized.semanticDuplicateKey,
     event: { ...normalized.event, kickoffAt: asTimestamp(normalized.event.kickoffAt) },
     bet: normalized.bet,
     system: normalized.system,
@@ -43,12 +44,42 @@ const queueDocumentFor = (normalized) => ({
     updatedAt: FieldValue.serverTimestamp()
 });
 
+// Older records predate semanticDuplicateKey. Scan the small, real-pick
+// ledger before queuing so a later change to a source kickoff hour cannot
+// reproduce one of those historical records either. New records are protected
+// atomically by their semantic public id below.
+const findLegacyPublishedDuplicate = async ({ db, semanticDuplicateKey }) => {
+    const snapshot = await db.collection('officialPicks')
+        .where('status', '==', 'published')
+        .limit(100)
+        .get();
+    return snapshot.docs.find((document) => {
+        const data = document.data();
+        const existingKey = data.semanticDuplicateKey || semanticOfficialPickKey({
+            event: { ...data.event, kickoffAt: asDate(data.event?.kickoffAt) },
+            bet: data.bet,
+            system: data.system,
+            source: data.source
+        });
+        return existingKey === semanticDuplicateKey;
+    }) || null;
+};
+
 export const queueOfficialPick = async (input) => {
     const normalized = normalizeOfficialPickInput(input);
     const db = getAdminDb();
     const pickId = publicPickIdFor(normalized);
     const pickRef = db.collection('officialPicks').doc(pickId);
     const queueRef = db.collection('officialPickQueue').doc(pickId);
+    const legacyDuplicate = await findLegacyPublishedDuplicate({ db, semanticDuplicateKey: normalized.semanticDuplicateKey });
+    if (legacyDuplicate) {
+        return {
+            created: false,
+            state: 'already_published',
+            queueId: legacyDuplicate.id,
+            pick: toPublicOfficialPick(legacyDuplicate)
+        };
+    }
     let state = 'queued';
     let created = false;
 

@@ -38,6 +38,19 @@ export const formatOfficialTelegramMessage = (pick) => {
     const proof = `${appUrl()}/?pick=${encodeURIComponent(pick.id)}`;
     const reference = String(pick.source?.evidenceHash || '').slice(0, 10).toUpperCase();
 
+    if (pick.status === 'withdrawn') {
+        return [
+            '⚠️ <b>REGISTRO RETIRADO · MONEY TIPS</b>',
+            '',
+            `<b>${escapeTelegramHtml(pick.event.homeTeam)} vs ${escapeTelegramHtml(pick.event.awayTeam)}</b>`,
+            'Este aviso se retiró antes de su uso por duplicidad.',
+            'El pick oficial válido conserva su propio comprobante verificable.',
+            '',
+            `<a href="${proof}">Ver pick y comprobante verificable</a>`,
+            `Referencia: <code>#${reference}</code>`
+        ].join('\n');
+    }
+
     return [
         '🎯 <b>PICK OFICIAL · MONEY TIPS</b>',
         '',
@@ -47,7 +60,7 @@ export const formatOfficialTelegramMessage = (pick) => {
         '',
         '🔒 Selección y cuota disponibles para miembros Premium hasta el inicio.',
         '',
-        `<a href="${proof}">Ver comprobante verificable</a>`,
+        `<a href="${proof}">Ver pick y comprobante verificable</a>`,
         `Referencia: <code>#${reference}</code>`
     ].join('\n');
 };

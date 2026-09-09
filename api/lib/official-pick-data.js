@@ -33,6 +33,37 @@ const stableStringify = (value) => {
 
 export const hashOfficialPickPayload = (value) => createHash('sha256').update(stableStringify(value)).digest('hex');
 
+// A source can correct how it renders the kickoff hour after a pick has already
+// appeared. That must not create a second Money Tips record for the same event.
+// The public identity is therefore based on the Madrid calendar day and the
+// actual recommendation, never on the transient source event id or exact hour.
+const canonicalText = (value) => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLocaleLowerCase('es-ES');
+
+const madridDateKey = (date) => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(date);
+    const part = (type) => parts.find((item) => item.type === type)?.value;
+    return `${part('year')}-${part('month')}-${part('day')}`;
+};
+
+export const semanticOfficialPickKey = ({ event = {}, bet = {}, system = {}, source = {} } = {}) => hashOfficialPickPayload({
+    sourceProvider: canonicalText(source.provider),
+    madridDay: madridDateKey(new Date(event.kickoffAt)),
+    competition: canonicalText(event.competition),
+    homeTeam: canonicalText(event.homeTeam),
+    awayTeam: canonicalText(event.awayTeam),
+    market: canonicalText(bet.market),
+    selection: canonicalText(bet.selection),
+    systemId: canonicalText(system.id),
+    systemVersion: canonicalText(system.version)
+});
+
 export const normalizeOfficialPickInput = (input = {}) => {
     const kickoffAt = cleanDate(input?.event?.kickoffAt, 'event.kickoffAt');
     const sourceEventId = cleanText(input?.event?.sourceEventId, 'event.sourceEventId');
@@ -50,7 +81,7 @@ export const normalizeOfficialPickInput = (input = {}) => {
         : scheduledAtForOfficialPick({ policy: publicationPolicy, kickoffAt, observedAt });
 
     const normalized = {
-        schemaVersion: 2,
+        schemaVersion: 3,
         status: 'published',
         event: {
             sourceEventId,
@@ -72,14 +103,8 @@ export const normalizeOfficialPickInput = (input = {}) => {
         scheduledAt
     };
 
-    const idempotencySeed = {
-        sourceEventId,
-        market,
-        selection,
-        systemId,
-        systemVersion
-    };
-    normalized.idempotencyKey = hashOfficialPickPayload(idempotencySeed);
+    normalized.semanticDuplicateKey = semanticOfficialPickKey(normalized);
+    normalized.idempotencyKey = normalized.semanticDuplicateKey;
     normalized.source.evidenceHash = hashOfficialPickPayload({
         event: { ...normalized.event, kickoffAt: kickoffAt.toISOString() },
         bet: normalized.bet,

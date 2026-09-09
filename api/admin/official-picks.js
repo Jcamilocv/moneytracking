@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
+import { FieldValue } from 'firebase-admin/firestore';
 import { queueOfficialPick } from '../../server/official-pick-queue.js';
 import { getAdminAuth, getAdminDb } from '../lib/firebase-admin.js';
 import { normalizeOfficialPickInput, publicPickIdFor } from '../lib/official-pick-data.js';
@@ -54,6 +55,23 @@ const KNOWN_TEST_PICK = {
     bet: { market: 'Ambos equipos marcan', selection: 'SI', oddsAtPublication: 1.7 }
 };
 
+// This is intentionally an individual, verifiable correction rather than a
+// generic withdrawal mechanism. The second Norwich/Birmingham record was
+// created when the source table redrew the kickoff time. The original 20:45
+// record remains the official one; this later 18:45 notice is marked as
+// withdrawn and its Telegram post is transparently updated.
+const KNOWN_DUPLICATE_PICK = {
+    id: 'op_d3dc08db99a1483257eb2e6c9b5ef8524fc32646',
+    retainedPickId: 'op_005562c0fa9c144c0a5f4b418a97d30061742d67',
+    confirmation: 'ANULAR DUPLICADO NORWICH',
+    event: {
+        homeTeam: 'Norwich City',
+        awayTeam: 'Birmingham City',
+        competition: 'ENG-Championship',
+        kickoffAt: '2026-09-09T16:45:00.000Z'
+    }
+};
+
 const isKnownTestPick = (pick = {}) => (
     pick.event?.homeTeam === KNOWN_TEST_PICK.event.homeTeam
     && pick.event?.awayTeam === KNOWN_TEST_PICK.event.awayTeam
@@ -99,6 +117,71 @@ const removeKnownTestPick = async (req, res) => {
     await batch.commit();
 
     return res.status(200).json({ ok: true, removedPickId: KNOWN_TEST_PICK.id });
+};
+
+const isKnownDuplicatePick = (pick = {}) => (
+    pick.status === 'published'
+    && pick.event?.homeTeam === KNOWN_DUPLICATE_PICK.event.homeTeam
+    && pick.event?.awayTeam === KNOWN_DUPLICATE_PICK.event.awayTeam
+    && pick.event?.competition === KNOWN_DUPLICATE_PICK.event.competition
+    && dateFromFirestoreValue(pick.event?.kickoffAt)?.toISOString() === KNOWN_DUPLICATE_PICK.event.kickoffAt
+);
+
+const withdrawKnownDuplicatePick = async (req, res) => {
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
+    if (!await hasOwnerTokenAuthorization(req)) return res.status(401).json({ error: 'No autorizado' });
+
+    const requestedId = String(req.body?.pickId || '');
+    const confirmation = String(req.body?.confirmation || '').trim().toUpperCase();
+    if (requestedId !== KNOWN_DUPLICATE_PICK.id || confirmation !== KNOWN_DUPLICATE_PICK.confirmation) {
+        return res.status(400).json({ error: 'La confirmación no corresponde al duplicado autorizado.' });
+    }
+
+    const db = getAdminDb();
+    const pickRef = db.collection('officialPicks').doc(KNOWN_DUPLICATE_PICK.id);
+    const anchorRef = pickRef.collection('events').doc('telegram_anchor');
+    const [pickSnapshot, anchorSnapshot] = await Promise.all([pickRef.get(), anchorRef.get()]);
+
+    if (!pickSnapshot.exists) return res.status(404).json({ error: 'El registro duplicado ya no existe.' });
+    if (!isKnownDuplicatePick(pickSnapshot.data())) {
+        return res.status(409).json({ error: 'El registro no coincide con el duplicado autorizado y no se ha tocado.' });
+    }
+
+    const withdrawal = {
+        reason: 'duplicate_publication',
+        message: 'Registro retirado antes de su uso por duplicidad. El pick oficial válido conserva su comprobante independiente.',
+        retainedPickId: KNOWN_DUPLICATE_PICK.retainedPickId
+    };
+    const eventRef = pickRef.collection('events').doc('withdrawn_duplicate');
+    const batch = db.batch();
+    batch.update(pickRef, {
+        status: 'withdrawn',
+        withdrawal,
+        withdrawnAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
+    });
+    batch.set(eventRef, {
+        type: 'withdrawn_duplicate',
+        message: withdrawal.message,
+        retainedPickId: KNOWN_DUPLICATE_PICK.retainedPickId,
+        createdAt: FieldValue.serverTimestamp()
+    });
+    await batch.commit();
+
+    let telegramUpdated = false;
+    if (anchorSnapshot.exists) {
+        const withdrawnSnapshot = await pickRef.get();
+        await editOfficialPickTelegramMessage(toPublicOfficialPick(withdrawnSnapshot), anchorSnapshot.data());
+        await anchorRef.set({ messageFormat: 'withdrawn_duplicate_v1', editedAt: new Date() }, { merge: true });
+        telegramUpdated = true;
+    }
+
+    return res.status(200).json({
+        ok: true,
+        withdrawnPickId: KNOWN_DUPLICATE_PICK.id,
+        retainedPickId: KNOWN_DUPLICATE_PICK.retainedPickId,
+        telegramUpdated
+    });
 };
 
 const refreshTodayTelegramPosts = async (req, res) => {
@@ -215,6 +298,15 @@ export default async function handler(req, res) {
         } catch (error) {
             console.error('No se pudo retirar el registro de prueba:', error);
             return res.status(400).json({ error: error.message || 'No se pudo retirar el registro de prueba.' });
+        }
+    }
+
+    if (req.query?.mode === 'withdraw-known-duplicate-pick') {
+        try {
+            return await withdrawKnownDuplicatePick(req, res);
+        } catch (error) {
+            console.error('No se pudo retirar el duplicado autorizado:', error);
+            return res.status(400).json({ error: error.message || 'No se pudo retirar el duplicado autorizado.' });
         }
     }
 

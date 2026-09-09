@@ -44,6 +44,16 @@ const isPickStillActive = (pick, now = new Date()) => {
 // la cuota registrada. Mercado, selección y sistema permanecen reservados para
 // Premium para que el histórico no revele mecánicamente picks futuros.
 export const pickForAudience = (pick, { canViewActiveDetails = false, now = new Date() } = {}) => {
+    if (pick.status === 'withdrawn') {
+        return {
+            ...pick,
+            isLocked: true,
+            isPublicSummary: true,
+            isWithdrawn: true,
+            bet: { market: null, selection: null, oddsAtPublication: null },
+            system: { id: null, version: null }
+        };
+    }
     if (canViewActiveDetails) return { ...pick, isLocked: false, isPublicSummary: false };
 
     const isActive = isPickStillActive(pick, now);
@@ -134,7 +144,7 @@ export const listOfficialPicks = async (limit = 20, audience = {}) => {
 export const getOfficialPick = async (pickId, audience = {}) => {
     const db = getAdminDb();
     const pickSnapshot = await db.collection('officialPicks').doc(pickId).get();
-    if (!pickSnapshot.exists || pickSnapshot.data().status !== 'published') return null;
+    if (!pickSnapshot.exists || !['published', 'withdrawn'].includes(pickSnapshot.data().status)) return null;
     const eventsSnapshot = await pickSnapshot.ref.collection('events').orderBy('createdAt', 'asc').get();
     const [pick] = await attachOfficialPickReviewSummaries([withStakeRecommendation(toPublicOfficialPick(pickSnapshot))]);
     return {

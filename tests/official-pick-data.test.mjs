@@ -32,6 +32,22 @@ test('un pick oficial normalizado tiene una identidad y evidencia deterministas'
     assert.equal(first.bet.policyVersion, '2026-27-forward-v1');
 });
 
+test('un cambio de hora de origen no crea otra identidad para el mismo pick del día', () => {
+    const original = normalizeOfficialPickInput(validPick);
+    const redrawn = normalizeOfficialPickInput({
+        ...validPick,
+        event: {
+            ...validPick.event,
+            sourceEventId: 'test-event-001-time-corrected',
+            kickoffAt: '2026-08-30T19:00:00.000Z'
+        }
+    });
+
+    assert.equal(original.semanticDuplicateKey, redrawn.semanticDuplicateKey);
+    assert.equal(publicPickIdFor(original), publicPickIdFor(redrawn));
+    assert.notEqual(original.source.evidenceHash, redrawn.source.evidenceHash);
+});
+
 test('la política de stake aplica el factor inicial de producción controlada', () => {
     assert.deepEqual(
         stakeRecommendationForOfficialPick({ systemId: 'MT - ENG2 - v1.0', oddsAtPublication: 1.3 }),
@@ -62,6 +78,7 @@ test('los registros técnicos no aparecen en el feed público de picks', () => {
     assert.equal(isPublicOfficialPickData({ status: 'published', source: { provider: 'money-tips-owned' } }), true);
     assert.equal(isPublicOfficialPickData({ status: 'published', source: { provider: 'test-authorized' } }), false);
     assert.equal(isPublicOfficialPickData({ status: 'queued', source: { provider: 'money-tips-owned' } }), false);
+    assert.equal(isPublicOfficialPickData({ status: 'withdrawn', source: { provider: 'money-tips-owned' } }), false);
 });
 
 test('un pick sintético nunca puede desencadenar una notificación de Telegram', () => {
@@ -78,8 +95,22 @@ test('el mensaje de Telegram muestra el comprobante como enlace corto y no revel
     });
 
     assert.match(text, /PICK OFICIAL/);
-    assert.match(text, /<a href="https:\/\/app\.pronosticosmoneytips\.com\/\?pick=op_123">Ver comprobante verificable<\/a>/);
+    assert.match(text, /<a href="https:\/\/app\.pronosticosmoneytips\.com\/\?pick=op_123">Ver pick y comprobante verificable<\/a>/);
     assert.match(text, /#ABCDE12345/);
     assert.doesNotMatch(text, /Más de 2,5|Over 2\.5|1\.85/);
     assert.match(text, /Equipo &lt;Local&gt;/);
+});
+
+test('un aviso retirado explica la duplicidad sin revelar el pick', () => {
+    const text = formatOfficialTelegramMessage({
+        id: 'op_123',
+        status: 'withdrawn',
+        event: { homeTeam: 'Norwich City', awayTeam: 'Birmingham City' },
+        source: { evidenceHash: 'abcde12345ffedcba987654321' }
+    });
+
+    assert.match(text, /REGISTRO RETIRADO/);
+    assert.match(text, /duplicidad/);
+    assert.match(text, /Ver pick y comprobante verificable/);
+    assert.doesNotMatch(text, /Más de 2,5|Over 2\.5|1\.85/);
 });

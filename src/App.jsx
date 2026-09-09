@@ -609,8 +609,13 @@ const OfficialPickPublicPage = ({ pickId, theme }) => {
     const eventLabel = (event) => {
         if (event.type === 'published') return 'Pick publicado por el servidor';
         if (event.type === 'telegram_anchor') return 'Anclado en Telegram';
+        if (event.type === 'withdrawn_duplicate') return 'Registro retirado por duplicidad';
         return OFFICIAL_REVIEW_LABELS[event.type] || event.type;
     };
+
+    if (pick?.isWithdrawn) {
+        return <><style>{getGlobalStyles(theme)}</style><LiquidBackground theme={theme}/><main className="min-h-screen p-4 md:p-8 flex items-center justify-center"><section className="w-full max-w-2xl bg-[var(--bg-card)] border border-yellow-500/30 rounded-[2rem] shadow-[var(--shadow-glow-md)] overflow-hidden"><header className="p-6 md:p-8 border-b border-[var(--border)]"><div className="flex items-center gap-2 text-yellow-400 font-bold text-xs uppercase tracking-widest"><AlertTriangle size={16}/> Registro retirado</div><h1 className="mt-3 text-2xl md:text-3xl font-extrabold text-[var(--text-main)]">{pick.event.homeTeam} vs {pick.event.awayTeam}</h1><p className="text-sm text-[var(--text-muted)] mt-2">Este aviso no forma parte del histórico oficial activo.</p></header><div className="p-6 md:p-8 space-y-5"><div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 p-5"><p className="font-extrabold text-[var(--text-main)]">Retirado antes de su uso por duplicidad</p><p className="text-sm text-[var(--text-muted)] mt-2">{pick.withdrawal?.message || 'El pick oficial válido conserva su comprobante verificable independiente.'}</p></div><div className="grid sm:grid-cols-2 gap-4"><div className="bg-[var(--bg-input)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Inicio mostrado</p><p className="font-bold text-[var(--text-main)] mt-2">{formatOfficialDateTime(pick.event.kickoffAt)}</p></div><div className="bg-[var(--bg-input)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Publicado</p><p className="font-bold text-[var(--accent)] mt-2">{formatOfficialDateTime(pick.publishedAt)}</p></div></div><div className="border border-[var(--border)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Evidencia</p><p className="text-xs font-mono break-all text-[var(--text-muted)] mt-2">SHA-256: {pick.source.evidenceHash}</p></div></div><footer className="p-6 border-t border-[var(--border)]"><a href={window.location.pathname} className="block text-center bg-[var(--accent)] text-[var(--accent-fg)] rounded-xl py-3 font-bold">Abrir MoneyTracKING</a></footer></section></main></>;
+    }
 
     if (pick?.isPublicSummary && !pick.isLocked) {
         return <><style>{getGlobalStyles(theme)}</style><LiquidBackground theme={theme}/><main className="min-h-screen p-4 md:p-8 flex items-center justify-center"><section className="w-full max-w-2xl bg-[var(--bg-card)] border border-[var(--border)] rounded-[2rem] shadow-[var(--shadow-glow-md)] overflow-hidden"><header className="p-6 md:p-8 border-b border-[var(--border)]"><div className="flex items-center gap-2 text-[var(--accent)] font-bold text-xs uppercase tracking-widest"><ShieldCheck size={16}/> Registro oficial Money Tips</div><h1 className="mt-3 text-2xl md:text-3xl font-extrabold text-[var(--text-main)]">{pick.event.homeTeam} vs {pick.event.awayTeam}</h1><p className="text-sm text-[var(--text-muted)] mt-2">{pick.event.competition} · registro sellado por servidor.</p></header><div className="p-6 md:p-8 space-y-6"><div className="rounded-2xl border border-[var(--accent-20)] bg-[var(--accent-5)] p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Cuota registrada</p><p className="font-extrabold text-2xl text-[var(--accent)] mt-2">@{Number(pick.bet.oddsAtPublication).toFixed(2)}</p><p className="text-sm text-[var(--text-muted)] mt-2">Mercado y selección reservados para miembros Premium.</p></div><div className="grid sm:grid-cols-2 gap-4"><div className="bg-[var(--bg-input)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Inicio</p><p className="font-bold text-[var(--text-main)] mt-2">{formatOfficialDateTime(pick.event.kickoffAt)}</p></div><div className="bg-[var(--bg-input)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Publicado</p><p className="font-bold text-[var(--accent)] mt-2">{formatOfficialDateTime(pick.publishedAt)}</p></div></div><div className="border border-[var(--border)] rounded-2xl p-4"><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Evidencia</p><p className="text-xs font-mono break-all text-[var(--text-muted)] mt-2">SHA-256: {pick.source.evidenceHash}</p><p className="text-xs text-[var(--text-muted)] mt-2">La referencia prueba que el registro existía antes del inicio. El histórico público no expone el mercado ni la selección.</p></div><OfficialReviewStatus review={pick.review} /><div><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Historial del registro</p><div className="space-y-2">{events.map((event) => <div key={event.id} className="flex items-center justify-between gap-3 text-sm bg-[var(--bg-input)] rounded-xl px-4 py-3"><p className="font-bold text-[var(--text-main)]">{eventLabel(event)}</p><span className="text-[var(--text-muted)] text-xs shrink-0">{formatOfficialDateTime(event.createdAt)}</span></div>)}</div></div></div><footer className="p-6 border-t border-[var(--border)] space-y-3"><a href={buildOfficialPickEntryLink(pick.id, { register: true })} className="block text-center bg-[var(--accent)] text-[var(--accent-fg)] rounded-xl py-3 font-bold">Crear cuenta y conocer Premium</a><a href={window.location.pathname} className="block text-center text-sm text-[var(--text-muted)] font-bold">Ver MoneyTracKING</a></footer></section></main></>;
@@ -762,6 +767,8 @@ const OfficialPicksAdminPanel = ({ currentUser }) => {
     const [testPickRemovalMessage, setTestPickRemovalMessage] = useState('');
     const [isRefreshingTelegram, setIsRefreshingTelegram] = useState(false);
     const [telegramRefreshMessage, setTelegramRefreshMessage] = useState('');
+    const [isWithdrawingKnownDuplicate, setIsWithdrawingKnownDuplicate] = useState(false);
+    const [duplicateWithdrawalMessage, setDuplicateWithdrawalMessage] = useState('');
 
     const update = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
@@ -893,6 +900,31 @@ const OfficialPicksAdminPanel = ({ currentUser }) => {
         }
     };
 
+    const withdrawKnownDuplicate = async () => {
+        if (!window.confirm('Se retirará únicamente el aviso duplicado Norwich City vs Birmingham City de las 18:45, conservando el registro válido de las 20:45. Telegram se actualizará con una nota transparente. ¿Continuar?')) return;
+        setError('');
+        setDuplicateWithdrawalMessage('');
+        setIsWithdrawingKnownDuplicate(true);
+        try {
+            const token = await currentUser.getIdToken();
+            const response = await fetch('/api/admin/official-picks?mode=withdraw-known-duplicate-pick', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                    pickId: 'op_d3dc08db99a1483257eb2e6c9b5ef8524fc32646',
+                    confirmation: 'ANULAR DUPLICADO NORWICH'
+                })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'No se pudo retirar el duplicado.');
+            setDuplicateWithdrawalMessage(data.telegramUpdated ? 'Duplicado retirado y mensaje de Telegram actualizado.' : 'Duplicado retirado. No tenía mensaje de Telegram anclado.');
+        } catch (requestError) {
+            setError(requestError.message || 'No se pudo retirar el duplicado.');
+        } finally {
+            setIsWithdrawingKnownDuplicate(false);
+        }
+    };
+
     const fields = [
         ['sourceEventId', 'ID único del evento', 'text'], ['competition', 'Competición', 'text'],
         ['homeTeam', 'Equipo local', 'text'], ['awayTeam', 'Equipo visitante', 'text'],
@@ -915,6 +947,7 @@ const OfficialPicksAdminPanel = ({ currentUser }) => {
         {queueMessage && <div className="bg-yellow-500/10 border border-yellow-500/30 text-[var(--text-main)] rounded-2xl p-4 text-sm">{queueMessage}</div>}
         {publishedPick && <div className="bg-[var(--accent-10)] border border-[var(--accent-30)] rounded-2xl p-5"><p className="font-bold text-[var(--accent)]">{publishedPick.created ? 'Pick publicado y sellado.' : 'Este pick ya existía; no se duplicó.'}</p><a className="inline-block mt-3 font-bold underline text-[var(--text-main)]" href={buildOfficialPickLink(publishedPick.id)} target="_blank" rel="noreferrer">Abrir comprobante público</a></div>}
         <section className="bg-[var(--accent-5)] border border-[var(--accent-20)] rounded-3xl p-5 md:p-6"><h4 className="font-extrabold text-[var(--text-main)]">Actualizar mensajes de Telegram de hoy</h4><p className="text-sm text-[var(--text-muted)] mt-1 max-w-2xl">Reemplaza solo los mensajes oficiales ya enviados hoy por el formato compacto: partido, competición, hora, comprobante y referencia. No muestra mercado, selección, cuota ni sistema.</p><button type="button" disabled={isRefreshingTelegram} onClick={refreshTodayTelegramPosts} className="mt-4 px-4 py-3 rounded-xl border border-[var(--accent-30)] text-[var(--text-main)] text-sm font-extrabold disabled:opacity-50">{isRefreshingTelegram ? 'Actualizando…' : 'Actualizar mensajes de hoy'}</button>{telegramRefreshMessage && <p className="mt-3 text-sm font-bold text-[var(--accent)]">{telegramRefreshMessage}</p>}</section>
+        <section className="bg-yellow-500/10 border border-yellow-500/30 rounded-3xl p-5 md:p-6"><h4 className="font-extrabold text-[var(--text-main)]">Corrección excepcional de duplicado</h4><p className="text-sm text-[var(--text-muted)] mt-1 max-w-2xl">Retira solo el aviso duplicado Norwich City vs Birmingham City de las 18:45. Conserva el registro oficial válido de las 20:45 y actualiza el mensaje de Telegram con una explicación verificable.</p><button type="button" disabled={isWithdrawingKnownDuplicate || Boolean(duplicateWithdrawalMessage)} onClick={withdrawKnownDuplicate} className="mt-4 px-4 py-3 rounded-xl border border-yellow-500/40 text-yellow-300 text-sm font-extrabold disabled:opacity-50">{isWithdrawingKnownDuplicate ? 'Retirando…' : duplicateWithdrawalMessage ? 'Duplicado retirado' : 'Retirar aviso duplicado'}</button>{duplicateWithdrawalMessage && <p className="mt-3 text-sm font-bold text-[var(--accent)]">{duplicateWithdrawalMessage}</p>}</section>
         <section className="bg-[var(--red-10)] border border-[var(--red-30)] rounded-3xl p-5 md:p-6"><h4 className="font-extrabold text-[var(--text-main)]">Limpieza excepcional</h4><p className="text-sm text-[var(--text-muted)] mt-1 max-w-2xl">Retira únicamente el registro de prueba Barcelona vs Madrid creado antes del flujo oficial. No muestra ni permite borrar ningún otro pick.</p><button type="button" disabled={isRemovingTestPick || Boolean(testPickRemovalMessage)} onClick={removeKnownTestPick} className="mt-4 px-4 py-3 rounded-xl border border-[var(--red-30)] text-[var(--red)] text-sm font-extrabold disabled:opacity-50">{isRemovingTestPick ? 'Retirando…' : testPickRemovalMessage ? 'Registro retirado' : 'Retirar registro de prueba'}</button>{testPickRemovalMessage && <p className="mt-3 text-sm font-bold text-[var(--accent)]">{testPickRemovalMessage}</p>}</section>
         <PremiumAccessAdminPanel currentUser={currentUser} />
         <OfficialPickReportsAdminPanel currentUser={currentUser} />
