@@ -1061,6 +1061,7 @@ export default function App() {
     const [showBetForm, setShowBetForm] = useState(false);
     const [isAddingBank, setIsAddingBank] = useState(false); 
     const [isAddingBalance, setIsAddingBalance] = useState(false); 
+    const [editingBalanceId, setEditingBalanceId] = useState(null);
     const [editingBetId, setEditingBetId] = useState(null); 
     const [expandedBetId, setExpandedBetId] = useState(null); 
     const [showMoreOptions, setShowMoreOptions] = useState(false);
@@ -2182,18 +2183,32 @@ export default function App() {
     const confirmAddBalance = async (e) => {
         e.preventDefault();
         try {
-            await addDoc(collection(db, 'users', currentUser.uid, 'balances'), {
+            const balanceData = {
                 name: newBalanceData.name,
                 bankIds: newBalanceData.bankIds,
-                createdAt: new Date().toISOString()
-            });
+            };
+            if (editingBalanceId) {
+                await updateDoc(doc(db, 'users', currentUser.uid, 'balances', editingBalanceId), balanceData);
+            } else {
+                await addDoc(collection(db, 'users', currentUser.uid, 'balances'), {
+                    ...balanceData,
+                    createdAt: new Date().toISOString()
+                });
+            }
             setIsAddingBalance(false);
+            setEditingBalanceId(null);
             setNewBalanceData({ name: '', bankIds: [] });
-            showAlert("Balance agrupado creado correctamente.");
+            showAlert(editingBalanceId ? "Balance agrupado actualizado correctamente." : "Balance agrupado creado correctamente.");
         } catch (error) {
-            console.error("Error creando balance:", error);
-            showAlert("Error creando el balance.");
+            console.error("Error guardando balance:", error);
+            showAlert("Error guardando el balance.");
         }
+    };
+
+    const openEditBalanceModal = (balance) => {
+        setEditingBalanceId(balance.id);
+        setNewBalanceData({ name: balance.name || '', bankIds: Array.isArray(balance.bankIds) ? balance.bankIds : [] });
+        setIsAddingBalance(true);
     };
 
     const handleDeleteBalance = (id) => {
@@ -2969,16 +2984,9 @@ export default function App() {
                                 <h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">Balances Agrupados</h3>
                                 <p className="text-[var(--text-muted)] text-sm mt-1">Agrupa varios bankrolls para ver sus estadísticas globales juntas.</p>
                             </div>
-                            <div className="flex flex-wrap justify-end gap-2">
-                                {banks.length < accountLimits.maxBanks && (
-                                    <button onClick={openAddBankModal} className="bg-[var(--bg-card)] hover:bg-[var(--bg-hover)] text-[var(--text-main)] border border-[var(--border)] hover:border-[var(--accent-50)] px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold transition-all shadow-sm">
-                                        <Plus size={16} className="text-[var(--accent)]" /> Nueva banca
-                                    </button>
-                                )}
-                                <button onClick={() => { setNewBalanceData({ name: '', bankIds: [] }); setIsAddingBalance(true); }} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold transition-all shadow-[var(--shadow-glow-md)]">
-                                    <Plus size={16} /> Crear Balance
-                                </button>
-                            </div>
+                            <button onClick={() => { setEditingBalanceId(null); setNewBalanceData({ name: '', bankIds: [] }); setIsAddingBalance(true); }} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold transition-all shadow-[var(--shadow-glow-md)]">
+                                <Plus size={16} /> Crear Balance
+                            </button>
                         </div>
 
                         {balances.length === 0 ? (
@@ -3003,6 +3011,9 @@ export default function App() {
                                                 <div className="flex gap-2">
                                                     <button onClick={() => { handleBankChange({target: {value: balance.id}}); setActiveTab('dashboard'); }} className="p-2 bg-[var(--accent-10)] text-[var(--accent)] rounded-lg hover:bg-[var(--accent-20)] transition-colors" title="Ver Dashboard de este Balance">
                                                         <LayoutDashboard size={18}/>
+                                                    </button>
+                                                    <button onClick={() => openEditBalanceModal(balance)} className="px-3 py-2 bg-[var(--bg-input)] text-[var(--text-main)] rounded-lg hover:bg-[var(--bg-hover)] border border-[var(--border)] transition-colors flex items-center gap-1.5 text-xs font-bold" title="Añadir o quitar bancas de este balance">
+                                                        <Edit2 size={16}/> Gestionar bancas
                                                     </button>
                                                     <button onClick={() => handleDeleteBalance(balance.id)} className="p-2 bg-[var(--red-10)] text-[var(--red)] rounded-lg hover:bg-[var(--red-20)] transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100" title="Eliminar Balance">
                                                         <Trash2 size={18}/>
@@ -3352,8 +3363,8 @@ export default function App() {
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[var(--bg-modal)] backdrop-blur-md animate-in fade-in w-full">
                     <div className="bg-[var(--bg-base-95)] backdrop-blur-2xl w-full max-w-sm rounded-3xl shadow-[var(--shadow-glow-lg)] border border-[var(--accent-20)] overflow-hidden flex flex-col transition-colors">
                         <div className="px-5 py-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-card)] w-full">
-                            <h3 className="font-bold text-[var(--text-main)] text-lg">Nuevo Balance</h3>
-                            <button onClick={() => setIsAddingBalance(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-overlay)] p-1.5 rounded-full"><X size={18}/></button>
+                            <h3 className="font-bold text-[var(--text-main)] text-lg">{editingBalanceId ? 'Gestionar Balance' : 'Nuevo Balance'}</h3>
+                            <button onClick={() => { setIsAddingBalance(false); setEditingBalanceId(null); }} className="text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-overlay)] p-1.5 rounded-full"><X size={18}/></button>
                         </div>
                         <div className="p-6 space-y-5 w-full">
                             <div className="space-y-1.5 w-full">
@@ -3361,7 +3372,7 @@ export default function App() {
                                 <input type="text" placeholder="Ej: General 2026" className="w-full bg-[var(--bg-card)] border border-transparent rounded-xl px-4 py-3 text-[var(--text-main)] focus:border-[var(--accent-50)] shadow-inner outline-none transition-colors" value={newBalanceData.name} onChange={e => setNewBalanceData({...newBalanceData, name: e.target.value})} autoFocus />
                             </div>
                             <div className="space-y-3 w-full">
-                                <label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Selecciona Bancas</label>
+                                <label className="text-xs text-[var(--text-muted)] uppercase font-bold tracking-wider ml-1">Bancas incluidas</label>
                                 <div className="max-h-40 overflow-y-auto space-y-2 custom-scrollbar pr-2 w-full">
                                     {banks.map(b => (
                                         <label key={b.id} className="flex items-center gap-3 p-3 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] cursor-pointer hover:bg-[var(--bg-hover)] transition-colors w-full">
@@ -3381,7 +3392,7 @@ export default function App() {
                                     ))}
                                 </div>
                             </div>
-                            <button onClick={confirmAddBalance} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-bold py-3.5 rounded-xl transition-all shadow-[var(--shadow-glow-md)] mt-4 disabled:opacity-50" disabled={!newBalanceData.name || newBalanceData.bankIds.length === 0}>Crear Balance Agrupado</button>
+                            <button onClick={confirmAddBalance} className="w-full bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] font-bold py-3.5 rounded-xl transition-all shadow-[var(--shadow-glow-md)] mt-4 disabled:opacity-50" disabled={!newBalanceData.name || newBalanceData.bankIds.length === 0}>{editingBalanceId ? 'Guardar cambios' : 'Crear Balance Agrupado'}</button>
                         </div>
                     </div>
                 </div>
