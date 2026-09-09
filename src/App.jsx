@@ -993,9 +993,14 @@ export default function App() {
     });
 
     const [isEmbed] = useState(initialShare.isEmbed);
+    const [forcedEmbedTheme] = useState(() => {
+        const requestedTheme = new URLSearchParams(window.location.search).get('theme');
+        return initialShare.isEmbed && ['light', 'dark'].includes(requestedTheme) ? requestedTheme : null;
+    });
 
     // --- LÓGICA TEMA (AUTO DÍA/NOCHE) ---
     const [theme, setTheme] = useState(() => {
+        if (forcedEmbedTheme) return forcedEmbedTheme;
         const manualTheme = localStorage.getItem('moneytracking_manual_theme');
         if (manualTheme) return manualTheme;
         const hour = new Date().getHours();
@@ -1011,6 +1016,11 @@ export default function App() {
     };
 
     useEffect(() => {
+        if (forcedEmbedTheme) {
+            setTheme(forcedEmbedTheme);
+            return undefined;
+        }
+
         // Tracker automático por hora si el usuario NO ha forzado el color
         const checkTimeTheme = () => {
             const manualTheme = localStorage.getItem('moneytracking_manual_theme');
@@ -1024,7 +1034,7 @@ export default function App() {
         checkTimeTheme(); 
         const intervalId = setInterval(checkTimeTheme, 60000); // Check cada minuto
         return () => clearInterval(intervalId);
-    }, []);
+    }, [forcedEmbedTheme]);
 
     const [currentUser, setCurrentUser] = useState(null);
     const [authResolved, setAuthResolved] = useState(false);
