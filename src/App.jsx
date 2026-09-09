@@ -238,6 +238,35 @@ const officialPickSnapshotForBank = (pick = {}) => ({
 
 const COMMON_BOOKMAKERS = ["Bet365", "William Hill", "Betfair", "Bwin", "888sport", "Betway", "Marathonbet", "Sportium", "Codere", "Kirolbet", "Retabet", "Luckia", "Paf", "LeoVegas", "TonyBet", "Pinnacle", "1xBet", "Winamax", "Coolbet"].sort();
 
+const normaliseFilterValue = (value) => String(value || '').trim().toLocaleLowerCase('es-ES');
+
+const betSelectionsForFilters = (bet = {}) => {
+    if (Array.isArray(bet.selections) && bet.selections.length > 0) return bet.selections;
+    return [{ sport: bet.sport, category: bet.category }];
+};
+
+const matchesDashboardFilters = (bet = {}, filters = {}) => {
+    const betDate = String(bet.date || '');
+    const odds = Number(bet.odds);
+    const selections = betSelectionsForFilters(bet);
+
+    if (filters.dateFrom && betDate < filters.dateFrom) return false;
+    if (filters.dateTo && betDate > filters.dateTo) return false;
+    if (filters.minOdds && (!Number.isFinite(odds) || odds < Number(filters.minOdds))) return false;
+    if (filters.maxOdds && (!Number.isFinite(odds) || odds > Number(filters.maxOdds))) return false;
+    if (filters.category && !selections.some((selection) => normaliseFilterValue(selection.category) === normaliseFilterValue(filters.category))) return false;
+    if (filters.sport && !selections.some((selection) => normaliseFilterValue(selection.sport) === normaliseFilterValue(filters.sport))) return false;
+    if (filters.bookmaker && normaliseFilterValue(bet.bookmaker) !== normaliseFilterValue(filters.bookmaker)) return false;
+    if (filters.tipster && normaliseFilterValue(bet.tipster) !== normaliseFilterValue(filters.tipster)) return false;
+    if (filters.betSide === 'back' && bet.isBack === false) return false;
+    if (filters.betSide === 'lay' && bet.isBack !== false) return false;
+    if (filters.status && getBetStatus(bet) !== filters.status) return false;
+    if (filters.isLive && !bet.isLive) return false;
+    if (filters.isFreebet && !bet.isFreebet) return false;
+    if (filters.isEachWay && !bet.isEachWay) return false;
+    return true;
+};
+
 const parseComplexCSV = (text) => {
     const rows = []; let currentRow = []; let currentVal = ''; let insideQuotes = false;
     const cleanText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -352,7 +381,10 @@ const officialBetFieldsForBank = (pick = {}, initialCapital = 0) => {
     return {
         date,
         time,
-        bookmaker: 'Money Tips',
+        // Las cuotas de referencia de los picks oficiales proceden de bet365.
+        // Es solo el valor inicial: cada usuario puede cambiarlo al registrar
+        // la cuota real que haya conseguido en su propia casa de apuestas.
+        bookmaker: 'Bet365',
         betMode: 'simple',
         title: `${homeTeam} vs ${awayTeam}`,
         market: String(pick?.bet?.market || ''),
@@ -1037,11 +1069,17 @@ export default function App() {
         maxOdds: '',
         category: '',
         sport: '',
-        status: '' // 'won', 'lost', 'pending', etc.
+        bookmaker: '',
+        tipster: '',
+        betSide: '',
+        status: '', // 'won', 'lost', 'pending', etc.
+        isLive: false,
+        isFreebet: false,
+        isEachWay: false
     });
 
     const resetFilters = () => {
-        setDashboardFilters({ dateFrom: '', dateTo: '', minOdds: '', maxOdds: '', category: '', sport: '', status: '' });
+        setDashboardFilters({ dateFrom: '', dateTo: '', minOdds: '', maxOdds: '', category: '', sport: '', bookmaker: '', tipster: '', betSide: '', status: '', isLive: false, isFreebet: false, isEachWay: false });
     };
 
     // Límites base. Las excepciones superiores se leen desde
@@ -1465,32 +1503,39 @@ export default function App() {
         return null;
     }, [banks, balances, currentBankId, viewMode, visitingBank]);
 
-    const activeBetsData = useMemo(() => {
-        let rawBets = [];
+    const rawBetsForActiveContext = useMemo(() => {
         if (viewMode === 'visiting' && activeBankData) {
             if(activeBankData.isBalance) {
-                rawBets = visitingBets.filter(b => activeBankData.bankIds?.includes(b.bankId));
+                return visitingBets.filter(b => activeBankData.bankIds?.includes(b.bankId));
             } else {
-                rawBets = visitingBets.filter(b => b.bankId === activeBankData.id);
+                return visitingBets.filter(b => b.bankId === activeBankData.id);
             }
         } else if (activeBankData?.isBalance) {
-            rawBets = bets.filter(b => activeBankData.bankIds.includes(b.bankId));
+            return bets.filter(b => activeBankData.bankIds.includes(b.bankId));
         } else if (currentBankId) {
-            rawBets = bets.filter(b => b.bankId === currentBankId);
+            return bets.filter(b => b.bankId === currentBankId);
         }
+        return [];
+    }, [bets, currentBankId, viewMode, visitingBets, activeBankData]);
+
+    const dashboardFilterOptions = useMemo(() => {
+        const collect = (values) => Array.from(new Set(values.filter(Boolean).map((value) => String(value).trim()).filter(Boolean)))
+            .sort((a, b) => a.localeCompare(b, 'es'));
+        const selections = rawBetsForActiveContext.flatMap(betSelectionsForFilters);
+        return {
+            categories: collect([...(customOptions.categories || []), ...selections.map((selection) => selection.category)]),
+            sports: collect([...(customOptions.sports || []), ...selections.map((selection) => selection.sport)]),
+            bookmakers: collect(rawBetsForActiveContext.map((bet) => bet.bookmaker)),
+            tipsters: collect([...(customOptions.tipsters || []), ...rawBetsForActiveContext.map((bet) => bet.tipster)])
+        };
+    }, [customOptions, rawBetsForActiveContext]);
+
+    const activeBetsData = useMemo(() => {
+        let rawBets = [...rawBetsForActiveContext];
 
         // --- APLICAR FILTROS DEL DASHBOARD ---
         if (activeTab === 'dashboard') {
-            rawBets = rawBets.filter(b => {
-                if (dashboardFilters.dateFrom && new Date(b.date) < new Date(dashboardFilters.dateFrom)) return false;
-                if (dashboardFilters.dateTo && new Date(b.date) > new Date(dashboardFilters.dateTo)) return false;
-                if (dashboardFilters.minOdds && b.odds < parseFloat(dashboardFilters.minOdds)) return false;
-                if (dashboardFilters.maxOdds && b.odds > parseFloat(dashboardFilters.maxOdds)) return false;
-                if (dashboardFilters.category && b.category !== dashboardFilters.category && b.selections?.[0]?.category !== dashboardFilters.category) return false;
-                if (dashboardFilters.sport && b.selections?.[0]?.sport !== dashboardFilters.sport) return false;
-                if (dashboardFilters.status && getBetStatus(b) !== dashboardFilters.status) return false;
-                return true;
-            });
+            rawBets = rawBets.filter((bet) => matchesDashboardFilters(bet, dashboardFilters));
         }
 
         rawBets = rawBets.sort((a, b) => new Date(`${b.date}T${b.time || '00:00'}`) - new Date(`${a.date}T${a.time || '00:00'}`));
@@ -1511,7 +1556,7 @@ export default function App() {
             return rawBets.filter(b => getBetStatus(b) !== 'pending');
         }
         return rawBets; 
-    }, [bets, currentBankId, viewMode, visitingBets, activeBankData, unlockedBank, dashboardFilters, activeTab]);
+    }, [rawBetsForActiveContext, viewMode, activeBankData, unlockedBank, dashboardFilters, activeTab]);
 
     const pendingHiddenCount = useMemo(() => {
         if (viewMode !== 'visiting' || !activeBankData) return 0;
@@ -2560,7 +2605,7 @@ export default function App() {
                     {/* PANEL DE FILTROS PLEGABLE */}
                     {isFiltersOpen && viewMode === 'personal' && (
                         <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 shadow-sm mb-6 animate-in fade-in slide-in-from-top-2 w-full">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Desde Fecha</label>
                                     <input type="date" value={dashboardFilters.dateFrom} onChange={e => setDashboardFilters(p => ({...p, dateFrom: e.target.value}))} className="w-full bg-[var(--bg-input)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" />
@@ -2580,14 +2625,36 @@ export default function App() {
                                     <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Estrategia</label>
                                     <select value={dashboardFilters.category} onChange={e => setDashboardFilters(p => ({...p, category: e.target.value}))} className="w-full bg-[var(--bg-input)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none appearance-none shadow-inner">
                                         <option value="">Todas</option>
-                                        {(customOptions.categories || []).map(c => <option key={c} value={c}>{c}</option>)}
+                                        {dashboardFilterOptions.categories.map(c => <option key={c} value={c}>{c}</option>)}
                                     </select>
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Deporte</label>
                                     <select value={dashboardFilters.sport} onChange={e => setDashboardFilters(p => ({...p, sport: e.target.value}))} className="w-full bg-[var(--bg-input)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none appearance-none shadow-inner">
                                         <option value="">Todos</option>
-                                        {(customOptions.sports || []).map(s => <option key={s} value={s}>{s}</option>)}
+                                        {dashboardFilterOptions.sports.map(s => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Casa de apuestas</label>
+                                    <select value={dashboardFilters.bookmaker} onChange={e => setDashboardFilters(p => ({...p, bookmaker: e.target.value}))} className="w-full bg-[var(--bg-input)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none appearance-none shadow-inner">
+                                        <option value="">Todas</option>
+                                        {dashboardFilterOptions.bookmakers.map(bookmaker => <option key={bookmaker} value={bookmaker}>{bookmaker}</option>)}
+                                    </select>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Tipster</label>
+                                    <select value={dashboardFilters.tipster} onChange={e => setDashboardFilters(p => ({...p, tipster: e.target.value}))} className="w-full bg-[var(--bg-input)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none appearance-none shadow-inner">
+                                        <option value="">Todos</option>
+                                        {dashboardFilterOptions.tipsters.map(tipster => <option key={tipster} value={tipster}>{tipster}</option>)}
+                                    </select>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Tipo</label>
+                                    <select value={dashboardFilters.betSide} onChange={e => setDashboardFilters(p => ({...p, betSide: e.target.value}))} className="w-full bg-[var(--bg-input)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none appearance-none shadow-inner">
+                                        <option value="">A favor y en contra</option>
+                                        <option value="back">A favor (Back)</option>
+                                        <option value="lay">En contra (Lay)</option>
                                     </select>
                                 </div>
                             </div>
@@ -2596,10 +2663,15 @@ export default function App() {
                             <div className="flex justify-between items-center mt-5 pt-4 border-t border-[var(--border)]">
                                 <div className="space-x-2">
                                     <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Estado Rápido:</span>
-                                    {['won', 'lost', 'pending'].map(st => (
+                                    {['won', 'lost', 'pending', 'void', 'half-won', 'half-lost', 'cancelled'].map(st => (
                                         <button key={st} onClick={() => setDashboardFilters(p => ({...p, status: p.status === st ? '' : st}))} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${dashboardFilters.status === st ? 'bg-[var(--accent)] text-[var(--accent-fg)] shadow-sm' : 'bg-[var(--bg-input)] text-[var(--text-muted)] hover:text-[var(--text-main)] border border-[var(--border)]'}`}>
-                                            {st === 'won' ? 'Ganadas' : st === 'lost' ? 'Perdidas' : 'Pendientes'}
+                                            {{ won: 'Ganadas', lost: 'Perdidas', pending: 'Pendientes', void: 'Reembolsadas', 'half-won': 'Media ganada', 'half-lost': 'Media perdida', cancelled: 'Canceladas' }[st]}
                                         </button>
+                                    ))}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    {[['isLive', 'En vivo'], ['isFreebet', 'Freebet'], ['isEachWay', 'Each-way']].map(([field, label]) => (
+                                        <button key={field} onClick={() => setDashboardFilters(p => ({ ...p, [field]: !p[field] }))} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${dashboardFilters[field] ? 'bg-[var(--accent)] text-[var(--accent-fg)] shadow-sm' : 'bg-[var(--bg-input)] text-[var(--text-muted)] hover:text-[var(--text-main)] border border-[var(--border)]'}`}>{label}</button>
                                     ))}
                                 </div>
                                 <button onClick={resetFilters} className="text-xs font-bold text-[var(--red)] hover:bg-[var(--red-10)] px-4 py-2 rounded-xl transition-colors">
