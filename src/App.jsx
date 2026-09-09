@@ -1577,7 +1577,9 @@ export default function App() {
         let rawBets = [...rawBetsForActiveContext];
 
         // --- APLICAR FILTROS DEL DASHBOARD ---
-        if (activeTab === 'dashboard') {
+        // En un widget público el mismo filtro debe mantenerse al alternar
+        // entre el resumen y el historial, para que ambas vistas cuenten lo mismo.
+        if (activeTab === 'dashboard' || isEmbed) {
             rawBets = rawBets.filter((bet) => matchesDashboardFilters(bet, dashboardFilters));
         }
 
@@ -1599,7 +1601,7 @@ export default function App() {
             return rawBets.filter(b => getBetStatus(b) !== 'pending');
         }
         return rawBets; 
-    }, [rawBetsForActiveContext, viewMode, activeBankData, unlockedBank, dashboardFilters, activeTab]);
+    }, [rawBetsForActiveContext, viewMode, activeBankData, unlockedBank, dashboardFilters, activeTab, isEmbed]);
 
     const pendingHiddenCount = useMemo(() => {
         if (viewMode !== 'visiting' || !activeBankData) return 0;
@@ -2211,6 +2213,80 @@ export default function App() {
         <button onClick={() => { setActiveTab(tabId); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === tabId ? 'bg-[var(--bg-overlay)] text-[var(--accent)] border border-[var(--border)] shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-overlay-hover)] hover:text-[var(--text-main)]'}`}>{React.createElement(icon, { size: 18 })} {label}</button>
     );
 
+    const AdvancedFiltersPanel = () => (
+        <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 shadow-sm animate-in fade-in slide-in-from-top-2 w-full">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Desde Fecha</label>
+                    <input type="date" value={dashboardFilters.dateFrom} onChange={e => setDashboardFilters(p => ({...p, dateFrom: e.target.value}))} className="w-full bg-[var(--bg-input)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" />
+                </div>
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Hasta Fecha</label>
+                    <input type="date" value={dashboardFilters.dateTo} onChange={e => setDashboardFilters(p => ({...p, dateTo: e.target.value}))} className="w-full bg-[var(--bg-input)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" />
+                </div>
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Cuota (Mín - Máx)</label>
+                    <div className="flex gap-2">
+                        <input type="number" step="0.01" placeholder="Mín" value={dashboardFilters.minOdds} onChange={e => setDashboardFilters(p => ({...p, minOdds: e.target.value}))} className="w-full bg-[var(--bg-input)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" />
+                        <input type="number" step="0.01" placeholder="Máx" value={dashboardFilters.maxOdds} onChange={e => setDashboardFilters(p => ({...p, maxOdds: e.target.value}))} className="w-full bg-[var(--bg-input)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none focus:border-[var(--accent-50)] shadow-inner" />
+                    </div>
+                </div>
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Estrategia</label>
+                    <select value={dashboardFilters.category} onChange={e => setDashboardFilters(p => ({...p, category: e.target.value}))} className="w-full bg-[var(--bg-input)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none appearance-none shadow-inner">
+                        <option value="">Todas</option>
+                        {dashboardFilterOptions.categories.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                </div>
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Deporte</label>
+                    <select value={dashboardFilters.sport} onChange={e => setDashboardFilters(p => ({...p, sport: e.target.value}))} className="w-full bg-[var(--bg-input)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none appearance-none shadow-inner">
+                        <option value="">Todos</option>
+                        {dashboardFilterOptions.sports.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                </div>
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Casa de apuestas</label>
+                    <select value={dashboardFilters.bookmaker} onChange={e => setDashboardFilters(p => ({...p, bookmaker: e.target.value}))} className="w-full bg-[var(--bg-input)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none appearance-none shadow-inner">
+                        <option value="">Todas</option>
+                        {dashboardFilterOptions.bookmakers.map(bookmaker => <option key={bookmaker} value={bookmaker}>{bookmaker}</option>)}
+                    </select>
+                </div>
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Tipster</label>
+                    <select value={dashboardFilters.tipster} onChange={e => setDashboardFilters(p => ({...p, tipster: e.target.value}))} className="w-full bg-[var(--bg-input)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none appearance-none shadow-inner">
+                        <option value="">Todos</option>
+                        {dashboardFilterOptions.tipsters.map(tipster => <option key={tipster} value={tipster}>{tipster}</option>)}
+                    </select>
+                </div>
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider ml-1">Tipo</label>
+                    <select value={dashboardFilters.betSide} onChange={e => setDashboardFilters(p => ({...p, betSide: e.target.value}))} className="w-full bg-[var(--bg-input)] border border-transparent rounded-xl px-3 py-2.5 text-[var(--text-main)] text-sm outline-none appearance-none shadow-inner">
+                        <option value="">A favor y en contra</option>
+                        <option value="back">A favor (Back)</option>
+                        <option value="lay">En contra (Lay)</option>
+                    </select>
+                </div>
+            </div>
+            <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-3 mt-5 pt-4 border-t border-[var(--border)]">
+                <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Estado:</span>
+                    {['won', 'lost', 'pending', 'void', 'half-won', 'half-lost', 'cancelled'].map(st => (
+                        <button key={st} onClick={() => setDashboardFilters(p => ({...p, status: p.status === st ? '' : st}))} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${dashboardFilters.status === st ? 'bg-[var(--accent)] text-[var(--accent-fg)] shadow-sm' : 'bg-[var(--bg-input)] text-[var(--text-muted)] hover:text-[var(--text-main)] border border-[var(--border)]'}`}>
+                            {{ won: 'Ganadas', lost: 'Perdidas', pending: 'Pendientes', void: 'Reembolsadas', 'half-won': 'Media ganada', 'half-lost': 'Media perdida', cancelled: 'Canceladas' }[st]}
+                        </button>
+                    ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    {[['isLive', 'En vivo'], ['isFreebet', 'Freebet'], ['isEachWay', 'Each-way']].map(([field, label]) => (
+                        <button key={field} onClick={() => setDashboardFilters(p => ({ ...p, [field]: !p[field] }))} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${dashboardFilters[field] ? 'bg-[var(--accent)] text-[var(--accent-fg)] shadow-sm' : 'bg-[var(--bg-input)] text-[var(--text-muted)] hover:text-[var(--text-main)] border border-[var(--border)]'}`}>{label}</button>
+                    ))}
+                    <button onClick={resetFilters} className="text-xs font-bold text-[var(--red)] hover:bg-[var(--red-10)] px-4 py-2 rounded-xl transition-colors">Limpiar filtros</button>
+                </div>
+            </div>
+        </div>
+    );
+
     // =========================================================================
     // RENDERIZADO DEL WIDGET (MODO EMBEBIDO / IFRAME)
     // =========================================================================
@@ -2221,19 +2297,23 @@ export default function App() {
                 <LiquidBackground theme={theme} />
                 
                 {/* Cabecera Minimalista para el Iframe */}
-                <header className="flex justify-between items-center px-4 py-3 border-b border-[var(--border)] bg-[var(--bg-card)]/80 backdrop-blur-xl z-20 w-full">
+                <header className="flex flex-wrap justify-between items-center gap-3 px-4 py-3 border-b border-[var(--border)] bg-[var(--bg-card)]/80 backdrop-blur-xl z-20 w-full">
                     <div className="flex items-center gap-3">
                         <img src="/favicon.jpg" alt="Logo" className="w-7 h-7 rounded-lg shadow-sm" onError={(e)=>{e.target.style.display='none'}} />
                         <h1 className="font-bold text-base tracking-tight truncate max-w-[150px] sm:max-w-xs">{activeBankData.name}</h1>
                     </div>
-                    <div className="flex gap-2 bg-[var(--bg-input)] p-1 rounded-lg border border-[var(--border)]">
+                    <div className="ml-auto flex gap-2 bg-[var(--bg-input)] p-1 rounded-lg border border-[var(--border)]">
                         <button onClick={() => setActiveTab('dashboard')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab==='dashboard' ? 'bg-[var(--accent)] text-[var(--accent-fg)] shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>Resumen</button>
                         <button onClick={() => setActiveTab('bets')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab==='bets' ? 'bg-[var(--accent)] text-[var(--accent-fg)] shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>Apuestas</button>
                     </div>
+                    <button onClick={() => setIsFiltersOpen((open) => !open)} aria-expanded={isFiltersOpen} className={`px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all border ${isFiltersOpen ? 'bg-[var(--accent)] text-[var(--accent-fg)] border-[var(--accent-50)]' : 'bg-[var(--bg-input)] text-[var(--text-main)] hover:bg-[var(--bg-hover)] border-[var(--border)]'}`}>
+                        <Filter size={14} /> Filtros {isFiltersOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </button>
                 </header>
 
                 {/* Contenido del Widget */}
                 <main className="flex-1 overflow-y-auto custom-scrollbar p-3 md:p-5 z-10 relative w-full">
+                    {isFiltersOpen && <div className="mb-4"><AdvancedFiltersPanel /></div>}
                     {/* Caja FOMO por si tiene contraseña */}
                     {activeBankData?.premiumPassword && !unlockedBank && pendingHiddenCount > 0 && activeTab === 'bets' && (
                         <div className="bg-[var(--bg-card)] border border-[var(--border-strong)] rounded-2xl p-5 text-center shadow-sm mb-5 w-full">
@@ -2889,9 +2969,16 @@ export default function App() {
                                 <h3 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">Balances Agrupados</h3>
                                 <p className="text-[var(--text-muted)] text-sm mt-1">Agrupa varios bankrolls para ver sus estadísticas globales juntas.</p>
                             </div>
-                            <button onClick={() => { setNewBalanceData({ name: '', bankIds: [] }); setIsAddingBalance(true); }} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold transition-all shadow-[var(--shadow-glow-md)]">
-                                <Plus size={16} /> Crear Balance
-                            </button>
+                            <div className="flex flex-wrap justify-end gap-2">
+                                {banks.length < accountLimits.maxBanks && (
+                                    <button onClick={openAddBankModal} className="bg-[var(--bg-card)] hover:bg-[var(--bg-hover)] text-[var(--text-main)] border border-[var(--border)] hover:border-[var(--accent-50)] px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold transition-all shadow-sm">
+                                        <Plus size={16} className="text-[var(--accent)]" /> Nueva banca
+                                    </button>
+                                )}
+                                <button onClick={() => { setNewBalanceData({ name: '', bankIds: [] }); setIsAddingBalance(true); }} className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-fg)] px-4 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold transition-all shadow-[var(--shadow-glow-md)]">
+                                    <Plus size={16} /> Crear Balance
+                                </button>
+                            </div>
                         </div>
 
                         {balances.length === 0 ? (
