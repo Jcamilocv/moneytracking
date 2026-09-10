@@ -73,7 +73,10 @@ const handlePremiumPayCheckout = async (req, res) => {
             })
         });
         const result = await response.json().catch(() => ({}));
-        if (!response.ok || !result?.url) {
+        // PremiumPay documents the hosted checkout link as `redirect`.
+        // Keep `url` as a compatibility fallback for earlier sandbox variants.
+        const checkoutUrl = result?.redirect || result?.url;
+        if (!response.ok || !checkoutUrl) {
             await orderRef.update({
                 status: 'provider_error',
                 providerResponse: result,
@@ -87,7 +90,7 @@ const handlePremiumPayCheckout = async (req, res) => {
             providerPaymentId: result.paymentId || null,
             updatedAt: FieldValue.serverTimestamp()
         });
-        return res.status(201).json({ ok: true, orderId, checkoutUrl: result.url, environment: 'test' });
+        return res.status(201).json({ ok: true, orderId, checkoutUrl, environment: 'test' });
     } catch (error) {
         console.error('No se pudo crear el checkout de PremiumPay:', error);
         return res.status(400).json({ error: error.message || 'No se pudo preparar el pago.' });
