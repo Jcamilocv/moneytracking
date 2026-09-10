@@ -767,6 +767,46 @@ const PremiumAccessAdminPanel = ({ currentUser }) => {
     return <section className="bg-[var(--bg-card)] border border-[var(--border)] rounded-3xl p-5 md:p-7 space-y-4"><div><div className="flex items-center gap-2 text-[var(--accent)] text-xs font-bold uppercase tracking-widest"><Crown size={15}/> Operativa Premium</div><h4 className="mt-2 font-extrabold text-[var(--text-main)]">Alta manual tras pago confirmado</h4><p className="text-sm text-[var(--text-muted)] mt-1 max-w-2xl">Hasta conectar PremiumPay, confirma el pago fuera de la app y activa el acceso aquí. El cliente debe haber creado primero su cuenta con este mismo correo. No se guardan tarjetas ni datos de cobro.</p></div><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><label className="md:col-span-2"><span className="block text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-2">Correo de la cuenta MoneyTracKING</span><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="cliente@correo.com" className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-3 text-[var(--text-main)] outline-none focus:border-[var(--accent)]" /></label><label><span className="block text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-2">Plan</span><select value={plan} onChange={(event) => setPlan(event.target.value)} className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-3 text-[var(--text-main)] outline-none focus:border-[var(--accent)]"><option value="monthly">Mensual · 31 días</option><option value="annual">Anual · 366 días</option></select></label><label><span className="block text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-2">Referencia de pago (opcional)</span><input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} maxLength={120} placeholder="Ej. PP-12345" className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-3 text-[var(--text-main)] outline-none focus:border-[var(--accent)]" /></label></div><div className="flex flex-col sm:flex-row gap-3"><button disabled={busy} onClick={() => updateAccess('grant')} className="px-4 py-3 rounded-xl bg-[var(--accent)] text-[var(--accent-fg)] text-sm font-extrabold disabled:opacity-50">{busy ? 'Actualizando…' : 'Activar o renovar acceso'}</button><button disabled={busy} onClick={() => updateAccess('revoke')} className="px-4 py-3 rounded-xl border border-[var(--red-30)] text-[var(--red)] text-sm font-bold disabled:opacity-50">Retirar acceso</button></div>{error && <p className="text-sm text-[var(--red)]">{error}</p>}{result && <div className="rounded-2xl bg-[var(--accent-10)] border border-[var(--accent-30)] p-4 text-sm text-[var(--text-main)]"><p className="font-extrabold text-[var(--accent)]">{result.action === 'grant' ? 'Acceso Premium activo.' : 'Acceso Premium retirado.'}</p><p className="mt-1">{result.email}{result.action === 'grant' && result.accessUntil ? ` · válido hasta ${formatOfficialDateTime(result.accessUntil)}` : ''}</p></div>}</section>;
 };
 
+const PREMIUM_PAY_TEST_EMAIL = 'premium-test@moneytips.local';
+const isPremiumPayTestEnvironment = previewFirebaseConfig.projectId === 'money-tips-premiumpay-test';
+
+const PremiumPayTestCheckoutPanel = ({ currentUser }) => {
+    const [plan, setPlan] = useState('monthly');
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+    const [checkout, setCheckout] = useState(null);
+
+    if (!isPremiumPayTestEnvironment || currentUser?.email?.toLowerCase() !== PREMIUM_PAY_TEST_EMAIL) return null;
+
+    const createCheckout = async () => {
+        setBusy(true);
+        setError('');
+        setCheckout(null);
+        try {
+            const token = await currentUser.getIdToken();
+            const response = await fetch('/api/payments/premiumpay/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ plan })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'No se pudo preparar el checkout de prueba.');
+            setCheckout(data);
+        } catch (requestError) {
+            setError(requestError.message || 'No se pudo preparar el checkout de prueba.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return <section className="bg-[var(--accent-5)] border border-[var(--accent-30)] rounded-3xl p-5 md:p-7 space-y-4">
+        <div><div className="flex items-center gap-2 text-[var(--accent)] text-xs font-bold uppercase tracking-widest"><ShieldCheck size={15}/> PremiumPay · entorno de prueba</div><h3 className="mt-2 text-xl font-extrabold text-[var(--text-main)]">Checkout técnico aislado</h3><p className="text-sm text-[var(--text-muted)] mt-1 max-w-2xl">Solo esta cuenta puede abrir un checkout simulado. No crea cargos ni habilita acceso Premium hasta que PremiumPay comunique un pago de prueba completado.</p></div>
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-end"><label className="flex-1"><span className="block text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-2">Plan simulado</span><select value={plan} onChange={(event) => setPlan(event.target.value)} className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-3 text-[var(--text-main)] outline-none focus:border-[var(--accent)]"><option value="monthly">Mensual · 29,90 €</option><option value="annual">Anual · 289 €</option></select></label><button type="button" onClick={createCheckout} disabled={busy} className="px-5 py-3 rounded-xl bg-[var(--accent)] text-[var(--accent-fg)] font-extrabold disabled:opacity-50">{busy ? 'Preparando…' : 'Crear checkout simulado'}</button></div>
+        {error && <p className="text-sm text-[var(--red)]">{error}</p>}
+        {checkout && <div className="rounded-2xl bg-[var(--bg-card)] border border-[var(--accent-30)] p-4 text-sm text-[var(--text-main)]"><p className="font-extrabold text-[var(--accent)]">Checkout de prueba creado.</p><p className="mt-1 text-[var(--text-muted)]">El pedido queda pendiente y no ha activado ninguna suscripción.</p><a href={checkout.checkoutUrl} target="_blank" rel="noreferrer" className="inline-flex mt-3 font-bold text-[var(--accent)]">Abrir pago simulado <ArrowUpRight size={15} className="ml-1"/></a></div>}
+    </section>;
+};
+
 const OfficialPicksAdminPanel = ({ currentUser }) => {
     const [form, setForm] = useState(emptyOfficialPickForm);
     const [isPublishing, setIsPublishing] = useState(false);
@@ -2738,6 +2778,7 @@ export default function App() {
                 </header>
 
                 <div className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 space-y-6 custom-scrollbar relative z-10 w-full ">
+                <PremiumPayTestCheckoutPanel currentUser={currentUser} />
                 {activeTab === 'dashboard' && activeBankData && (
                     <>
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
