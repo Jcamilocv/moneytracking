@@ -19,7 +19,7 @@ import { getAuth, GoogleAuthProvider, signInWithEmailAndPassword, signInWithRedi
 import { getFirestore, collection, onSnapshot, addDoc, doc, deleteDoc, updateDoc, setDoc, writeBatch, serverTimestamp } from "firebase/firestore";
 
 // --- CONFIGURACIÓN DE FIREBASE ---
-const firebaseConfig = {
+const productionFirebaseConfig = {
     apiKey: "AIzaSyDdhFhK2leqXczuBU-inLBLi9PfMt7NbkY",
     authDomain: "app.pronosticosmoneytips.com",
     projectId: "money-tracking-d908b",
@@ -27,6 +27,18 @@ const firebaseConfig = {
     messagingSenderId: "776084225241",
     appId: "1:776084225241:web:f50c611da487a29a2112c8"
 };
+
+const previewFirebaseConfig = {
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID
+};
+
+const hasPreviewFirebaseConfig = Object.values(previewFirebaseConfig).every(Boolean);
+const firebaseConfig = hasPreviewFirebaseConfig ? previewFirebaseConfig : productionFirebaseConfig;
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);

@@ -1,6 +1,6 @@
 import { createVerify } from 'node:crypto';
 
-const FIREBASE_PROJECT_ID = 'money-tracking-d908b';
+const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'money-tracking-d908b';
 const FIREBASE_ISSUER = `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`;
 const FIREBASE_CERTS_URL = 'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com';
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
