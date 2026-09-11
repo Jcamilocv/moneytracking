@@ -12,6 +12,15 @@ const isValidPickId = (value) => typeof value === 'string' && /^op_[a-f0-9]{40}$
 const publicOrigin = (req) => process.env.MONEYTRACKING_APP_ORIGIN
     || `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}`;
 
+const premiumPayCallbackUrl = (origin) => {
+    const callbackUrl = new URL('/api/payments/premiumpay/callback', origin);
+    // Preview deployments are protected by Vercel. The system-provided bypass
+    // keeps the callback private while allowing PremiumPay to report a test payment.
+    const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    if (bypassSecret) callbackUrl.searchParams.set('x-vercel-protection-bypass', bypassSecret);
+    return callbackUrl.toString();
+};
+
 const clientIp = (req) => String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '')
     .split(',')[0]
     .trim()
@@ -68,7 +77,7 @@ const handlePremiumPayCheckout = async (req, res) => {
                 okurl: `${origin}/?payment=success`,
                 kourl: `${origin}/?payment=failed`,
                 cancelurl: `${origin}/?payment=cancelled`,
-                callbackurl: `${origin}/api/payments/premiumpay/callback`,
+                callbackurl: premiumPayCallbackUrl(origin),
                 tokenizer: true
             })
         });
