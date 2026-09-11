@@ -12,12 +12,21 @@ const isValidPickId = (value) => typeof value === 'string' && /^op_[a-f0-9]{40}$
 const publicOrigin = (req) => process.env.MONEYTRACKING_APP_ORIGIN
     || `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}`;
 
+const premiumPayEnvironment = () => process.env.PREMIUMPAY_ENVIRONMENT === 'production'
+    ? 'production'
+    : 'test';
+
+const premiumPayCheckoutEnabled = () => premiumPayEnvironment() === 'test'
+    || process.env.PREMIUMPAY_CHECKOUT_ENABLED === 'true';
+
 const premiumPayCallbackUrl = (origin) => {
     const callbackUrl = new URL('/api/payments/premiumpay/callback', origin);
-    // Preview deployments are protected by Vercel. The system-provided bypass
-    // keeps the callback private while allowing PremiumPay to report a test payment.
-    const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
-    if (bypassSecret) callbackUrl.searchParams.set('x-vercel-protection-bypass', bypassSecret);
+    // Preview deployments are protected by Vercel. The system-provided bypass is
+    // permitted only for sandbox callbacks, never for live payment traffic.
+    if (premiumPayEnvironment() === 'test') {
+        const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+        if (bypassSecret) callbackUrl.searchParams.set('x-vercel-protection-bypass', bypassSecret);
+    }
     return callbackUrl.toString();
 };
 
@@ -32,7 +41,9 @@ const handlePremiumPayCheckout = async (req, res) => {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
 
     const apiKey = process.env.PREMIUMPAY_API_KEY;
-    if (!apiKey) return res.status(503).json({ error: 'La pasarela de pruebas todavía no está configurada.' });
+    if (!premiumPayCheckoutEnabled() || !apiKey) {
+        return res.status(503).json({ error: 'La suscripción Premium todavía no está disponible.' });
+    }
 
     const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
     if (!token) return res.status(401).json({ error: 'Inicia sesión para continuar con el pago.' });
@@ -47,12 +58,18 @@ const handlePremiumPayCheckout = async (req, res) => {
         const orderId = `mt-${planName}-${randomUUID()}`;
         const origin = publicOrigin(req);
         const orderRef = getAdminDb().collection('premiumPaymentOrders').doc(orderId);
+        const environment = premiumPayEnvironment();
+        const configuredApiBase = process.env.PREMIUMPAY_API_BASE_URL;
+
+        if (environment === 'production' && !configuredApiBase) {
+            throw new Error('La pasarela Premium todavía no está configurada.');
+        }
 
         await orderRef.set({
             schemaVersion: 1,
             status: 'pending',
             provider: 'premiumpay',
-            environment: 'test',
+            environment,
             uid: user.uid,
             email: account.email.toLowerCase(),
             plan: planName,
@@ -62,7 +79,7 @@ const handlePremiumPayCheckout = async (req, res) => {
             updatedAt: FieldValue.serverTimestamp()
         });
 
-        const apiBase = (process.env.PREMIUMPAY_API_BASE_URL || 'https://dev.premiumpay.pro/api/v1').replace(/\/$/, '');
+        const apiBase = (configuredApiBase || 'https://dev.premiumpay.pro/api/v1').replace(/\/$/, '');
         const response = await fetch(`${apiBase}/makepayment`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -91,7 +108,7 @@ const handlePremiumPayCheckout = async (req, res) => {
                 providerResponse: result,
                 updatedAt: FieldValue.serverTimestamp()
             });
-            return res.status(502).json({ error: result?.message || 'PremiumPay no pudo preparar el pago de prueba.' });
+            return res.status(502).json({ error: result?.message || 'PremiumPay no pudo preparar el pago.' });
         }
 
         await orderRef.update({
@@ -99,7 +116,7 @@ const handlePremiumPayCheckout = async (req, res) => {
             providerPaymentId: result.paymentId || null,
             updatedAt: FieldValue.serverTimestamp()
         });
-        return res.status(201).json({ ok: true, orderId, checkoutUrl, environment: 'test' });
+        return res.status(201).json({ ok: true, orderId, checkoutUrl, environment });
     } catch (error) {
         console.error('No se pudo crear el checkout de PremiumPay:', error);
         return res.status(400).json({ error: error.message || 'No se pudo preparar el pago.' });

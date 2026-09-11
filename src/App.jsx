@@ -768,6 +768,8 @@ const PremiumAccessAdminPanel = ({ currentUser }) => {
 };
 
 const isPremiumPayTestEnvironment = previewFirebaseConfig.projectId === 'money-tips-premiumpay-test';
+const isPremiumPayLiveCheckoutEnabled = import.meta.env.VITE_PREMIUMPAY_CHECKOUT_ENABLED === 'true';
+const isPremiumPayCheckoutVisible = isPremiumPayTestEnvironment || isPremiumPayLiveCheckoutEnabled;
 
 const PremiumPayTestCheckoutPanel = ({ currentUser }) => {
     const [plan, setPlan] = useState('monthly');
@@ -777,7 +779,7 @@ const PremiumPayTestCheckoutPanel = ({ currentUser }) => {
     const [entitlement, setEntitlement] = useState(null);
 
     useEffect(() => {
-        if (!isPremiumPayTestEnvironment || !currentUser) {
+        if (!isPremiumPayCheckoutVisible || !currentUser) {
             setEntitlement(null);
             return undefined;
         }
@@ -787,7 +789,9 @@ const PremiumPayTestCheckoutPanel = ({ currentUser }) => {
         }, () => setEntitlement(null));
     }, [currentUser]);
 
-    if (!isPremiumPayTestEnvironment || !currentUser) return null;
+    if (!isPremiumPayCheckoutVisible || !currentUser) return null;
+
+    const isTestCheckout = isPremiumPayTestEnvironment;
 
     const createCheckout = async () => {
         setBusy(true);
@@ -811,11 +815,11 @@ const PremiumPayTestCheckoutPanel = ({ currentUser }) => {
     };
 
     return <section className="bg-[var(--accent-5)] border border-[var(--accent-30)] rounded-3xl p-5 md:p-7 space-y-4">
-        <div><div className="flex items-center gap-2 text-[var(--accent)] text-xs font-bold uppercase tracking-widest"><ShieldCheck size={15}/> PremiumPay · entorno de prueba</div><h3 className="mt-2 text-xl font-extrabold text-[var(--text-main)]">Checkout técnico aislado</h3><p className="text-sm text-[var(--text-muted)] mt-1 max-w-2xl">Solo las cuentas autenticadas en este entorno aislado pueden abrir un checkout simulado. No crea cargos ni habilita acceso Premium hasta que PremiumPay comunique un pago de prueba completado.</p></div>
-        {entitlement?.status === 'active' && <div className="rounded-2xl bg-[var(--accent-10)] border border-[var(--accent-30)] p-4 text-sm text-[var(--text-main)]"><p className="font-extrabold text-[var(--accent)]">Acceso Premium de prueba activo.</p><p className="mt-1 text-[var(--text-muted)]">Plan {entitlement.plan === 'annual' ? 'anual' : 'mensual'} · válido hasta {formatOfficialDateTime(entitlement.accessUntil?.toDate?.() || entitlement.accessUntil)}.</p></div>}
-        <div className="flex flex-col sm:flex-row gap-3 sm:items-end"><label className="flex-1"><span className="block text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-2">Plan simulado</span><select value={plan} onChange={(event) => setPlan(event.target.value)} className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-3 text-[var(--text-main)] outline-none focus:border-[var(--accent)]"><option value="monthly">Mensual · 29,90 €</option><option value="annual">Anual · 289 €</option></select></label><button type="button" onClick={createCheckout} disabled={busy} className="px-5 py-3 rounded-xl bg-[var(--accent)] text-[var(--accent-fg)] font-extrabold disabled:opacity-50">{busy ? 'Preparando…' : 'Crear checkout simulado'}</button></div>
+        <div><div className="flex items-center gap-2 text-[var(--accent)] text-xs font-bold uppercase tracking-widest"><ShieldCheck size={15}/> {isTestCheckout ? 'PremiumPay · entorno de prueba' : 'Money Tips Premium'}</div><h3 className="mt-2 text-xl font-extrabold text-[var(--text-main)]">{isTestCheckout ? 'Checkout técnico aislado' : 'Activa tu acceso Premium'}</h3><p className="text-sm text-[var(--text-muted)] mt-1 max-w-2xl">{isTestCheckout ? 'Solo las cuentas autenticadas en este entorno aislado pueden abrir un checkout simulado. No crea cargos ni habilita acceso Premium hasta que PremiumPay comunique un pago de prueba completado.' : 'Elige tu plan para acceder a los picks oficiales de Money Tips y a MoneyTracKING. El pago se procesa de forma segura en PremiumPay.'}</p></div>
+        {entitlement?.status === 'active' && <div className="rounded-2xl bg-[var(--accent-10)] border border-[var(--accent-30)] p-4 text-sm text-[var(--text-main)]"><p className="font-extrabold text-[var(--accent)]">{isTestCheckout ? 'Acceso Premium de prueba activo.' : 'Tu acceso Premium está activo.'}</p><p className="mt-1 text-[var(--text-muted)]">Plan {entitlement.plan === 'annual' ? 'anual' : 'mensual'} · válido hasta {formatOfficialDateTime(entitlement.accessUntil?.toDate?.() || entitlement.accessUntil)}.</p></div>}
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-end"><label className="flex-1"><span className="block text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-2">{isTestCheckout ? 'Plan simulado' : 'Plan Premium'}</span><select value={plan} onChange={(event) => setPlan(event.target.value)} className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-3 py-3 text-[var(--text-main)] outline-none focus:border-[var(--accent)]"><option value="monthly">Mensual · 29,90 €</option><option value="annual">Anual · 289 €</option></select></label><button type="button" onClick={createCheckout} disabled={busy} className="px-5 py-3 rounded-xl bg-[var(--accent)] text-[var(--accent-fg)] font-extrabold disabled:opacity-50">{busy ? 'Preparando…' : isTestCheckout ? 'Crear checkout simulado' : 'Continuar al pago seguro'}</button></div>
         {error && <p className="text-sm text-[var(--red)]">{error}</p>}
-        {checkout && <div className="rounded-2xl bg-[var(--bg-card)] border border-[var(--accent-30)] p-4 text-sm text-[var(--text-main)]"><p className="font-extrabold text-[var(--accent)]">Checkout de prueba creado.</p><p className="mt-1 text-[var(--text-muted)]">El pedido queda pendiente y no ha activado ninguna suscripción.</p><a href={checkout.checkoutUrl} target="_blank" rel="noreferrer" className="inline-flex mt-3 font-bold text-[var(--accent)]">Abrir pago simulado <ArrowUpRight size={15} className="ml-1"/></a></div>}
+        {checkout && <div className="rounded-2xl bg-[var(--bg-card)] border border-[var(--accent-30)] p-4 text-sm text-[var(--text-main)]"><p className="font-extrabold text-[var(--accent)]">{isTestCheckout ? 'Checkout de prueba creado.' : 'Checkout preparado.'}</p><p className="mt-1 text-[var(--text-muted)]">El pedido queda pendiente y no ha activado ninguna suscripción hasta que el pago se confirme.</p><a href={checkout.checkoutUrl} target="_blank" rel="noreferrer" className="inline-flex mt-3 font-bold text-[var(--accent)]">{isTestCheckout ? 'Abrir pago simulado' : 'Ir al pago seguro'} <ArrowUpRight size={15} className="ml-1"/></a></div>}
     </section>;
 };
 
@@ -1803,6 +1807,7 @@ export default function App() {
         } catch (error) {
             console.error(error);
             if (error.code === 'auth/email-already-in-use') setAuthError('Este email ya está registrado.');
+            else if (error.code === 'auth/weak-password') setAuthError('La contraseña debe tener al menos 6 caracteres.');
             else if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') setAuthError('Email o contraseña incorrectos.');
             else setAuthError('Error de autenticación. Revisa tus datos.');
         }
