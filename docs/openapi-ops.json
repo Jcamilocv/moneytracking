@@ -1,0 +1,571 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Money Tips Operational API for Astra UI",
+    "version": "1.0.0",
+    "description": "API operativa centralizada y segura para la interacción del centro de mando de Astra UI con los servicios de dominio de Money Tips. Aísla completamente la lógica empresarial, prohíbe consultas masivas directas a Firestore y asegura auditoría inmutable de todas las mutaciones administrativas.",
+    "contact": {
+      "name": "Money Tips Engineering",
+      "url": "https://pronosticosmoneytips.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://app.pronosticosmoneytips.com",
+      "description": "Servidor de Producción (Vercel Serverless)"
+    },
+    {
+      "url": "http://127.0.0.1:4174",
+      "description": "Entorno Local / Astra HQ Development Server"
+    }
+  ],
+  "security": [
+    { "BearerAuth": [] },
+    { "OpsAdminToken": [] }
+  ],
+  "paths": {
+    "/api/ops/kpis": {
+      "get": {
+        "summary": "Resumen Ejecutivo de KPIs",
+        "description": "Devuelve las métricas clave de salud corporativa, suscriptores activos, ingresos brutos mensuales, incidencias abiertas y estado del portfolio.",
+        "parameters": [
+          {
+            "name": "refresh",
+            "in": "query",
+            "description": "Forzar bypass de cache en memoria",
+            "required": false,
+            "schema": { "type": "boolean", "default": false }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "KPIs agregados con éxito",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KpisResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
+        }
+      }
+    },
+    "/api/ops/health": {
+      "get": {
+        "summary": "Modelo Unificado de Salud de la Plataforma",
+        "description": "Inspecciona y consolida el estado del worker T-5 en VPS, cron de liquidación 01:00, Firestore, TheSportsDB, Telegram saliente y facturación.",
+        "responses": {
+          "200": {
+            "description": "Snapshot de salud unificada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
+        }
+      }
+    },
+    "/api/ops/systems": {
+      "get": {
+        "summary": "Listado de Sistemas de Apuestas",
+        "description": "Devuelve todos los modelos y sistemas registrados en SystemRegistry, sus modalidades de ejecución (PRODUCTION/PAPER/T5) y timing.",
+        "responses": {
+          "200": {
+            "description": "Catálogo de sistemas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemsResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
+        }
+      }
+    },
+    "/api/ops/picks": {
+      "get": {
+        "summary": "Listado de Picks Oficiales",
+        "description": "Picks publicados en la temporada con su estado de liquidación, cuotas, selecciones y resultados.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "default": 50, "maximum": 100 }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": { "type": "integer", "default": 0 }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["won", "lost", "void", "pending", "half-won", "half-lost"]
+            }
+          },
+          {
+            "name": "systemId",
+            "in": "query",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Listado paginado de picks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PicksResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
+        }
+      }
+    },
+    "/api/ops/incidents": {
+      "get": {
+        "summary": "Incidencias Técnicas y de Revenue",
+        "description": "Lista unificada de incidencias abiertas en operaciones, liquidación, sincronización de proveedores y cobros.",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["open", "acknowledged", "resolved"], "default": "open" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "default": 50 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Listado de incidencias",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentsResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
+        }
+      }
+    },
+    "/api/ops/paper": {
+      "get": {
+        "summary": "Seguimiento de Sistemas Paper",
+        "description": "Rendimiento y picks de sistemas en fase experimental de validación (stake 0, cero difusión pública).",
+        "responses": {
+          "200": {
+            "description": "Resumen paper",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
+        }
+      }
+    },
+    "/api/ops/automation": {
+      "get": {
+        "summary": "Estado de Automatizaciones y Cron Jobs",
+        "description": "Detalle operativo del worker MTProto en Hetzner VPS y crons de Vercel.",
+        "responses": {
+          "200": {
+            "description": "Resumen de automatización",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
+        }
+      }
+    },
+    "/api/ops/audit-logs": {
+      "get": {
+        "summary": "Registro de Auditoría de Acciones",
+        "description": "Consulta el log inmutable central de auditoría de todas las acciones administrativas ejecutadas.",
+        "parameters": [
+          { "name": "entityType", "in": "query", "schema": { "type": "string" } },
+          { "name": "entityId", "in": "query", "schema": { "type": "string" } },
+          { "name": "action", "in": "query", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Logs de auditoría recuperados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditLogsResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
+        }
+      }
+    },
+    "/api/ops/actions": {
+      "post": {
+        "summary": "Despacho de Acciones Administrativas",
+        "description": "Ejecuta una acción administrativa autorizada, validada, idempotente y registrada en el log de auditoría central.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActionRequest"
+              },
+              "examples": {
+                "retrySettlement": {
+                  "summary": "Reintentar liquidación de un pick",
+                  "value": {
+                    "action": "retry_settlement",
+                    "reason": "El proveedor TheSportsDB ya dispone del marcador final tras la revisión manual",
+                    "params": {
+                      "pickId": "op_fbc5bcc593d441a70745d791571412272a790eac"
+                    }
+                  }
+                },
+                "acknowledgeIncident": {
+                  "summary": "Reconocer una incidencia técnica",
+                  "value": {
+                    "action": "acknowledge_incident",
+                    "reason": "En investigación por el equipo de ingeniería",
+                    "params": {
+                      "incidentId": "inc_ops_12345",
+                      "domain": "operations"
+                    }
+                  }
+                },
+                "activateEntitlement": {
+                  "summary": "Concesión manual de acceso Premium",
+                  "value": {
+                    "action": "activate_entitlement",
+                    "reason": "Pago por transferencia verificado manualmente",
+                    "params": {
+                      "email": "usuario@ejemplo.com",
+                      "plan": "monthly",
+                      "paymentReference": "TRF-987654"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Acción ejecutada y auditada con éxito",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequestError" },
+          "401": { "$ref": "#/components/responses/UnauthorizedError" },
+          "500": { "$ref": "#/components/responses/InternalServerError" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Token administrativo estándar (Bearer)"
+      },
+      "OpsAdminToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-ops-admin-token",
+        "description": "Cabecera de token administrativo directo para Astra UI"
+      }
+    },
+    "responses": {
+      "UnauthorizedError": {
+        "description": "Autenticación fallida o token ausente",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "BadRequestError": {
+        "description": "Parámetros o motivo de auditoría no válidos",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "Error interno del servidor",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "MetaEnvelope": {
+        "type": "object",
+        "properties": {
+          "correlationId": { "type": "string", "example": "corr_9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "durationMs": { "type": "number", "example": 14 }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["ok", "error"],
+        "properties": {
+          "ok": { "type": "boolean", "example": false },
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "correlationId"],
+            "properties": {
+              "code": { "type": "string", "example": "REASON_REQUIRED" },
+              "message": { "type": "string", "example": "Se requiere un motivo justificado para registrar la acción." },
+              "details": { "type": ["object", "string", "null"] },
+              "correlationId": { "type": "string" },
+              "timestamp": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      },
+      "KpisResponse": {
+        "type": "object",
+        "required": ["ok", "data", "meta"],
+        "properties": {
+          "ok": { "type": "boolean", "example": true },
+          "data": {
+            "type": "object",
+            "properties": {
+              "companyHealth": { "type": "string", "enum": ["HEALTHY", "DEGRADED", "DOWN", "UNKNOWN"] },
+              "status": { "type": "string", "enum": ["connected", "degraded", "stale", "unavailable"] },
+              "isStale": { "type": "boolean", "example": false },
+              "staleReason": { "type": ["string", "null"] },
+              "sourceStatus": { "type": "object" },
+              "activeSubscribers": { "type": ["integer", "null"], "example": 24 },
+              "monthlyGrossRevenueEUR": { "type": ["number", "null"], "example": 1195.00 },
+              "openIncidents": { "type": ["integer", "null"], "example": 0 },
+              "picksMetrics": {
+                "type": "object",
+                "properties": {
+                  "totalValidOfficialPicks": { "type": ["integer", "null"], "example": 81 },
+                  "pendingSettlements": { "type": ["integer", "null"], "example": 0 }
+                }
+              },
+              "generatedAt": { "type": ["string", "null"], "format": "date-time" },
+              "updatedAt": { "type": ["string", "null"], "format": "date-time" }
+            }
+          },
+          "meta": { "$ref": "#/components/schemas/MetaEnvelope" }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "required": ["ok", "data", "meta"],
+        "properties": {
+          "ok": { "type": "boolean", "example": true },
+          "data": {
+            "type": "object",
+            "properties": {
+              "overall": { "type": "string", "enum": ["HEALTHY", "DEGRADED", "DOWN", "UNKNOWN"] },
+              "checkedAt": { "type": "string", "format": "date-time" },
+              "checkedAtMadrid": { "type": "string", "example": "23/09/2026, 14:30:00" },
+              "components": {
+                "type": "object",
+                "properties": {
+                  "firestore": { "type": "object" },
+                  "settlement_01_00": { "type": "object" },
+                  "vps_t5_worker": { "type": "object" },
+                  "telegram_outbound": { "type": "object" },
+                  "thesportsdb": { "type": "object" },
+                  "billing": { "type": "object" }
+                }
+              }
+            }
+          },
+          "meta": { "$ref": "#/components/schemas/MetaEnvelope" }
+        }
+      },
+      "SystemsResponse": {
+        "type": "object",
+        "required": ["ok", "data", "meta"],
+        "properties": {
+          "ok": { "type": "boolean", "example": true },
+          "data": {
+            "type": "object",
+            "properties": {
+              "systems": { "type": "array", "items": { "type": "object" } },
+              "breakdown": { "type": "object" }
+            }
+          },
+          "meta": { "$ref": "#/components/schemas/MetaEnvelope" }
+        }
+      },
+      "PicksResponse": {
+        "type": "object",
+        "required": ["ok", "data", "meta"],
+        "properties": {
+          "ok": { "type": "boolean", "example": true },
+          "data": {
+            "type": "object",
+            "properties": {
+              "count": { "type": "integer" },
+              "limit": { "type": "integer" },
+              "offset": { "type": "integer" },
+              "picks": { "type": "array", "items": { "type": "object" } }
+            }
+          },
+          "meta": { "$ref": "#/components/schemas/MetaEnvelope" }
+        }
+      },
+      "IncidentsResponse": {
+        "type": "object",
+        "required": ["ok", "data", "meta"],
+        "properties": {
+          "ok": { "type": "boolean", "example": true },
+          "data": {
+            "type": "object",
+            "properties": {
+              "total": { "type": "integer" },
+              "incidents": { "type": "array", "items": { "type": "object" } }
+            }
+          },
+          "meta": { "$ref": "#/components/schemas/MetaEnvelope" }
+        }
+      },
+      "PaperResponse": {
+        "type": "object",
+        "required": ["ok", "data", "meta"],
+        "properties": {
+          "ok": { "type": "boolean", "example": true },
+          "data": {
+            "type": "object",
+            "properties": {
+              "systemsTracked": { "type": "array", "items": { "type": "string" } },
+              "totalTrackedPicks": { "type": "integer" },
+              "paperPicks": { "type": "array", "items": { "type": "object" } }
+            }
+          },
+          "meta": { "$ref": "#/components/schemas/MetaEnvelope" }
+        }
+      },
+      "AutomationResponse": {
+        "type": "object",
+        "required": ["ok", "data", "meta"],
+        "properties": {
+          "ok": { "type": "boolean", "example": true },
+          "data": {
+            "type": "object",
+            "properties": {
+              "overallStatus": { "type": "string" },
+              "vpsWorker": { "type": "object" },
+              "crons": { "type": "object" }
+            }
+          },
+          "meta": { "$ref": "#/components/schemas/MetaEnvelope" }
+        }
+      },
+      "AuditLogsResponse": {
+        "type": "object",
+        "required": ["ok", "data", "meta"],
+        "properties": {
+          "ok": { "type": "boolean", "example": true },
+          "data": {
+            "type": "object",
+            "properties": {
+              "count": { "type": "integer" },
+              "logs": { "type": "array", "items": { "type": "object" } }
+            }
+          },
+          "meta": { "$ref": "#/components/schemas/MetaEnvelope" }
+        }
+      },
+      "ActionRequest": {
+        "type": "object",
+        "required": ["action", "reason"],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "retry_settlement",
+              "retry_payment_reconciliation",
+              "activate_entitlement",
+              "revoke_entitlement",
+              "request_cancel_at_period_end",
+              "resume_subscription",
+              "acknowledge_incident",
+              "resolve_incident",
+              "replay_failed_automation",
+              "disable_system",
+              "enable_system"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "description": "Motivo obligatorio para auditoría inmutable de la acción",
+            "minLength": 5
+          },
+          "params": {
+            "type": "object",
+            "description": "Parámetros específicos para la acción solicitada"
+          }
+        }
+      },
+      "ActionResponse": {
+        "type": "object",
+        "required": ["ok", "data", "meta"],
+        "properties": {
+          "ok": { "type": "boolean", "example": true },
+          "data": {
+            "type": "object",
+            "required": ["action", "entityId", "auditId", "correlationId"],
+            "properties": {
+              "ok": { "type": "boolean", "example": true },
+              "action": { "type": "string" },
+              "entityType": { "type": "string" },
+              "entityId": { "type": "string" },
+              "result": { "type": "object" },
+              "auditId": { "type": "string", "example": "audit_8a5e8c13-79d3-4a11-8274-123456789abc" },
+              "correlationId": { "type": "string" },
+              "timestamp": { "type": "string", "format": "date-time" }
+            }
+          },
+          "meta": { "$ref": "#/components/schemas/MetaEnvelope" }
+        }
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildPublication } from '../api/lib/official-snapshot-data.js';
+import { buildPublication } from '../api/_lib/official-snapshot-data.js';
 
 test('la publicación pública omite apuestas pendientes y produce una huella estable', () => {
     const bank = { id: 'bank-1', name: 'Oficial', initialCapital: 1000, currency: 'EUR' };

@@ -1,24 +1,17 @@
 import { timingSafeEqual } from 'node:crypto';
+import { SUBSCRIPTION_PLANS, normalizePlanId } from './billing/plans.js';
 
-export const PREMIUM_PAY_PLANS = {
-    monthly: {
-        amount: 29.9,
-        currency: 'EUR',
-        productName: 'Money Tips Premium Mensual',
-        productDescription: 'Acceso Premium a Money Tips durante 31 días.'
-    },
-    annual: {
-        amount: 289,
-        currency: 'EUR',
-        productName: 'Money Tips Premium Anual',
-        productDescription: 'Acceso Premium a Money Tips durante 366 días.'
-    }
-};
+export const PREMIUM_PAY_PLANS = Object.freeze(Object.fromEntries(
+    Object.entries(SUBSCRIPTION_PLANS).map(([id, plan]) => [id, {
+        amount: plan.priceCents / 100,
+        currency: plan.currency,
+        productName: plan.productName,
+        productDescription: plan.productDescription
+    }])
+));
 
 export const normalizePremiumPayPlan = (value) => {
-    const plan = String(value || '').trim().toLowerCase();
-    if (!(plan in PREMIUM_PAY_PLANS)) throw new Error('Plan Premium no válido.');
-    return plan;
+    return normalizePlanId(value);
 };
 
 export const premiumPayPlan = (value) => PREMIUM_PAY_PLANS[normalizePremiumPayPlan(value)];

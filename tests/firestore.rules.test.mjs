@@ -11,6 +11,7 @@ import {
   getDoc,
   serverTimestamp,
   setDoc,
+  Timestamp,
   writeBatch,
 } from 'firebase/firestore';
 
@@ -75,6 +76,15 @@ const validPublicBet = () => ({
   commission: '',
   selections: [],
 });
+
+const grantPremiumWorkspace = async (userId) => {
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'users', userId, 'entitlements', 'subscription'), {
+      status: 'active',
+      accessUntil: Timestamp.fromMillis(Date.now() + (24 * 60 * 60 * 1000)),
+    });
+  });
+};
 
 before(async () => {
   testEnvironment = await initializeTestEnvironment({
@@ -154,9 +164,32 @@ test('las reglas existentes de MoneyTracking conservan el aislamiento por propie
   const ownerDb = testEnvironment.authenticatedContext('user-a').firestore();
   const strangerDb = testEnvironment.authenticatedContext('user-b').firestore();
 
+  await grantPremiumWorkspace('user-a');
+
   await assertSucceeds(setDoc(doc(ownerDb, 'users', 'user-a', 'banks', 'bank-1'), { name: 'Principal' }));
   await assertFails(getDoc(doc(strangerDb, 'users', 'user-a', 'banks', 'bank-1')));
   await assertFails(setDoc(doc(ownerDb, 'users', 'user-a', 'entitlements', 'limits'), { maxScansPerDay: 20 }));
+});
+
+test('una cuenta sin Premium no puede crear una banca gratuita', async () => {
+  const db = testEnvironment.authenticatedContext('user-without-premium').firestore();
+
+  await assertFails(setDoc(doc(db, 'users', 'user-without-premium', 'banks', 'bank-1'), { name: 'No permitido' }));
+});
+
+test('una cuenta expirada puede leer su histórico, pero no modificarlo ni ver el de otro usuario', async () => {
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'users', 'expired-user', 'entitlements', 'subscription'), {
+      status: 'expired', accessUntil: Timestamp.fromMillis(Date.now() - 1000),
+    });
+    await setDoc(doc(context.firestore(), 'users', 'expired-user', 'banks', 'bank-1'), { name: 'Histórico' });
+  });
+  const ownerDb = testEnvironment.authenticatedContext('expired-user').firestore();
+  const strangerDb = testEnvironment.authenticatedContext('other-user').firestore();
+  const bank = doc(ownerDb, 'users', 'expired-user', 'banks', 'bank-1');
+  await assertSucceeds(getDoc(bank));
+  await assertFails(setDoc(bank, { name: 'No permitido' }));
+  await assertFails(getDoc(doc(strangerDb, 'users', 'expired-user', 'banks', 'bank-1')));
 });
 
 test('el propietario puede crear un snapshot saneado y un visitante anónimo puede leerlo', async () => {
@@ -207,4 +240,84 @@ test('los snapshots rechazan apuestas pendientes y campos privados', async () =>
     ...validPublicBet(),
     analysis: 'nota privada',
   }));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CUSTOMERS & REVENUE: PRUEBAS DE SEGURIDAD EN REGLAS DE FIRESTORE
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('reglas: un cliente puede leer su propio entitlement pero NUNCA escribirlo', async () => {
+  const ownerDb = testEnvironment.authenticatedContext('customer-123').firestore();
+  const strangerDb = testEnvironment.authenticatedContext('stranger-456').firestore();
+  const entitlementRef = doc(ownerDb, 'users', 'customer-123', 'entitlements', 'subscription');
+  const strangerRef = doc(strangerDb, 'users', 'customer-123', 'entitlements', 'subscription');
+
+  // Pre-cargar entitlement con permisos desactivados (como lo haría Admin SDK)
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'users', 'customer-123', 'entitlements', 'subscription'), {
+      status: 'active',
+      plan: 'monthly',
+      accessUntil: Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      renewalMode: 'manual'
+    });
+  });
+
+  // 1. El cliente puede leer su propio documento de suscripción
+  await assertSucceeds(getDoc(entitlementRef));
+
+  // 2. Otro cliente NO puede leerlo
+  await assertFails(getDoc(strangerRef));
+
+  // 3. El cliente NUNCA puede modificar o forzar su entitlement desde el navegador
+  await assertFails(setDoc(entitlementRef, { status: 'active', plan: 'annual' }));
+});
+
+test('reglas: las 8 colecciones exclusivas de servidor son inaccesibles para cualquier navegador', async () => {
+  const signedInDb = testEnvironment.authenticatedContext('user-hacker').firestore();
+  const anonymousDb = testEnvironment.unauthenticatedContext().firestore();
+
+  // 1. premiumPaymentOrders
+  const orderRef = doc(signedInDb, 'premiumPaymentOrders', 'mt-order-fake');
+  await assertFails(setDoc(orderRef, { status: 'paid' }));
+  await assertFails(getDoc(orderRef));
+  await assertFails(getDoc(doc(anonymousDb, 'premiumPaymentOrders', 'mt-order-fake')));
+
+  // 2. systemEvents
+  const eventRef = doc(signedInDb, 'systemEvents', 'evt-fake');
+  await assertFails(setDoc(eventRef, { eventType: 'test' }));
+  await assertFails(getDoc(eventRef));
+
+  // 3. agentStates
+  const agentRef = doc(signedInDb, 'agentStates', 'revenue-order-monitor');
+  await assertFails(setDoc(agentRef, { status: 'idle' }));
+  await assertFails(getDoc(agentRef));
+
+  // 4. revenueIncidents
+  const incidentRef = doc(signedInDb, 'revenueIncidents', 'inc-fake');
+  await assertFails(setDoc(incidentRef, { status: 'open' }));
+  await assertFails(getDoc(incidentRef));
+
+  // 5. operationsIncidents (Data & Performance, etc.)
+  const opsIncidentRef = doc(signedInDb, 'operationsIncidents', 'inc-ops-fake');
+  await assertFails(setDoc(opsIncidentRef, { status: 'open' }));
+  await assertFails(getDoc(opsIncidentRef));
+  await assertFails(getDoc(doc(anonymousDb, 'operationsIncidents', 'inc-ops-fake')));
+
+  // 6. officialPickAutoCopyQueue (cola durable)
+  const autoCopyQueueRef = doc(signedInDb, 'officialPickAutoCopyQueue', 'op-fake-queue');
+  await assertFails(setDoc(autoCopyQueueRef, { status: 'pending' }));
+  await assertFails(getDoc(autoCopyQueueRef));
+  await assertFails(getDoc(doc(anonymousDb, 'officialPickAutoCopyQueue', 'op-fake-queue')));
+
+  // 7. officialPickPreflight (Picks & Risk v1)
+  const preflightRef = doc(signedInDb, 'officialPickPreflight', 'pre-fake');
+  await assertFails(setDoc(preflightRef, { status: 'awaiting_telegram_t5' }));
+  await assertFails(getDoc(preflightRef));
+  await assertFails(getDoc(doc(anonymousDb, 'officialPickPreflight', 'pre-fake')));
+
+  // 8. paperPicks (Picks & Risk v1)
+  const paperRef = doc(signedInDb, 'paperPicks', 'paper-fake');
+  await assertFails(setDoc(paperRef, { isPaper: true }));
+  await assertFails(getDoc(paperRef));
+  await assertFails(getDoc(doc(anonymousDb, 'paperPicks', 'paper-fake')));
 });

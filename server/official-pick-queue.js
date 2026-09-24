@@ -1,8 +1,8 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
-import { getAdminDb } from '../api/lib/firebase-admin.js';
-import { normalizeOfficialPickInput, publicPickIdFor, semanticOfficialPickKey } from '../api/lib/official-pick-data.js';
+import { getAdminDb } from '../api/_lib/firebase-admin.js';
+import { normalizeOfficialPickInput, publicPickIdFor, semanticOfficialPickKey } from '../api/_lib/official-pick-data.js';
 import { PUBLICATION_POLICIES } from './official-pick-scheduling.js';
-import { publishOfficialPick, toPublicOfficialPick } from '../api/lib/official-picks.js';
+import { publishOfficialPick, toPublicOfficialPick } from '../api/_lib/official-picks.js';
 
 const MAX_DISPATCH_BATCH = 20;
 const LEASE_MS = 2 * 60 * 1000;
@@ -65,7 +65,7 @@ const findLegacyPublishedDuplicate = async ({ db, semanticDuplicateKey }) => {
     }) || null;
 };
 
-export const queueOfficialPick = async (input) => {
+export const queueOfficialPick = async (input, { now = new Date() } = {}) => {
     const normalized = normalizeOfficialPickInput(input);
     const db = getAdminDb();
     const pickId = publicPickIdFor(normalized);
@@ -101,8 +101,8 @@ export const queueOfficialPick = async (input) => {
     if (state === 'already_published') return { created: false, state, queueId: pickId, pick: toPublicOfficialPick(await pickRef.get()) };
     if (!created) return { created: false, state, queueId: pickId };
 
-    if (normalized.publicationPolicy === PUBLICATION_POLICIES.IMMEDIATE) {
-        const dispatch = await dispatchQueuedOfficialPick({ pickId });
+    if (normalized.publicationPolicy === PUBLICATION_POLICIES.IMMEDIATE || normalized.scheduledAt <= now) {
+        const dispatch = await dispatchQueuedOfficialPick({ pickId, now });
         return { created: true, state: dispatch.state, queueId: pickId, pick: dispatch.pick || null };
     }
 

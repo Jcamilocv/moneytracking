@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { summarizeOfficialPickReports } from '../api/lib/official-pick-reports.js';
+import { summarizeOfficialPickReports } from '../api/_lib/official-pick-reports.js';
 
 test('las incidencias públicas agregan categorías sin exponer el usuario que reporta', () => {
     const summary = summarizeOfficialPickReports([

@@ -3,11 +3,22 @@
     {
       "path": "/api/cron/refresh-official-snapshots",
       "schedule": "17 4 * * *"
+    },
+    {
+      "path": "/api/cron/settle-official-picks",
+      "schedule": "0 23 * * *"
+    },
+    {
+      "path": "/api/cron/settle-official-picks",
+      "schedule": "0 0 * * *"
     }
   ],
   "functions": {
     "api/cron/refresh-official-snapshots.js": {
       "maxDuration": 300
+    },
+    "api/cron/settle-official-picks.js": {
+      "maxDuration": 120
     }
   },
   "rewrites": [
@@ -22,6 +33,14 @@
     {
       "source": "/api/admin/official-pick-reports",
       "destination": "/api/official-picks?mode=admin-reports"
+    },
+    {
+      "source": "/api/payments/subscription-status",
+      "destination": "/api/official-picks?mode=subscription-status"
+    },
+    {
+      "source": "/api/payments/subscription-management",
+      "destination": "/api/official-picks?mode=subscription-management"
     },
     {
       "source": "/api/payments/premiumpay/create",

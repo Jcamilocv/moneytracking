@@ -8,9 +8,10 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test:rules": "node --test tests/firestore.rules.test.mjs",
+    "test:rules": "npx -y firebase-tools emulators:exec --only firestore \"node --test tests/firestore.rules.test.mjs\"",
+    "test:firestore-integration": "npx -y firebase-tools emulators:exec --only firestore \"node --test tests/firestore.rules.test.mjs tests/firestore-server-integration.test.mjs\"",
     "test:snapshots": "node --test tests/official-snapshot-data.test.mjs",
-    "test:official-picks": "node --test tests/official-pick-data.test.mjs tests/official-pick-reports.test.mjs tests/operations-alerts.test.mjs tests/futbolbrain-local-ingest.test.mjs tests/premium-access.test.mjs tests/subscription-entitlement.test.mjs tests/premiumpay.test.mjs"
+    "test:official-picks": "node --test tests/official-pick-data.test.mjs tests/official-pick-reports.test.mjs tests/operations-alerts.test.mjs tests/futbolbrain-local-ingest.test.mjs tests/premium-access.test.mjs tests/subscription-entitlement.test.mjs tests/premiumpay.test.mjs tests/customers-revenue.test.mjs tests/integration-audit-validation.test.mjs tests/official-pick-auto-copy.test.mjs tests/pick-settlement.test.mjs tests/system-registry.test.mjs tests/picks-risk-phase1.test.mjs tests/legacy-t5-e2e-regression.test.mjs tests/timezone-integrity-regression.test.mjs tests/official-pick-authorization.test.mjs tests/official-snapshot-data.test.mjs tests/public-pick-privacy-gate.test.mjs"
   },
   "dependencies": {
     "firebase": "^11.10.0",
@@ -19,7 +20,8 @@
     "lz-string": "^1.5.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "recharts": "2.12.0"
+    "recharts": "2.12.0",
+    "telegram": "^2.26.22"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.3",

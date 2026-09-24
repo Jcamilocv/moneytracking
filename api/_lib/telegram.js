@@ -32,7 +32,11 @@ const escapeTelegramHtml = (value) => String(value || '')
     .replace(/>/g, '&gt;');
 
 export const formatOfficialTelegramMessage = (pick) => {
-    const kickoff = new Date(pick.event.kickoffAt).toLocaleString('es-ES', {
+    const rawKickoff = pick?.event?.kickoffAt;
+    const kickoffDate = rawKickoff?.toDate && typeof rawKickoff.toDate === 'function'
+        ? rawKickoff.toDate()
+        : (rawKickoff instanceof Date ? rawKickoff : new Date(rawKickoff));
+    const kickoff = kickoffDate.toLocaleString('es-ES', {
         dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Madrid'
     });
     const proof = `${appUrl()}/?pick=${encodeURIComponent(pick.id)}`;

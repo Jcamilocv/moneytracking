@@ -1,5 +1,5 @@
-import { FALLBACK_SNAPSHOT_IDS } from './lib/official-snapshot-data.js';
-import { readOfficialSnapshotIds } from './lib/official-snapshots.js';
+import { FALLBACK_SNAPSHOT_IDS } from './_lib/official-snapshot-data.js';
+import { readOfficialSnapshotIds } from './_lib/official-snapshots.js';
 
 const ALLOWED_ORIGIN = 'https://pronosticosmoneytips.com';
 

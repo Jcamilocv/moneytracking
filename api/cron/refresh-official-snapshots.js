@@ -1,4 +1,4 @@
-import { refreshOfficialSnapshots } from '../lib/official-snapshots.js';
+import { refreshOfficialSnapshots } from '../_lib/official-snapshots.js';
 import { dispatchDueOfficialPicks, dispatchDueSyntheticTestPicks, inspectDueOfficialPicks } from '../../server/official-pick-queue.js';
 import { discoverOperationsTelegramChannel, notifyOperations } from '../../server/operations-alerts.js';
 

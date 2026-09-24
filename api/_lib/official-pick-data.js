@@ -17,11 +17,9 @@ const cleanOdds = (value) => {
     return Number(odds.toFixed(2));
 };
 
-const cleanDate = (value, field) => {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) throw new Error(`${field} no es una fecha válida`);
-    return date;
-};
+import { cleanDateWithMadridFallback } from './timezone.js';
+
+const cleanDate = cleanDateWithMadridFallback;
 
 const stableStringify = (value) => {
     if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
@@ -52,17 +50,39 @@ const madridDateKey = (date) => {
     return `${part('year')}-${part('month')}-${part('day')}`;
 };
 
-export const semanticOfficialPickKey = ({ event = {}, bet = {}, system = {}, source = {} } = {}) => hashOfficialPickPayload({
-    sourceProvider: canonicalText(source.provider),
+// REGLA ARQUITECTÓNICA INVIOLABLE (Picks & Risk v1):
+// La identidad deportiva del pick oficial es SOURCE-AGNOSTIC.
+// No depende de si el transporte fue la extensión Chrome o Telegram ni de versiones de transporte.
+// Ambas fuentes convergen en el mismo hash determinista para el mismo evento deportivo.
+export const semanticOfficialPickKey = ({ event = {}, bet = {}, system = {} } = {}) => hashOfficialPickPayload({
     madridDay: madridDateKey(new Date(event.kickoffAt)),
     competition: canonicalText(event.competition),
     homeTeam: canonicalText(event.homeTeam),
     awayTeam: canonicalText(event.awayTeam),
     market: canonicalText(bet.market),
     selection: canonicalText(bet.selection),
-    systemId: canonicalText(system.id),
-    systemVersion: canonicalText(system.version)
+    systemId: canonicalText(system.id)
 });
+
+/**
+ * Genera la clave de identidad para un PREFLIGHT (expectativa de partido).
+ * REGLA: Preflight != Pick definitivo.
+ * Identifica que se espera un evento para un sistema sin requerir todavía mercado ni selección final.
+ * Prioridad: sourceEventId si existe y es estable. Fallback: systemId + madridDay + equipos canónicos.
+ */
+export const preflightKeyForEvent = ({ event = {}, system = {} } = {}) => {
+    const rawSourceEventId = typeof event.sourceEventId === 'string' ? event.sourceEventId.trim() : '';
+    if (rawSourceEventId && !rawSourceEventId.startsWith('test-') && rawSourceEventId.length >= 4) {
+        return `pre_${canonicalText(system.id)}_${canonicalText(rawSourceEventId)}`;
+    }
+    const rawHash = hashOfficialPickPayload({
+        systemId: canonicalText(system.id),
+        madridDay: madridDateKey(new Date(event.kickoffAt)),
+        homeTeam: canonicalText(event.homeTeam),
+        awayTeam: canonicalText(event.awayTeam)
+    });
+    return `pre_${rawHash.slice(0, 36)}`;
+};
 
 export const normalizeOfficialPickInput = (input = {}) => {
     const kickoffAt = cleanDate(input?.event?.kickoffAt, 'event.kickoffAt');

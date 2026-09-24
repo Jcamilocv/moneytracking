@@ -1,16 +1,17 @@
 import { timingSafeEqual } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { queueOfficialPick } from '../../server/official-pick-queue.js';
-import { getAdminAuth, getAdminDb } from '../lib/firebase-admin.js';
-import { normalizeOfficialPickInput, publicPickIdFor } from '../lib/official-pick-data.js';
-import { toPublicOfficialPick } from '../lib/official-picks.js';
-import { editOfficialPickTelegramMessage } from '../lib/telegram.js';
-import { normalizeFutbolBrainOwnerCandidate } from '../../server/futbolbrain-local-ingest.js';
+import { getAdminAuth, getAdminDb } from '../_lib/firebase-admin.js';
+import { normalizeOfficialPickInput, publicPickIdFor } from '../_lib/official-pick-data.js';
+import { toPublicOfficialPick } from '../_lib/official-picks.js';
+import { editOfficialPickTelegramMessage } from '../_lib/telegram.js';
+import { normalizeFutbolBrainOwnerCandidate, ingestFutbolBrainOwnerCandidate } from '../../server/futbolbrain-local-ingest.js';
 import {
     entitlementForManualGrant,
     entitlementForRevocation,
     normalizePremiumAccessRequest
 } from '../../server/premium-access.js';
+import { logSystemEvent, DEPARTMENTS, EVENT_STATUSES } from '../_lib/system-events.js';
 
 const hasSecretAuthorization = (req) => {
     const secret = process.env.OFFICIAL_PICKS_ADMIN_SECRET;
@@ -250,6 +251,27 @@ const handlePremiumAccess = async (req, res) => {
         : entitlementForRevocation({ previous, now });
 
     await entitlementRef.set(entitlement);
+
+    await logSystemEvent({
+        department: DEPARTMENTS.CUSTOMERS_REVENUE,
+        workerId: 'admin-premium-access-manager',
+        eventType: request.action === 'grant' ? 'subscription.manual_granted' : 'subscription.manual_revoked',
+        status: EVENT_STATUSES.SUCCESS,
+        payload: {
+            action: request.action,
+            email: request.email,
+            uid: user.uid,
+            plan: request.plan,
+            paymentReference: request.paymentReference || null
+        },
+        rulesApplied: ['rule_admin_auth', 'rule_manual_entitlement'],
+        output: {
+            status: entitlement.status,
+            renewalMode: 'manual',
+            accessUntil: entitlement.accessUntil?.toISOString?.() || null
+        }
+    }).catch((err) => console.error('Error al registrar evento de administración de suscripción:', err));
+
     return res.status(200).json({
         ok: true,
         action: request.action,
@@ -329,14 +351,8 @@ export default async function handler(req, res) {
         }
         if (!hasValidFutbolBrainDeviceToken(req)) return res.status(401).json({ error: 'No autorizado' });
         try {
-            const pick = normalizeFutbolBrainOwnerCandidate(req.body);
-            const result = await queueOfficialPick(pick);
-            return res.status(result.created ? 201 : 200).json({
-                ok: true,
-                state: result.state,
-                queueId: result.queueId,
-                publicationPolicy: pick.publicationPolicy
-            });
+            const result = await ingestFutbolBrainOwnerCandidate(req.body);
+            return res.status(200).json(result);
         } catch (error) {
             console.error('No se pudo recibir el pick local de FutbolBrain:', error);
             return res.status(400).json({ error: error.message || 'No se pudo recibir el pick local' });

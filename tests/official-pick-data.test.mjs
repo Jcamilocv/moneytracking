@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeOfficialPickInput, publicPickIdFor } from '../api/lib/official-pick-data.js';
-import { isPublicOfficialPickData, shouldNotifyTelegramForOfficialPick } from '../api/lib/official-picks.js';
-import { formatOfficialTelegramMessage } from '../api/lib/telegram.js';
+import { normalizeOfficialPickInput, publicPickIdFor } from '../api/_lib/official-pick-data.js';
+import { isPublicOfficialPickData, shouldNotifyTelegramForOfficialPick } from '../api/_lib/official-picks.js';
+import { formatOfficialTelegramMessage } from '../api/_lib/telegram.js';
 import { stakeRecommendationForOfficialPick } from '../server/money-tips-stake-policy.js';
 
 const validPick = {

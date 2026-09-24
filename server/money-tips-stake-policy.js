@@ -1,16 +1,14 @@
 // Centralised, server-owned stake policy for the 2026/27 forward test.
 // Browser data can identify a visible pick, but never determines its stake.
+import { SYSTEM_REGISTRY, getSystemDefinition } from './system-registry.js';
 
 export const MONEY_TIPS_STAKE_POLICY_VERSION = '2026-27-forward-v1';
 
-export const SYSTEM_STAKE_STATES = Object.freeze({
-    'MT - CHA EUR - V1.0': 'production_controlled',
-    'MT - ENG2 - v1.0': 'production_controlled',
-    'MT - ITA1 - V1.0': 'production_controlled',
-    'MT - Premier League 02.5': 'production_controlled',
-    'MT - FRA1 FRA2 - V1.0': 'production_controlled',
-    'MT-LAB-BTTS-ESP-v0.1': 'production_controlled'
-});
+export const SYSTEM_STAKE_STATES = Object.freeze(
+    Object.fromEntries(
+        Object.entries(SYSTEM_REGISTRY).map(([id, def]) => [id, def.stakePolicy.tier])
+    )
+);
 
 const STAKE_MULTIPLIERS = Object.freeze({
     production_validated: 1,
@@ -32,7 +30,8 @@ const cleanOdds = (value) => {
 
 export const stakeRecommendationForOfficialPick = ({ systemId, oddsAtPublication }) => {
     const odds = cleanOdds(oddsAtPublication);
-    const systemState = SYSTEM_STAKE_STATES[systemId] || 'paper';
+    const systemDef = getSystemDefinition(systemId);
+    const systemState = systemDef?.stakePolicy?.tier || SYSTEM_STAKE_STATES[systemId] || 'paper';
     const baseStakePct = baseStakePctForOdds(odds);
     const confidenceFactor = STAKE_MULTIPLIERS[systemState] ?? 0;
     const recommendedStakePct = Number((baseStakePct * confidenceFactor).toFixed(3));

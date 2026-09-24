@@ -5,3 +5,10 @@ dist
 # Local deployment metadata and credentials.
 .vercel
 .env*
+firestore-debug.log
+
+# Local test reports, audit dumps, and temporary data
+.soak-test-report.json
+.telegram-audit-messages.json
+data/
+

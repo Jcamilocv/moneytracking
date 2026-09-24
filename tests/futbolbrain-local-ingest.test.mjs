@@ -39,8 +39,18 @@ test('uses T-minus-five only for the approved systems', () => {
     assert.equal(pick.bet.selection, 'Más de 2,5 goles');
 });
 
+test('normalizes paper systems correctly', () => {
+    const pick = normalizeFutbolBrainOwnerCandidate(visibleCandidate({
+        system: { id: 'MT - GER1 - v1.1' },
+        visiblePick: { selection: 'Over 3.5', odds: 1.8 }
+    }), { now: NOW });
+    assert.equal(pick.publicationPolicy, 'paper');
+    assert.equal(pick.executionMode, 'PAPER');
+    assert.equal(pick.bet.recommendedStakePct, 0);
+});
+
 test('rejects unapproved systems, mismatched markets, and incomplete timing', () => {
-    assert.throws(() => normalizeFutbolBrainOwnerCandidate(visibleCandidate({ system: { id: 'MT - GER1 - v1.1' } }), { now: NOW }), /no está aprobado/i);
+    assert.throws(() => normalizeFutbolBrainOwnerCandidate(visibleCandidate({ system: { id: 'MT - UNKNOWN - v9.9' } }), { now: NOW }), /no está aprobado/i);
     assert.throws(() => normalizeFutbolBrainOwnerCandidate(visibleCandidate({ visiblePick: { selection: 'Over 2.5', odds: 1.5 } }), { now: NOW }), /no coincide/i);
     assert.throws(() => normalizeFutbolBrainOwnerCandidate(visibleCandidate({ event: { ...visibleCandidate().event, kickoffAt: '2026-09-06T10:00:30.000Z' } }), { now: NOW }), /al menos un minuto/i);
 });

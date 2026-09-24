@@ -4,6 +4,7 @@ import { normalizeOfficialPickInput, publicPickIdFor } from './official-pick-dat
 import { attachOfficialPickReviewSummaries } from './official-pick-reports.js';
 import { publishOfficialPickToTelegram } from './telegram.js';
 import { stakeRecommendationForOfficialPick } from '../../server/money-tips-stake-policy.js';
+import { dispatchOfficialPickAutoCopy } from '../../server/official-pick-auto-copy.js';
 
 const toPlainValue = (value) => {
     if (value?.toDate && typeof value.toDate === 'function') return value.toDate().toISOString();
@@ -40,34 +41,74 @@ const isPickStillActive = (pick, now = new Date()) => {
     return !Number.isNaN(kickoffAt.getTime()) && kickoffAt.getTime() > now.getTime();
 };
 
-// El público puede auditar la existencia, el evento, la hora y, tras el inicio,
-// la cuota registrada. Mercado, selección y sistema permanecen reservados para
-// Premium para que el histórico no revele mecánicamente picks futuros.
-export const pickForAudience = (pick, { canViewActiveDetails = false, now = new Date() } = {}) => {
+export const sanitizeOfficialPickSettlement = (settlement) => {
+    if (!settlement || typeof settlement !== 'object') return null;
+    return {
+        status: settlement.status || 'pending',
+        regularTimeScore: settlement.regularTimeScore || null,
+        settledAt: settlement.settledAt || null
+    };
+};
+
+export const sanitizeOfficialPickEventForAudience = (event, { canViewActiveDetails = false } = {}) => {
+    if (canViewActiveDetails) return event;
+    const { id, type, createdAt } = event;
+    if (type === 'published') {
+        return { id, type, evidenceHash: event.evidenceHash, createdAt };
+    }
+    if (type === 'telegram_anchor') {
+        return { id, type, permalink: event.permalink, createdAt };
+    }
+    if (type === 'settled') {
+        return {
+            id,
+            type,
+            status: event.status,
+            regularTimeScore: event.regularTimeScore || null,
+            createdAt
+        };
+    }
+    if (type === 'withdrawn_duplicate') {
+        return { id, type, createdAt };
+    }
+    return { id, type, status: event.status || null, createdAt };
+};
+
+// POLÍTICA DE PRIVACIDAD PERMANENTE DE MONEY TIPS:
+// Un usuario NO Premium o no autenticado NUNCA debe recibir market, selection,
+// oddsAtPublication, system, reglas internas ni parámetros de estrategia.
+// Esto aplica antes, durante y después del partido, en histórico, tras settlement
+// y en cualquier snapshot o API pública.
+export const pickForAudience = (pick, { canViewActiveDetails = false } = {}) => {
     if (pick.status === 'withdrawn') {
         return {
             ...pick,
             isLocked: true,
             isPublicSummary: true,
             isWithdrawn: true,
-            bet: { market: null, selection: null, oddsAtPublication: null },
-            system: { id: null, version: null }
+            publicationPolicy: null,
+            bet: { market: null, selection: null, oddsAtPublication: null, recommendedStakePct: null, baseStakePct: null, confidenceFactor: null },
+            system: { id: null, version: null },
+            settlement: sanitizeOfficialPickSettlement(pick.settlement)
         };
     }
     if (canViewActiveDetails) return { ...pick, isLocked: false, isPublicSummary: false };
 
-    const isActive = isPickStillActive(pick, now);
-
     return {
         ...pick,
-        isLocked: isActive,
+        isLocked: true,
         isPublicSummary: true,
+        publicationPolicy: null,
         bet: {
             market: null,
             selection: null,
-            oddsAtPublication: isActive ? null : pick.bet?.oddsAtPublication ?? null
+            oddsAtPublication: null,
+            recommendedStakePct: null,
+            baseStakePct: null,
+            confidenceFactor: null
         },
-        system: { id: null, version: null }
+        system: { id: null, version: null },
+        settlement: sanitizeOfficialPickSettlement(pick.settlement)
     };
 };
 
@@ -126,6 +167,18 @@ export const publishOfficialPick = async (input) => {
         }
     }
 
+    // Auto-copia desacoplada y durable a la banca de temporada (Data & Performance).
+    // REGLA ARQUITECTÓNICA INVIOLABLE:
+    // La publicación oficial NUNCA se revierte ni falla si la auto-copia falla.
+    // La tarea queda persistida de forma durable en officialPickAutoCopyQueue antes de finalizar.
+    if (created && isPublicOfficialPickData(pick)) {
+        try {
+            await dispatchOfficialPickAutoCopy(pick, { db });
+        } catch (err) {
+            console.error('Error desacoplado en auto-copia durable de pick oficial:', err);
+        }
+    }
+
     return { created, pick };
 };
 
@@ -149,6 +202,6 @@ export const getOfficialPick = async (pickId, audience = {}) => {
     const [pick] = await attachOfficialPickReviewSummaries([withStakeRecommendation(toPublicOfficialPick(pickSnapshot))]);
     return {
         pick: pickForAudience(pick, audience),
-        events: eventsSnapshot.docs.map(toPublicOfficialPick)
+        events: eventsSnapshot.docs.map((doc) => sanitizeOfficialPickEventForAudience(toPublicOfficialPick(doc), audience))
     };
 };
