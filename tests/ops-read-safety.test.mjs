@@ -114,7 +114,7 @@ test('Every Ops GET stays within its document and index budget on a very large d
         const response = mockRequest(path);
         await handleOpsRequest(response.req, response.res, { db });
         assert.equal(response.result().status, path === 'picks' ? 503 : 200, path);
-        if (path === 'picks') assert.equal(response.result().body.error.code, 'OPS_PICKS_UNAVAILABLE');
+        if (path === 'picks') assert.equal(response.result().body.error.code, 'OPS_PICKS_CAPPED');
         assert.ok(db.stats.documents <= budgets[path], `${path}: ${db.stats.documents} > ${budgets[path]}`);
         assert.ok(db.stats.indexEntries <= 4 * OPS_READ_LIMITS.kpiCountIndexEntries, path);
         assert.equal(db.stats.unboundedGets, 0, `${path} attempted an unbounded query`);

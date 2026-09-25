@@ -155,7 +155,10 @@ export async function handleOpsRequest(req, res, { db = null, now = new Date() }
                 status: query.status,
                 systemId: query.systemId
             });
-            if (picks.status === 'capped' || picks.status === 'error') {
+            if (picks.status === 'capped') {
+                return sendError(503, 'OPS_PICKS_CAPPED', 'La página de picks supera el presupuesto de lectura; no se ofrecen resultados parciales.');
+            }
+            if (picks.status === 'error') {
                 return sendError(503, 'OPS_PICKS_UNAVAILABLE', 'No se puede ofrecer una página completa de picks dentro del presupuesto de lectura.');
             }
             return sendSuccess(picks);
