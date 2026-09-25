@@ -150,7 +150,6 @@ export async function getOpsKpisSummary({ db = null, bypassCache = false, now = 
     try {
         const monthStart = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
         const paymentsSnap = await database.collection('premiumPaymentOrders')
-            .where('status', '==', 'paid')
             .where('paidAt', '>=', monthStart)
             .limit(OPS_READ_LIMITS.kpiDetailDocuments)
             .get();
@@ -160,7 +159,9 @@ export async function getOpsKpisSummary({ db = null, bypassCache = false, now = 
         } else {
             let sum = 0;
             for (const doc of payments) {
-                const amount = Number(doc.data().expectedAmount);
+                const payment = doc.data();
+                if (payment.status !== 'paid') continue;
+                const amount = Number(payment.expectedAmount);
                 if (!Number.isFinite(amount)) throw new Error('INVALID_PAYMENT_AMOUNT');
                 sum += amount;
             }
@@ -174,7 +175,6 @@ export async function getOpsKpisSummary({ db = null, bypassCache = false, now = 
     // 4. Suscriptores activos
     try {
         const entitlementsSnap = await database.collectionGroup('entitlements')
-            .where('status', '==', 'active')
             .limit(OPS_READ_LIMITS.kpiDetailDocuments)
             .get();
         const entitlements = boundedCompleteDocs(entitlementsSnap);
@@ -184,6 +184,7 @@ export async function getOpsKpisSummary({ db = null, bypassCache = false, now = 
             const uniqueUsers = new Set();
             for (const doc of entitlements) {
                 const data = doc.data();
+                if (data.status !== 'active') continue;
                 const accessUntil = data.accessUntil?.toDate ? data.accessUntil.toDate() : new Date(data.accessUntil);
                 if (accessUntil > now) {
                     const userId = doc.ref.parent.parent?.id;
@@ -312,20 +313,21 @@ export async function getOpsPicksSummary({
 
     if (database && typeof database.collection === 'function') {
         try {
-            let query = database.collection('officialPicks')
-                .where('status', '==', 'published')
-                .orderBy('event.kickoffAt', 'desc');
-
-            if (systemId) {
-                query = query.where('system.id', '==', systemId);
+            // A single-field kickoff index preserves Firestore's exact ordering.
+            // Only filter locally if the entire ordered set fits the document budget.
+            const snapshot = await database.collection('officialPicks')
+                .orderBy('event.kickoffAt', 'desc')
+                .limit(OPS_READ_LIMITS.pickDocuments)
+                .get();
+            if (snapshot.docs.length >= OPS_READ_LIMITS.pickDocuments) {
+                return { count: null, limit: safeLimit, offset: safeOffset, status: 'capped', picks: [] };
             }
-
-            if (status) {
-                query = query.where('settlement.status', '==', status);
-            }
-
-            const snapshot = await query.limit(safeLimit + safeOffset).get();
-            picks = snapshot.docs.map(doc => {
+            picks = snapshot.docs.filter(doc => {
+                const data = doc.data();
+                return data.status === 'published'
+                    && (!systemId || data.system?.id === systemId)
+                    && (!status || data.settlement?.status === status);
+            }).slice(safeOffset, safeOffset + safeLimit).map(doc => {
                 const data = doc.data();
                 const kickoff = data.event?.kickoffAt?.toDate ? data.event.kickoffAt.toDate().toISOString() : data.event?.kickoffAt;
                 const settledAt = data.settlement?.settledAt?.toDate ? data.settlement.settledAt.toDate().toISOString() : data.settlement?.settledAt;
@@ -355,7 +357,6 @@ export async function getOpsPicksSummary({
                 };
             });
 
-            picks = picks.slice(safeOffset, safeOffset + safeLimit);
             sourceStatus = 'connected';
         } catch (err) {
             console.error('[OPS_PICKS_READ_ERROR]', err.message);

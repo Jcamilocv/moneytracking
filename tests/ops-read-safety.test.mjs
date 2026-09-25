@@ -113,7 +113,8 @@ test('Every Ops GET stays within its document and index budget on a very large d
         const db = mockFirestore();
         const response = mockRequest(path);
         await handleOpsRequest(response.req, response.res, { db });
-        assert.equal(response.result().status, 200, path);
+        assert.equal(response.result().status, path === 'picks' ? 503 : 200, path);
+        if (path === 'picks') assert.equal(response.result().body.error.code, 'OPS_PICKS_UNAVAILABLE');
         assert.ok(db.stats.documents <= budgets[path], `${path}: ${db.stats.documents} > ${budgets[path]}`);
         assert.ok(db.stats.indexEntries <= 4 * OPS_READ_LIMITS.kpiCountIndexEntries, path);
         assert.equal(db.stats.unboundedGets, 0, `${path} attempted an unbounded query`);
@@ -130,6 +131,10 @@ test('HQ historical full-scan incident cannot recur through KPI refresh or offse
     assert.equal(first.result().status, 200);
     assert.equal(first.result().body.data.picksMetrics.totalValidOfficialPicks, null);
     assert.equal(first.result().body.data.sourceStatus.picks, 'capped');
+    assert.equal(first.result().body.data.monthlyGrossRevenueEUR, null);
+    assert.equal(first.result().body.data.sourceStatus.revenue, 'capped');
+    assert.equal(first.result().body.data.activeSubscribers, null);
+    assert.equal(first.result().body.data.sourceStatus.subscribers, 'capped');
     const firstCost = { ...db.stats };
     const second = mockRequest('kpis?refresh=true');
     await handleOpsRequest(second.req, second.res, { db });

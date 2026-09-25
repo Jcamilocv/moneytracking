@@ -160,7 +160,11 @@ test('Read Models: getOpsKpisSummary caches results and responds within TTL', as
     opsReadCache.invalidate();
 
     const query = (name, filters = [], max = null) => ({
-        where: (field, operator, value) => query(name, [...filters, [field, operator, value]], max),
+        where: (field, operator, value) => {
+            assert.notEqual(name === 'premiumPaymentOrders' && field === 'status', true, 'revenue must not require a compound index');
+            assert.notEqual(name === 'entitlements' && field === 'status', true, 'entitlements must not require a collection-group status index');
+            return query(name, [...filters, [field, operator, value]], max);
+        },
         limit: (size) => query(name, filters, size),
         count: () => ({ get: async () => ({ data: () => ({ count:
             name === 'officialPicks' ? (filters.some(([field]) => field === 'settlement.status') ? 5 : 81)
@@ -168,10 +172,16 @@ test('Read Models: getOpsKpisSummary caches results and responds within TTL', as
         }) }) }),
         get: async () => {
             assert.ok(max, 'No Ops query may call get() without a limit');
-            if (name === 'premiumPaymentOrders') return { docs: [{ data: () => ({ expectedAmount: 29.9 }) }] };
+            if (name === 'premiumPaymentOrders') return { docs: [
+                { data: () => ({ status: 'paid', expectedAmount: 29.9 }) },
+                { data: () => ({ status: 'pending', expectedAmount: 999 }) }
+            ] };
             if (name === 'entitlements') return { docs: [{
-                data: () => ({ accessUntil: new Date(Date.now() + 86400000) }),
+                data: () => ({ status: 'active', accessUntil: new Date(Date.now() + 86400000) }),
                 ref: { parent: { parent: { id: 'user_1' } } }
+            }, {
+                data: () => ({ status: 'expired', accessUntil: new Date(Date.now() - 86400000) }),
+                ref: { parent: { parent: { id: 'user_2' } } }
             }] };
             return { size: 0, docs: [] };
         },
@@ -193,6 +203,31 @@ test('Read Models: getOpsKpisSummary caches results and responds within TTL', as
     // Segunda lectura debe venir de cache
     const kpis2 = await getOpsKpisSummary();
     assert.deepEqual(kpis1, kpis2);
+});
+
+test('Read Models: picks use a bounded single-field kickoff index and filter before pagination', async () => {
+    const docs = [
+        { id: 'latest', data: () => ({ status: 'published', system: { id: 'sys-a' }, event: { kickoffAt: new Date('2026-09-25T21:00:00Z') }, settlement: { status: 'won' } }) },
+        { id: 'draft', data: () => ({ status: 'draft', system: { id: 'sys-b' }, event: { kickoffAt: new Date('2026-09-25T20:00:00Z') }, settlement: { status: 'pending' } }) },
+        { id: 'older', data: () => ({ status: 'published', system: { id: 'sys-b' }, event: { kickoffAt: new Date('2026-09-25T19:00:00Z') }, settlement: { status: 'pending' } }) }
+    ];
+    const db = { collection(name) {
+        assert.equal(name, 'officialPicks');
+        return { orderBy(field, direction) {
+            assert.equal(field, 'event.kickoffAt');
+            assert.equal(direction, 'desc');
+            return { limit(max) {
+                assert.equal(max, 200);
+                return { get: async () => ({ docs }) };
+            } };
+        } };
+    } };
+
+    const page = await getOpsPicksSummary({ db, limit: 1, offset: 1 });
+    assert.equal(page.status, 'connected');
+    assert.deepEqual(page.picks.map(pick => pick.id), ['older']);
+    const filtered = await getOpsPicksSummary({ db, systemId: 'sys-a', status: 'won' });
+    assert.deepEqual(filtered.picks.map(pick => pick.id), ['latest']);
 });
 
 test('Read Models: getOpsPaperSummary returns paper systems breakdown', async () => {
