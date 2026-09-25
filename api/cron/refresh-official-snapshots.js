@@ -1,4 +1,5 @@
 import { refreshOfficialSnapshots } from '../_lib/official-snapshots.js';
+import { blockOutsideOpsInReadOnlyMode } from '../../server/ops/read-only-mode.js';
 import { dispatchDueOfficialPicks, dispatchDueSyntheticTestPicks, inspectDueOfficialPicks } from '../../server/official-pick-queue.js';
 import { discoverOperationsTelegramChannel, notifyOperations } from '../../server/operations-alerts.js';
 
@@ -13,6 +14,7 @@ const shouldSendOperationsTest = (req) => req.headers['x-money-tips-operations-t
 const shouldDispatchSyntheticTestsOnly = (req) => req.headers['x-money-tips-dispatch-test-only'] === 'true';
 
 export default async function handler(req, res) {
+    if (blockOutsideOpsInReadOnlyMode(res)) return;
     const job = req.query?.job;
     if (job === 'official-picks') {
         if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });

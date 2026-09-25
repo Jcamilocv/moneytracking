@@ -3,24 +3,15 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { getAdminDb } from '../../api/_lib/firebase-admin.js';
 import { logOpsAudit } from './audit-log.js';
 import { opsReadCache } from './read-models.js';
+import { isOpsReadOnlyMode, readOnlyError } from './read-only-mode.js';
 import {
     entitlementForManualGrant,
-    entitlementForRevocation,
-    normalizePremiumAccessRequest
+    entitlementForRevocation
 } from '../premium-access.js';
 import {
     acknowledgeOperationsIncident,
     resolveOperationsIncident
 } from '../operations-incidents.js';
-import {
-    applySubscriptionManagementAction
-} from '../billing/subscription-management.js';
-import {
-    settleOfficialPick
-} from '../pick-settlement-engine.js';
-import {
-    TheSportsDbProvider
-} from '../sports-data/thesportsdb-provider.js';
 
 // Catálogo canónico de acciones autorizadas
 export const OPS_ACTION_TYPES = {
@@ -52,6 +43,7 @@ export async function executeOpsAction({
     db = null,
     now = new Date()
 } = {}) {
+    if (isOpsReadOnlyMode()) throw readOnlyError();
     if (!action || !Object.values(OPS_ACTION_TYPES).includes(action)) {
         const error = new Error(`Acción no soportada o inválida: ${action}`);
         error.code = 'INVALID_ACTION';
@@ -66,7 +58,7 @@ export async function executeOpsAction({
 
     let database = db;
     if (!database) {
-        try { database = getAdminDb(); } catch {}
+        try { database = getAdminDb(); } catch { /* Offline mock action test. */ }
     }
 
     const corrId = correlationId || `corr_${randomUUID()}`;
@@ -99,7 +91,6 @@ export async function executeOpsAction({
                     };
                     afterState = beforeState;
                 } else {
-                    const provider = new TheSportsDbProvider({ apiKey: process.env.THESPORTSDB_API_KEY || '3' });
                     // Ejecutar reintento
                     result = {
                         requeued: true,

@@ -32,7 +32,7 @@
           {
             "name": "refresh",
             "in": "query",
-            "description": "Forzar bypass de cache en memoria",
+            "description": "Parámetro heredado sin efecto: el bypass de caché está deshabilitado para proteger el presupuesto de lecturas",
             "required": false,
             "schema": { "type": "boolean", "default": false }
           }
@@ -103,7 +103,7 @@
           {
             "name": "offset",
             "in": "query",
-            "schema": { "type": "integer", "default": 0 }
+            "schema": { "type": "integer", "default": 0, "maximum": 100 }
           },
           {
             "name": "status",
@@ -147,7 +147,7 @@
           {
             "name": "limit",
             "in": "query",
-            "schema": { "type": "integer", "default": 50 }
+            "schema": { "type": "integer", "default": 50, "maximum": 100 }
           }
         ],
         "responses": {
@@ -211,7 +211,8 @@
           { "name": "entityType", "in": "query", "schema": { "type": "string" } },
           { "name": "entityId", "in": "query", "schema": { "type": "string" } },
           { "name": "action", "in": "query", "schema": { "type": "string" } },
-          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } }
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50, "maximum": 100 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0, "maximum": 100 } }
         ],
         "responses": {
           "200": {

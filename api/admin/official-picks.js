@@ -1,11 +1,12 @@
 import { timingSafeEqual } from 'node:crypto';
+import { blockOutsideOpsInReadOnlyMode } from '../../server/ops/read-only-mode.js';
 import { FieldValue } from 'firebase-admin/firestore';
 import { queueOfficialPick } from '../../server/official-pick-queue.js';
 import { getAdminAuth, getAdminDb } from '../_lib/firebase-admin.js';
 import { normalizeOfficialPickInput, publicPickIdFor } from '../_lib/official-pick-data.js';
 import { toPublicOfficialPick } from '../_lib/official-picks.js';
 import { editOfficialPickTelegramMessage } from '../_lib/telegram.js';
-import { normalizeFutbolBrainOwnerCandidate, ingestFutbolBrainOwnerCandidate } from '../../server/futbolbrain-local-ingest.js';
+import { ingestFutbolBrainOwnerCandidate } from '../../server/futbolbrain-local-ingest.js';
 import {
     entitlementForManualGrant,
     entitlementForRevocation,
@@ -303,6 +304,7 @@ const validationPreview = (input) => {
 };
 
 export default async function handler(req, res) {
+    if (blockOutsideOpsInReadOnlyMode(res)) return;
     if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: 'Método no permitido' });
 
     if (req.query?.mode === 'premium-access') {

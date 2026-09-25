@@ -1,4 +1,5 @@
 import { getAdminDb } from '../../_lib/firebase-admin.js';
+import { blockOutsideOpsInReadOnlyMode } from '../../../server/ops/read-only-mode.js';
 import { buildBillingEvent } from '../../../server/billing/event-ledger.js';
 import { createStripeBillingProvider } from '../../../server/billing/stripe-provider.js';
 import { applyStripeWebhookToEntitlement, stripeSubscriptionId, stripeUserId, stripeWebhookType } from '../../../server/billing/stripe-subscription-sync.js';
@@ -17,6 +18,7 @@ const provider = () => createStripeBillingProvider({
 });
 
 export default async function handler(req, res) {
+    if (blockOutsideOpsInReadOnlyMode(res)) return;
     if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
     if (process.env.STRIPE_BILLING_MODE !== 'test' || process.env.STRIPE_BILLING_ENABLED !== 'true') {
         return res.status(503).json({ error: 'El webhook Stripe sandbox no está habilitado.' });

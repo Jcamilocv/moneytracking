@@ -5,18 +5,21 @@ import {
     getOpsPicksSummary,
     getOpsIncidentsSummary,
     getOpsPaperSummary,
-    getOpsAutomationSummary,
-    opsReadCache
+    getOpsAutomationSummary
 } from './read-models.js';
 import { evaluateUnifiedHealth } from './health-model.js';
 import { executeOpsAction, OPS_ACTION_TYPES } from './action-service.js';
 import { listOpsAuditLogs } from './audit-log.js';
+import { isOpsReadOnlyMode, OPS_READ_PATHS } from './read-only-mode.js';
 
 /**
  * Valida la autenticación administrativa para las peticiones de Astra Ops.
  */
 export function isOpsAuthorized(req) {
-    const adminSecret = process.env.OPS_ADMIN_SECRET || process.env.OFFICIAL_PICKS_ADMIN_SECRET;
+    // Never reuse a production/admin fallback credential in the isolated local mode.
+    const adminSecret = isOpsReadOnlyMode()
+        ? process.env.OPS_ADMIN_SECRET
+        : process.env.OPS_ADMIN_SECRET || process.env.OFFICIAL_PICKS_ADMIN_SECRET;
 
     // Si estamos en tests sin secreto configurado
     if (!adminSecret && process.env.NODE_ENV === 'test') {
@@ -94,6 +97,11 @@ export async function handleOpsRequest(req, res, { db = null, now = new Date() }
     const url = new URL(req.url, 'http://localhost');
     const pathname = url.pathname.replace(/^\/api\/ops\/?/, '').replace(/\/$/, '');
 
+    // Exact allowlist before parsing bodies or invoking any service.
+    if (isOpsReadOnlyMode() && (req.method !== 'GET' || !OPS_READ_PATHS.has(pathname))) {
+        return sendError(403, 'OPS_READ_ONLY_MODE', 'Esta instancia solo permite las ocho lecturas Ops.');
+    }
+
     // OpenAPI specification can be viewed if authorized or for introspection
     if (!isOpsAuthorized(req)) {
         return sendError(401, 'UNAUTHORIZED', 'Acceso denegado: se requiere token administrativo de operaciones válido (Bearer o x-ops-admin-token).');
@@ -121,8 +129,8 @@ export async function handleOpsRequest(req, res, { db = null, now = new Date() }
 
         // GET /api/ops/kpis
         if (req.method === 'GET' && (pathname === 'kpis' || pathname === '')) {
-            const bypassCache = query.refresh === 'true';
-            const kpis = await getOpsKpisSummary({ db, bypassCache, now });
+            // A query parameter cannot force repeated Firestore reads.
+            const kpis = await getOpsKpisSummary({ db, now });
             return sendSuccess(kpis);
         }
 
@@ -180,6 +188,7 @@ export async function handleOpsRequest(req, res, { db = null, now = new Date() }
                 action: query.action,
                 limit: query.limit,
                 offset: query.offset,
+                strict: true,
                 db
             });
             return sendSuccess({ count: logs.length, logs });
@@ -211,9 +220,9 @@ export async function handleOpsRequest(req, res, { db = null, now = new Date() }
         return sendError(404, 'ROUTE_NOT_FOUND', `La ruta /api/ops/${pathname} no existe.`);
 
     } catch (err) {
-        console.error('[OPS_ROUTER_EXCEPTION]', err);
+        if (err.code !== 'OPS_READ_BUDGET_EXCEEDED') console.error('[OPS_ROUTER_EXCEPTION]', err);
         return sendError(
-            err.code === 'INVALID_ACTION' || err.code === 'REASON_REQUIRED' ? 400 : 500,
+            ['INVALID_ACTION', 'REASON_REQUIRED', 'OPS_READ_BUDGET_EXCEEDED'].includes(err.code) ? 400 : 500,
             err.code || 'INTERNAL_OPS_ERROR',
             err.message
         );

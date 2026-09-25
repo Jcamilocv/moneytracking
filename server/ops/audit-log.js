@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getAdminDb } from '../../api/_lib/firebase-admin.js';
+import { isOpsReadOnlyMode, readOnlyError } from './read-only-mode.js';
+import { boundedAuditOffset, boundedPageSize } from './read-safety.js';
 
 // Lista exhaustiva de claves sensibles que deben ser redactadas del audit log
 const SENSITIVE_KEY_PATTERNS = [
@@ -65,6 +67,7 @@ export async function logOpsAudit({
     db = null,
     now = new Date()
 } = {}) {
+    if (isOpsReadOnlyMode()) throw readOnlyError();
     if (!action) throw new Error('AUDIT_LOG_ERROR: action is required');
     if (!entityType) throw new Error('AUDIT_LOG_ERROR: entityType is required');
     if (!entityId) throw new Error('AUDIT_LOG_ERROR: entityId is required');
@@ -143,9 +146,11 @@ export async function listOpsAuditLogs({
     action = null,
     limit = 50,
     offset = 0,
+    strict = false,
     db = null
 } = {}) {
-    const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 100);
+    const safeLimit = boundedPageSize(limit);
+    const safeOffset = boundedAuditOffset(offset);
 
     let database = db;
     if (!database) {
@@ -163,14 +168,18 @@ export async function listOpsAuditLogs({
             if (entityId) query = query.where('entityId', '==', String(entityId));
             if (action) query = query.where('action', '==', action);
 
-            const snapshot = await query.limit(safeLimit).get();
+            const snapshot = await query.limit(safeLimit + safeOffset).get();
+            if (strict) return snapshot.docs.slice(safeOffset, safeOffset + safeLimit).map(doc => doc.data());
             if (!snapshot.empty) {
-                return snapshot.docs.map(doc => doc.data());
+                return snapshot.docs.slice(safeOffset, safeOffset + safeLimit).map(doc => doc.data());
             }
-        } catch {
+        } catch (error) {
+            if (strict) throw error;
             // fallback in-memory on error
         }
     }
+
+    if (strict) throw new Error('FIRESTORE_UNAVAILABLE');
 
     // Filtrar in-memory
     let filtered = [...inMemoryAuditLogs].reverse();
@@ -179,5 +188,5 @@ export async function listOpsAuditLogs({
     if (actorId) filtered = filtered.filter(l => l.actor?.id === actorId);
     if (action) filtered = filtered.filter(l => l.action === action);
 
-    return filtered.slice(offset, offset + safeLimit);
+    return filtered.slice(safeOffset, safeOffset + safeLimit);
 }

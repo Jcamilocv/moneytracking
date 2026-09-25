@@ -18,6 +18,7 @@
 
 import { TheSportsDbProvider, CanonicalSettlementScheduler, SETTLEMENT_CYCLE_STATUSES, SETTLEMENT_OUTCOMES } from '../../server/sports-data/index.js';
 import { getAdminDb } from '../_lib/firebase-admin.js';
+import { blockOutsideOpsInReadOnlyMode } from '../../server/ops/read-only-mode.js';
 import { getOfficialOwnerUid } from '../../server/official-season-bank.js';
 import { FieldValue } from 'firebase-admin/firestore';
 
@@ -61,6 +62,7 @@ const isAuthorizedCron = (req) => {
 };
 
 export default async function handler(req, res) {
+    if (blockOutsideOpsInReadOnlyMode(res)) return;
     if (!['GET', 'POST'].includes(req.method)) {
         return res.status(405).json({ error: 'Método no permitido' });
     }

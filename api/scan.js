@@ -1,4 +1,5 @@
 import { createVerify } from 'node:crypto';
+import { blockOutsideOpsInReadOnlyMode } from '../server/ops/read-only-mode.js';
 
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'money-tracking-d908b';
 const FIREBASE_ISSUER = `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`;
@@ -131,6 +132,7 @@ const consumeScanQuota = async (token, userId) => {
 };
 
 export default async function handler(req, res) {
+    if (blockOutsideOpsInReadOnlyMode(res)) return;
     // Solo permitimos peticiones POST
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Método no permitido' });

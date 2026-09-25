@@ -3,7 +3,6 @@ import { FutbolBrainMtprotoClient } from '../futbolbrain-telegram-poc/mtproto-cl
 import { TelegramPocRouter } from '../futbolbrain-telegram-poc/poc-router.js';
 import { TelegramDeduplicationLedger } from '../futbolbrain-telegram-poc/deduplication-ledger.js';
 import { classifyTelegramMessage, MESSAGE_TYPES } from '../futbolbrain-telegram-poc/message-classifier.js';
-import { normalizeFutbolBrainTelegramPick } from '../futbolbrain-telegram-poc/canonical-normalizer.js';
 import { parseMyPicksSummary } from '../futbolbrain-telegram-poc/my-picks-parser.js';
 import { SingleInstanceLock } from './single-instance-lock.js';
 import { ReconnectManager } from './reconnect-manager.js';
@@ -83,6 +82,11 @@ export class FutbolBrainTelegramWorker extends EventEmitter {
      * Inicia el worker con protección de instancia única, conexión MTProto y replay recovery.
      */
     async start() {
+        if (process.env.OPS_READ_ONLY_MODE === '1') {
+            const error = new Error('OPS_READ_ONLY_MODE: Telegram worker disabled');
+            error.code = 'OPS_READ_ONLY_MODE';
+            throw error;
+        }
         if (this.isRunning) return;
 
         this.logger.log(LOG_TAGS.STARTUP, `Iniciando FutbolBrain Telegram Worker en modo ${this.mode}...`, {

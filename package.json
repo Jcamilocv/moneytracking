@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "ops:read-only": "node --env-file-if-exists=.env.local server/ops/local-read-only-server.js",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",

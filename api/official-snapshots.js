@@ -1,9 +1,11 @@
 import { FALLBACK_SNAPSHOT_IDS } from './_lib/official-snapshot-data.js';
+import { blockOutsideOpsInReadOnlyMode } from '../server/ops/read-only-mode.js';
 import { readOfficialSnapshotIds } from './_lib/official-snapshots.js';
 
 const ALLOWED_ORIGIN = 'https://pronosticosmoneytips.com';
 
 export default async function handler(req, res) {
+    if (blockOutsideOpsInReadOnlyMode(res)) return;
     if (req.method !== 'GET') return res.status(405).json({ error: 'Método no permitido' });
 
     res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);

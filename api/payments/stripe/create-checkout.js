@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { blockOutsideOpsInReadOnlyMode } from '../../../server/ops/read-only-mode.js';
 import { getAdminAuth, getAdminDb } from '../../_lib/firebase-admin.js';
 import { buildBillingEvent, recordBillingEvent } from '../../../server/billing/event-ledger.js';
 import { normalizePlanId } from '../../../server/billing/plans.js';
@@ -24,6 +25,7 @@ const tokenUser = async (req) => {
 };
 
 export default async function handler(req, res) {
+    if (blockOutsideOpsInReadOnlyMode(res)) return;
     if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
     try {
         assertSandbox();

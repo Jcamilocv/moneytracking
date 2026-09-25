@@ -159,32 +159,27 @@ test('Read Models: getOpsSystemsSummary returns all 9 portfolio systems with exe
 test('Read Models: getOpsKpisSummary caches results and responds within TTL', async () => {
     opsReadCache.invalidate();
 
+    const query = (name, filters = [], max = null) => ({
+        where: (field, operator, value) => query(name, [...filters, [field, operator, value]], max),
+        limit: (size) => query(name, filters, size),
+        count: () => ({ get: async () => ({ data: () => ({ count:
+            name === 'officialPicks' ? (filters.some(([field]) => field === 'settlement.status') ? 5 : 81)
+                : name === 'operationsIncidents' ? 1 : 0
+        }) }) }),
+        get: async () => {
+            assert.ok(max, 'No Ops query may call get() without a limit');
+            if (name === 'premiumPaymentOrders') return { docs: [{ data: () => ({ expectedAmount: 29.9 }) }] };
+            if (name === 'entitlements') return { docs: [{
+                data: () => ({ accessUntil: new Date(Date.now() + 86400000) }),
+                ref: { parent: { parent: { id: 'user_1' } } }
+            }] };
+            return { size: 0, docs: [] };
+        },
+        doc: () => ({ get: async () => ({ exists: true, data: () => ({ lastSettledAt: new Date().toISOString() }) }) })
+    });
     const mockDb = {
-        collection: (name) => ({
-            where: () => ({
-                where: () => ({
-                    get: async () => ({ size: 5, docs: [{ data: () => ({ expectedAmount: 29.9 }) }] })
-                }),
-                get: async () => ({ size: 81, docs: [{ data: () => ({ expectedAmount: 29.9 }) }] })
-            }),
-            limit: () => ({
-                get: async () => ({ size: 1, docs: [] })
-            }),
-            doc: () => ({
-                get: async () => ({ exists: true, data: () => ({ lastSettledAt: new Date().toISOString() }) })
-            }),
-            get: async () => ({ size: 81, docs: [] })
-        }),
-        collectionGroup: () => ({
-            where: () => ({
-                get: async () => ({
-                    docs: [{
-                        data: () => ({ accessUntil: new Date(Date.now() + 86400000) }),
-                        ref: { parent: { parent: { id: 'user_1' } } }
-                    }]
-                })
-            })
-        })
+        collection: (name) => query(name),
+        collectionGroup: (name) => query(name)
     };
 
     const kpis1 = await getOpsKpisSummary({ db: mockDb });

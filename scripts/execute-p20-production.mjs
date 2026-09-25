@@ -316,6 +316,9 @@ const PENDING_18_RESOLUTIONS = {
 };
 
 async function main() {
+    if (process.env.OPS_READ_ONLY_MODE === '1') {
+        throw new Error('OPS_READ_ONLY_MODE: production repair script disabled');
+    }
     console.log('='.repeat(75));
     console.log('P2.0 — PRODUCCIÓN: RECONCILIACIÓN + SETTLEMENT + CRON 01:00');
     console.log('='.repeat(75));

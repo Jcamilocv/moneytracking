@@ -1,13 +1,13 @@
 import { getAdminDb } from '../../api/_lib/firebase-admin.js';
 import { SYSTEM_REGISTRY, SYSTEM_EXECUTION_MODES } from '../system-registry.js';
 import { evaluateUnifiedHealth } from './health-model.js';
-import { sanitizeForAudit } from './audit-log.js';
+import { OPS_READ_LIMITS, boundedCompleteDocs, boundedCount, boundedPageSize, boundedPickOffset } from './read-safety.js';
 
 /**
- * Cache en memoria con TTL para evitar lecturas masivas y costosas sobre Firestore.
+ * Cache en memoria con TTL para reducir lecturas acotadas sobre Firestore.
  */
 class OpsReadCache {
-    constructor(ttlMs = 30000) {
+    constructor(ttlMs = 300000) {
         this.ttlMs = ttlMs;
         this.cache = new Map();
     }
@@ -39,7 +39,7 @@ class OpsReadCache {
     }
 }
 
-export const opsReadCache = new OpsReadCache(30000); // 30s TTL por defecto
+export const opsReadCache = new OpsReadCache(300000); // 5 min; no background refresh
 
 /**
  * KPI Summary consolidado para la vista ejecutiva de Astra HQ.
@@ -54,7 +54,7 @@ export async function getOpsKpisSummary({ db = null, bypassCache = false, now = 
 
     let database = db;
     if (!database) {
-        try { database = getAdminDb(); } catch {}
+        try { database = getAdminDb(); } catch { /* No Firebase credentials in isolated tests. */ }
     }
 
     const health = await evaluateUnifiedHealth({ db: database, now });
@@ -123,32 +123,26 @@ export async function getOpsKpisSummary({ db = null, bypassCache = false, now = 
 
     // 1. Picks oficiales
     try {
-        const pendingPicksSnap = await database.collection('officialPicks')
+        pendingSettlementCount = await boundedCount(database.collection('officialPicks')
             .where('status', '==', 'published')
-            .where('settlement.status', '==', 'pending')
-            .get();
-        pendingSettlementCount = pendingPicksSnap.size;
+            .where('settlement.status', '==', 'pending'));
 
-        const allPicksSnap = await database.collection('officialPicks')
-            .where('status', '==', 'published')
-            .get();
-        totalOfficialPicks = allPicksSnap.size;
-        picksSourceStatus = 'connected';
-    } catch (err) {
+        totalOfficialPicks = await boundedCount(database.collection('officialPicks')
+            .where('status', '==', 'published'));
+        picksSourceStatus = pendingSettlementCount === null || totalOfficialPicks === null ? 'capped' : 'connected';
+    } catch {
         picksSourceStatus = 'error';
     }
 
     // 2. Incidencias abiertas (Operations + Revenue)
     try {
-        const opsIncidentsSnap = await database.collection('operationsIncidents')
-            .where('status', '==', 'open')
-            .get();
-        const revIncidentsSnap = await database.collection('revenueIncidents')
-            .where('status', '==', 'open')
-            .get();
-        openIncidentsCount = opsIncidentsSnap.size + revIncidentsSnap.size;
-        incidentsSourceStatus = 'connected';
-    } catch (err) {
+        const opsCount = await boundedCount(database.collection('operationsIncidents')
+            .where('status', '==', 'open'));
+        const revCount = await boundedCount(database.collection('revenueIncidents')
+            .where('status', '==', 'open'));
+        openIncidentsCount = opsCount === null || revCount === null ? null : opsCount + revCount;
+        incidentsSourceStatus = openIncidentsCount === null ? 'capped' : 'connected';
+    } catch {
         incidentsSourceStatus = 'error';
     }
 
@@ -158,16 +152,22 @@ export async function getOpsKpisSummary({ db = null, bypassCache = false, now = 
         const paymentsSnap = await database.collection('premiumPaymentOrders')
             .where('status', '==', 'paid')
             .where('paidAt', '>=', monthStart)
+            .limit(OPS_READ_LIMITS.kpiDetailDocuments)
             .get();
-        
-        let sum = 0;
-        for (const doc of paymentsSnap.docs) {
-            const amount = Number(doc.data().expectedAmount) || 0;
-            sum += amount;
+        const payments = boundedCompleteDocs(paymentsSnap);
+        if (payments === null) {
+            revenueSourceStatus = 'capped';
+        } else {
+            let sum = 0;
+            for (const doc of payments) {
+                const amount = Number(doc.data().expectedAmount);
+                if (!Number.isFinite(amount)) throw new Error('INVALID_PAYMENT_AMOUNT');
+                sum += amount;
+            }
+            currentMonthGrossRevenueEUR = Number(sum.toFixed(2));
+            revenueSourceStatus = 'connected';
         }
-        currentMonthGrossRevenueEUR = Number(sum.toFixed(2));
-        revenueSourceStatus = 'connected';
-    } catch (err) {
+    } catch {
         revenueSourceStatus = 'error';
     }
 
@@ -175,19 +175,25 @@ export async function getOpsKpisSummary({ db = null, bypassCache = false, now = 
     try {
         const entitlementsSnap = await database.collectionGroup('entitlements')
             .where('status', '==', 'active')
+            .limit(OPS_READ_LIMITS.kpiDetailDocuments)
             .get();
-        const uniqueUsers = new Set();
-        for (const doc of entitlementsSnap.docs) {
-            const data = doc.data();
-            const accessUntil = data.accessUntil?.toDate ? data.accessUntil.toDate() : new Date(data.accessUntil);
-            if (accessUntil > now) {
-                const userId = doc.ref.parent.parent?.id;
-                if (userId) uniqueUsers.add(userId);
+        const entitlements = boundedCompleteDocs(entitlementsSnap);
+        if (entitlements === null) {
+            subscribersSourceStatus = 'capped';
+        } else {
+            const uniqueUsers = new Set();
+            for (const doc of entitlements) {
+                const data = doc.data();
+                const accessUntil = data.accessUntil?.toDate ? data.accessUntil.toDate() : new Date(data.accessUntil);
+                if (accessUntil > now) {
+                    const userId = doc.ref.parent.parent?.id;
+                    if (userId) uniqueUsers.add(userId);
+                }
             }
+            activeSubscribersCount = uniqueUsers.size;
+            subscribersSourceStatus = 'connected';
         }
-        activeSubscribersCount = uniqueUsers.size;
-        subscribersSourceStatus = 'connected';
-    } catch (err) {
+    } catch {
         subscribersSourceStatus = 'error';
     }
 
@@ -254,7 +260,7 @@ export async function getOpsKpisSummary({ db = null, bypassCache = false, now = 
 /**
  * Lista y métricas de sistemas de apuestas registrados.
  */
-export async function getOpsSystemsSummary({ db = null } = {}) {
+export async function getOpsSystemsSummary() {
     const systems = Object.entries(SYSTEM_REGISTRY).map(([id, def]) => {
         return {
             id,
@@ -295,13 +301,14 @@ export async function getOpsPicksSummary({
 } = {}) {
     let database = db;
     if (!database) {
-        try { database = getAdminDb(); } catch {}
+        try { database = getAdminDb(); } catch { /* No Firebase credentials in isolated tests. */ }
     }
 
-    const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 100);
-    const safeOffset = Math.max(Number(offset) || 0, 0);
+    const safeLimit = boundedPageSize(limit);
+    const safeOffset = boundedPickOffset(offset);
 
     let picks = [];
+    let sourceStatus = 'unavailable';
 
     if (database && typeof database.collection === 'function') {
         try {
@@ -311,6 +318,10 @@ export async function getOpsPicksSummary({
 
             if (systemId) {
                 query = query.where('system.id', '==', systemId);
+            }
+
+            if (status) {
+                query = query.where('settlement.status', '==', status);
             }
 
             const snapshot = await query.limit(safeLimit + safeOffset).get();
@@ -344,13 +355,11 @@ export async function getOpsPicksSummary({
                 };
             });
 
-            if (status) {
-                picks = picks.filter(p => p.settlement.status === status);
-            }
-
             picks = picks.slice(safeOffset, safeOffset + safeLimit);
+            sourceStatus = 'connected';
         } catch (err) {
             console.error('[OPS_PICKS_READ_ERROR]', err.message);
+            sourceStatus = 'error';
         }
     }
 
@@ -358,6 +367,7 @@ export async function getOpsPicksSummary({
         count: picks.length,
         limit: safeLimit,
         offset: safeOffset,
+        status: sourceStatus,
         picks
     };
 }
@@ -372,11 +382,13 @@ export async function getOpsIncidentsSummary({
 } = {}) {
     let database = db;
     if (!database) {
-        try { database = getAdminDb(); } catch {}
+        try { database = getAdminDb(); } catch { /* No Firebase credentials in isolated tests. */ }
     }
 
-    const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 100);
+    const safeLimit = boundedPageSize(limit);
     const incidents = [];
+    let capped = false;
+    let readError = false;
 
     if (database && typeof database.collection === 'function') {
         try {
@@ -384,6 +396,7 @@ export async function getOpsIncidentsSummary({
             let opsQuery = database.collection('operationsIncidents');
             if (status) opsQuery = opsQuery.where('status', '==', status);
             const opsSnap = await opsQuery.limit(safeLimit).get();
+            capped ||= opsSnap.docs.length === safeLimit;
 
             for (const doc of opsSnap.docs) {
                 const data = doc.data();
@@ -405,6 +418,7 @@ export async function getOpsIncidentsSummary({
             let revQuery = database.collection('revenueIncidents');
             if (status) revQuery = revQuery.where('status', '==', status);
             const revSnap = await revQuery.limit(safeLimit).get();
+            capped ||= revSnap.docs.length === safeLimit;
 
             for (const doc of revSnap.docs) {
                 const data = doc.data();
@@ -423,6 +437,7 @@ export async function getOpsIncidentsSummary({
             }
         } catch (err) {
             console.error('[OPS_INCIDENTS_READ_ERROR]', err.message);
+            readError = true;
         }
     }
 
@@ -432,8 +447,9 @@ export async function getOpsIncidentsSummary({
     const isConnected = Boolean(database && typeof database.collection === 'function');
 
     return {
-        total: isConnected ? incidents.length : null,
-        status: isConnected ? 'connected' : 'unavailable',
+        total: isConnected && !readError && !capped ? incidents.length : null,
+        sampleCount: incidents.length,
+        status: !isConnected ? 'unavailable' : readError ? 'error' : capped ? 'capped' : 'connected',
         statusFilter: status,
         incidents: incidents.slice(0, safeLimit)
     };
@@ -445,11 +461,13 @@ export async function getOpsIncidentsSummary({
 export async function getOpsPaperSummary({ db = null, limit = 50 } = {}) {
     let database = db;
     if (!database) {
-        try { database = getAdminDb(); } catch {}
+        try { database = getAdminDb(); } catch { /* No Firebase credentials in isolated tests. */ }
     }
 
-    const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 100);
+    const safeLimit = boundedPageSize(limit);
     let paperPicks = [];
+    let capped = false;
+    let readError = false;
 
     if (database && typeof database.collection === 'function') {
         try {
@@ -457,6 +475,7 @@ export async function getOpsPaperSummary({ db = null, limit = 50 } = {}) {
                 .orderBy('recordedAt', 'desc')
                 .limit(safeLimit)
                 .get();
+            capped = snap.docs.length === safeLimit;
 
             paperPicks = snap.docs.map(doc => {
                 const d = doc.data();
@@ -473,12 +492,15 @@ export async function getOpsPaperSummary({ db = null, limit = 50 } = {}) {
             });
         } catch (err) {
             console.error('[OPS_PAPER_READ_ERROR]', err.message);
+            readError = true;
         }
     }
 
     return {
         systemsTracked: ['MT - GER1 - v1.1', 'MT - TUR1 - V1.0', 'MT - POR1 - v1.0'],
-        totalTrackedPicks: paperPicks.length,
+        totalTrackedPicks: capped || readError || !database ? null : paperPicks.length,
+        sampleCount: paperPicks.length,
+        status: !database ? 'unavailable' : readError ? 'error' : capped ? 'capped' : 'connected',
         paperPicks
     };
 }
@@ -506,7 +528,7 @@ export async function getOpsAutomationSummary({ db = null, now = new Date() } = 
             },
             snapshotRefresh: {
                 schedule: '04:17 UTC',
-                status: 'HEALTHY'
+                status: 'UNKNOWN'
             }
         },
         checkedAt: health.checkedAt

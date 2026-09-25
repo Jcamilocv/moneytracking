@@ -1,4 +1,5 @@
 import { getAdminDb } from '../../api/_lib/firebase-admin.js';
+import { OPS_READ_LIMITS } from './read-safety.js';
 
 export const HEALTH_STATES = {
     HEALTHY: 'HEALTHY',
@@ -89,7 +90,7 @@ async function checkSettlementCronHealth(db, now = new Date()) {
 /**
  * Evalúa el estado del worker T-5 (VPS / MTProto).
  */
-async function checkVpsWorkerHealth(db, now = new Date()) {
+async function checkVpsWorkerHealth() {
     // Si tenemos una variable de entorno indicando que el transporte está activo
     const transportStatus = process.env.T5_TRANSPORT_STATUS || 'UNKNOWN';
     const workerMode = process.env.FUTBOLBRAIN_WORKER_MODE || 'UNKNOWN';
@@ -170,6 +171,7 @@ async function checkBillingHealth(db) {
     try {
         const incidentsSnap = await db.collection('revenueIncidents')
             .where('status', '==', 'open')
+            .limit(OPS_READ_LIMITS.healthIncidentDocuments)
             .get();
 
         const openCount = incidentsSnap.size;
@@ -178,7 +180,8 @@ async function checkBillingHealth(db) {
             return {
                 status: HEALTH_STATES.DEGRADED,
                 openIncidentsCount: openCount,
-                message: `${openCount} incidencias de revenue abiertas requieren atención`
+                countIsLowerBound: true,
+                message: `Al menos ${openCount} incidencias de revenue abiertas requieren atención`
             };
         }
 
@@ -221,7 +224,7 @@ export async function evaluateUnifiedHealth({
     ] = await Promise.all([
         checkFirestoreHealth(database),
         checkSettlementCronHealth(database, now),
-        checkVpsWorkerHealth(database, now),
+        checkVpsWorkerHealth(),
         Promise.resolve(checkTelegramHealth()),
         checkTheSportsDbHealth(),
         checkBillingHealth(database)

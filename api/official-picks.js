@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { blockOutsideOpsInReadOnlyMode } from '../server/ops/read-only-mode.js';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getOfficialPick, listOfficialPicks } from './_lib/official-picks.js';
 import { getAdminAuth, getAdminDb } from './_lib/firebase-admin.js';
@@ -394,6 +395,7 @@ const handleAdminReports = async (req, res) => {
 };
 
 export default async function handler(req, res) {
+    if (blockOutsideOpsInReadOnlyMode(res)) return;
     try {
         if (req.query.mode === 'subscription-status') {
             const uid = await getTokenUid(req);
