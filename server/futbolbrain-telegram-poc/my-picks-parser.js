@@ -1,4 +1,4 @@
-import { getSystemDefinition, SYSTEM_REGISTRY } from '../system-registry.js';
+import { getSystemDefinition, SYSTEM_REGISTRY, normalizeSystemId } from '../system-registry.js';
 
 /**
  * Parsea un mensaje de resumen "My Picks" de FutbolBrain Telegram.
@@ -38,7 +38,7 @@ export const parseMyPicksSummary = (text = '', { observedAt = new Date() } = {})
     
     let match;
     while ((match = systemLineRegex.exec(raw)) !== null) {
-        const rawSystemId = match[1].trim();
+        const rawSystemId = normalizeSystemId(match[1]);
         const countStr = match[2] || match[3] || '0';
         const upcomingPickCount = parseInt(countStr, 10);
 

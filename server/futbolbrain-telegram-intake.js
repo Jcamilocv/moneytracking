@@ -5,7 +5,8 @@ import {
     isApprovedSystem,
     mapSystemSelection,
     calculateRegistryStake,
-    SYSTEM_EXECUTION_MODES
+    SYSTEM_EXECUTION_MODES,
+    normalizeSystemId
 } from './system-registry.js';
 import {
     semanticOfficialPickKey,
@@ -69,11 +70,11 @@ export const parseFutbolBrainTelegramText = (text = '') => {
     if (!raw) return null;
 
     // Buscar sistema: "System: MT - FRA1 FRA2 - V1.0", "Sistema: ...", "AI Model MT - FRA1 FRA2 - V1.0"
-    const systemMatch = raw.match(/(?:System|Sistema):\s*([^\r\n]+)/i)
+    const systemMatch = raw.match(/(?:System|Sistema|AI\s*Model)[:\s]\s*([^\r\n]+)/i)
         || raw.match(/(?:AI Model\s+)?(MT\s*-[^\r\n\s]+[^\r\n]*)/i)
         || raw.match(/(MT\s*-[^\r\n]+)/i);
     if (!systemMatch) return null;
-    const systemId = systemMatch[1].trim();
+    const systemId = normalizeSystemId(systemMatch[1]);
 
     // Buscar partido y competición:
     // 1. Si existe línea explícita de Partido / Match / Evento (formato clásico / tests):

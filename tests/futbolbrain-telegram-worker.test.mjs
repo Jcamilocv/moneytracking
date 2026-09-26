@@ -555,6 +555,52 @@ test('Worker Routing E2E Acceptance: Real fixtures 28440, 28441, 28437 emit acti
     cleanupTestLock();
 });
 
+test('Worker Routing E2E Acceptance: Real message 28499 (Granada CF VS FC Andorra) with markdown bold **systemId** emits active_pick WOULD_PUBLISH and derives op_id', async () => {
+    cleanupTestLock();
+    const worker = new FutbolBrainTelegramWorker({
+        mode: 'DRY_RUN',
+        lockPath: TEST_LOCK_PATH,
+        silent: true,
+        chatId: 'futbolbrain_chat'
+    });
+    await worker.start();
+
+    const activePickEvents = [];
+    worker.on('active_pick', (data) => { activePickEvents.push(data); });
+
+    // Fixture 28499: ESP-SEG: Granada CF VS FC Andorra (con markdown bold **MT-LAB-BTTS-ESP-v0.1**)
+    worker.client.simulateIncomingMessage({
+        id: 28499,
+        chatId: 'futbolbrain_chat',
+        date: new Date('2026-09-26T14:12:06.065Z'),
+        text: 'AI Model **MT-LAB-BTTS-ESP-v0.1**\nYield: 8.99% Hit Rate: 61.80%\n\nESP-SEG: Granada CF VS FC Andorra\n    -Predicted Probability: 54% \n    -Kickoff: 16:15\n\nMarket BTTS Yes (Bet365): 1.95\n\nActive Pick'
+    });
+
+    await new Promise(r => setTimeout(r, 50));
+
+    assert.equal(activePickEvents.length, 1, 'Debe haber emitido exactamente 1 evento active_pick');
+    const ev28499 = activePickEvents[0];
+    assert.equal(ev28499.action, 'WOULD_PUBLISH');
+    assert.equal(ev28499.candidate.systemId, 'MT-LAB-BTTS-ESP-v0.1');
+    assert.equal(ev28499.candidate.event, 'Granada CF vs FC Andorra');
+    assert.equal(ev28499.candidate.selection, 'Sí');
+    assert.equal(ev28499.candidate.odds, 1.95);
+    assert.equal(ev28499.candidate.kickoffAt, '2026-09-26T14:15:00.000Z');
+    assert.equal(ev28499.executionMode, 'PRODUCTION');
+
+    // Comprobar derivación de op_id canónico
+    const derivedOpId = `op_${ev28499.candidate.fingerprint.slice(0, 40)}`;
+    assert.match(derivedOpId, /^op_[a-f0-9]{40}$/);
+
+    const safety = worker.getRouterSafetyReport();
+    assert.equal(safety.externalFirestoreWrites, 0);
+    assert.equal(safety.outboundTelegramMessages, 0);
+    assert.equal(safety.productionMutations, 0);
+
+    await worker.stop();
+    cleanupTestLock();
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 8. LOGGING & SECRET REDACTION
 // ─────────────────────────────────────────────────────────────────────────────

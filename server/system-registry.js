@@ -129,9 +129,33 @@ export const SYSTEM_REGISTRY = Object.freeze({
     }
 });
 
+/**
+ * Normaliza un identificador de sistema eliminando wrappers de formato Markdown o Telegram
+ * (negrita, cursiva, backticks, comillas, tildes de tachado), caracteres invisibles Unicode
+ * y espacios envolventes, preservando intactos los caracteres internos válidos del ID.
+ *
+ * @param {string} rawSystemId
+ * @returns {string}
+ */
+export const normalizeSystemId = (rawSystemId = '') => {
+    if (!rawSystemId || typeof rawSystemId !== 'string') return '';
+
+    // 1. Eliminar caracteres invisibles y de control Unicode (BOM, zero-width, LTR/RTL marks)
+    let cleaned = rawSystemId.replace(/[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E]/g, '');
+
+    // 2. Normalizar espacios Unicode (NBSP, narrow NBSP, thin space, etc.) a espacio regular
+    cleaned = cleaned.replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ');
+
+    // 3. Eliminar wrappers de formato de inicio y fin (Markdown *, _, `, comillas, ~ y espacios)
+    cleaned = cleaned.replace(/^[\s*_`"'~“”‘’«»]+|[\s*_`"'~“”‘’«»]+$/g, '');
+
+    return cleaned.trim();
+};
+
 export const getSystemDefinition = (systemId) => {
     if (!systemId) return null;
-    return SYSTEM_REGISTRY[String(systemId).trim()] || null;
+    const normalized = normalizeSystemId(systemId);
+    return SYSTEM_REGISTRY[normalized] || null;
 };
 
 export const isApprovedSystem = (systemId) => {

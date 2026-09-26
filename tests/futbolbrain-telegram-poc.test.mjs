@@ -5,8 +5,11 @@ import {
     SYSTEM_REGISTRY,
     SYSTEM_EXECUTION_MODES,
     SYSTEM_TIERS,
-    getSystemDefinition
+    getSystemDefinition,
+    normalizeSystemId
 } from '../server/system-registry.js';
+
+import { parseFutbolBrainTelegramText } from '../server/futbolbrain-telegram-intake.js';
 
 import {
     FutbolBrainMtprotoClient,
@@ -630,4 +633,118 @@ test('Chat Discovery: Discovers FutbolBrain chats automatically without requirin
     assert.equal(discovered[0].isGroup, true);
 
     await client.stop();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. SYSTEM ID NORMALIZATION & MARKDOWN SANITIZATION REGRESSIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('System ID Normalization: Correctly sanitizes Markdown, Telegram formatting, and Unicode invisible characters', () => {
+    const rawVariations = [
+        '**MT-LAB-BTTS-ESP-v0.1**',
+        '*MT-LAB-BTTS-ESP-v0.1*',
+        '`MT-LAB-BTTS-ESP-v0.1`',
+        ' MT-LAB-BTTS-ESP-v0.1 ',
+        'MT-LAB-BTTS-ESP-v0.1',
+        'MT-LAB-BTTS-ESP-v0.1**',
+        '**MT-LAB-BTTS-ESP-v0.1',
+        '_MT-LAB-BTTS-ESP-v0.1_',
+        '__MT-LAB-BTTS-ESP-v0.1__',
+        '**_MT-LAB-BTTS-ESP-v0.1_**',
+        '~MT-LAB-BTTS-ESP-v0.1~',
+        '~~MT-LAB-BTTS-ESP-v0.1~~',
+        '\u200B**MT-LAB-BTTS-ESP-v0.1**\u200B',
+        '\uFEFF`MT-LAB-BTTS-ESP-v0.1`',
+        '‘MT-LAB-BTTS-ESP-v0.1’',
+        '“MT-LAB-BTTS-ESP-v0.1”',
+        '«MT-LAB-BTTS-ESP-v0.1»'
+    ];
+
+    for (const raw of rawVariations) {
+        const normalized = normalizeSystemId(raw);
+        assert.equal(normalized, 'MT-LAB-BTTS-ESP-v0.1', `Variación "${raw}" debe normalizarse exactamente a "MT-LAB-BTTS-ESP-v0.1"`);
+
+        const def = getSystemDefinition(normalized);
+        assert.ok(def, `Debe resolver en SystemRegistry para variación: ${raw}`);
+        assert.equal(def.market, 'Ambos equipos marcan');
+        assert.equal(def.executionMode, SYSTEM_EXECUTION_MODES.T5);
+    }
+
+    // Preservation of internal characters for other systems
+    assert.equal(normalizeSystemId('**MT - FRA1 FRA2 - V1.0**'), 'MT - FRA1 FRA2 - V1.0');
+    assert.equal(normalizeSystemId('`MT - Premier League 02.5`'), 'MT - Premier League 02.5');
+    assert.equal(normalizeSystemId(' "MT - GER1 - v1.1" '), 'MT - GER1 - v1.1');
+});
+
+test('System ID Normalization: Genuinely unknown systems remain strictly rejected', () => {
+    const unknownCases = [
+        'UNKNOWN-SYSTEM-99',
+        '**UNKNOWN-SYSTEM-99**',
+        '`MT-UNKNOWN-V1.0`',
+        '*MT-FAKE-SYSTEM*'
+    ];
+
+    for (const u of unknownCases) {
+        const cleaned = normalizeSystemId(u);
+        assert.equal(getSystemDefinition(cleaned), null, `Sistema desconocido "${u}" no debe ser aceptado en Registry`);
+    }
+
+    // Router test with unknown system
+    const router = new TelegramPocRouter({ dryRun: true, expectedChatId: 'test_chat' });
+    const fakeMsg = 'AI Model **MT-NONEXISTENT-v9.9**\nYield: 10%\n\nESP-PRE: Real Madrid VS Barcelona\n-Kickoff: 21:00\n\nMarket BTTS Yes: 1.8\n\nActive Pick';
+    const parsed = parseFutbolBrainTelegramText(fakeMsg);
+    assert.equal(parsed.systemId, 'MT-NONEXISTENT-v9.9');
+    assert.equal(getSystemDefinition(parsed.systemId), null);
+});
+
+test('Real Message 28499 Replay: Granada CF vs FC Andorra with **MT-LAB-BTTS-ESP-v0.1** routes to WOULD_PUBLISH and derives op_id', async () => {
+    const router = new TelegramPocRouter({ dryRun: true, expectedChatId: 'futbolbrain_chat' });
+
+    // Fixture fiel del mensaje real 28499 recibido el 26/09/2026 a las 16:12 CEST
+    const realMessage28499Text = 'AI Model **MT-LAB-BTTS-ESP-v0.1**\nYield: 8.99% Hit Rate: 61.80%\n\nESP-SEG: Granada CF VS FC Andorra\n    -Predicted Probability: 54% \n    -Kickoff: 16:15\n\nMarket BTTS Yes (Bet365): 1.95\n\nActive Pick';
+
+    // 1. Parsing directo
+    const parsed = parseFutbolBrainTelegramText(realMessage28499Text);
+    assert.ok(parsed, 'El parser de texto debe devolver estructura válida');
+    assert.equal(parsed.systemId, 'MT-LAB-BTTS-ESP-v0.1', 'systemId debe quedar normalizado sin asteriscos');
+    assert.equal(parsed.homeTeam, 'Granada CF');
+    assert.equal(parsed.awayTeam, 'FC Andorra');
+    assert.equal(parsed.competition, 'ESP-SEG');
+    assert.equal(parsed.rawSelection, 'BTTS Yes');
+    assert.equal(parsed.odds, 1.95);
+
+    // 2. Normalización canónica
+    const normalized = normalizeFutbolBrainTelegramPick(realMessage28499Text, {
+        telegramMessageId: 28499,
+        observedAt: '2026-09-26T14:12:06.065Z'
+    });
+    assert.equal(normalized.systemId, 'MT-LAB-BTTS-ESP-v0.1');
+    assert.equal(normalized.event, 'Granada CF vs FC Andorra');
+    assert.equal(normalized.selection, 'Sí');
+    assert.equal(normalized.odds, 1.95);
+    assert.equal(normalized.kickoffAt, '2026-09-26T14:15:00.000Z'); // 16:15 Madrid CEST = 14:15 UTC
+    assert.equal(normalized.executionMode, 'PRODUCTION');
+    assert.ok(normalized.fingerprint, 'Debe generar fingerprint canónico');
+
+    // 3. Enrutamiento en router
+    const routed = await router.processMessage({
+        text: realMessage28499Text,
+        chatId: 'futbolbrain_chat',
+        telegramMessageId: 28499,
+        observedAt: new Date('2026-09-26T14:12:06.065Z')
+    });
+
+    assert.equal(routed.action, 'WOULD_PUBLISH', 'El router debe permitir avanzar a WOULD_PUBLISH');
+    assert.equal(routed.candidate.systemId, 'MT-LAB-BTTS-ESP-v0.1');
+    assert.equal(routed.eligibility, 'ELIGIBLE');
+    assert.equal(routed.executionMode, 'PRODUCTION');
+
+    // 4. Derivación del op_id exacto (sin ejecutar publicación real)
+    const derivedOpId = `op_${routed.candidate.fingerprint.slice(0, 40)}`;
+    assert.match(derivedOpId, /^op_[a-f0-9]{40}$/, 'Debe derivar un op_id canónico con prefijo op_ y 40 caracteres hexadecimales');
+
+    // 5. Garantía de aislamiento y seguridad
+    assert.equal(routed.safety.externalFirestoreWrites, 0, '0 escrituras en Firestore');
+    assert.equal(routed.safety.outboundTelegramMessages, 0, '0 mensajes enviados a Telegram');
+    assert.equal(routed.safety.productionMutations, 0, '0 mutaciones de producción');
 });
