@@ -17,8 +17,10 @@ import {
 
 import { createReadOnlyClientProxy, ReadOnlyViolationError } from '../server/futbolbrain-telegram-poc/read-only-guard.js';
 import { redactSecrets, redactSecretString } from '../server/futbolbrain-telegram-poc/secrets-redaction.js';
-import { parseMadridDateTimeToUTC } from '../server/futbolbrain-telegram-poc/canonical-normalizer.js';
+import { parseMadridDateTimeToUTC, normalizeFutbolBrainTelegramPick } from '../server/futbolbrain-telegram-poc/canonical-normalizer.js';
 import { MESSAGE_TYPES } from '../server/futbolbrain-telegram-poc/message-classifier.js';
+import { normalizeOfficialPickInput, publicPickIdFor } from '../api/_lib/official-pick-data.js';
+import { TheSportsDbProvider } from '../server/sports-data/thesportsdb-provider.js';
 
 const TEST_LOCK_PATH = resolve(process.cwd(), '.test-worker.lock');
 
@@ -260,6 +262,30 @@ test('ReplayRecovery: Inspects recent messages, populates deduplication ledger a
     assert.equal(stats2.myPicksCount, 1, 'My Picks se procesa pasivamente para observabilidad');
 
     cleanupTestLock();
+});
+
+test('Replay recovery reports and quarantines an invalid wrapped T-5 candidate without WOULD_PUBLISH', async () => {
+    const worker = new FutbolBrainTelegramWorker({ isMock: true, silent: true, chatId: 'futbolbrain_chat' });
+    const quarantine = new ParserQuarantine();
+    const recovery = new ReplayRecovery({
+        router: worker.router,
+        healthMonitor: new HealthMonitor(),
+        quarantine,
+        logger: new WorkerLogger({ silent: true })
+    });
+    const stats = await recovery.recoverRecentMessages({
+        client: { client: { getMessages: async () => [{
+            id: 28501,
+            message: 'AI Model **MT-LAB-BTTS-ESP-v0.1**\nFRA-LG1: Granada CF VS FC Andorra\n-Kickoff: 16:15\nMarket BTTS Yes (Bet365): 1.95\nActive Pick',
+            date: Date.parse('2026-09-26T14:12:06.065Z') / 1000
+        }] } },
+        targetEntity: 'futbolbrain_chat',
+        chatId: 'futbolbrain_chat'
+    });
+    assert.equal(stats.wouldPublish, 0);
+    assert.equal(stats.errors, 1);
+    assert.equal(quarantine.count(), 1);
+    assert.equal(quarantine.getEntries()[0].reason, 'LEAGUE_MISMATCH');
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -555,10 +581,11 @@ test('Worker Routing E2E Acceptance: Real fixtures 28440, 28441, 28437 emit acti
     cleanupTestLock();
 });
 
-test('Worker Routing E2E Acceptance: Real message 28499 (Granada CF VS FC Andorra) with markdown bold **systemId** emits active_pick WOULD_PUBLISH and derives op_id', async () => {
+test('Worker routing of reconstructed 28499 fixture emits active_pick WOULD_PUBLISH and derives op_id', async () => {
     cleanupTestLock();
     const worker = new FutbolBrainTelegramWorker({
         mode: 'DRY_RUN',
+        isMock: true,
         lockPath: TEST_LOCK_PATH,
         silent: true,
         chatId: 'futbolbrain_chat'
@@ -568,7 +595,7 @@ test('Worker Routing E2E Acceptance: Real message 28499 (Granada CF VS FC Andorr
     const activePickEvents = [];
     worker.on('active_pick', (data) => { activePickEvents.push(data); });
 
-    // Fixture 28499: ESP-SEG: Granada CF VS FC Andorra (con markdown bold **MT-LAB-BTTS-ESP-v0.1**)
+    // Reconstructed fixture 28499; the captured MTProto message has not been independently compared.
     worker.client.simulateIncomingMessage({
         id: 28499,
         chatId: 'futbolbrain_chat',
@@ -599,6 +626,151 @@ test('Worker Routing E2E Acceptance: Real message 28499 (Granada CF VS FC Andorr
 
     await worker.stop();
     cleanupTestLock();
+});
+
+test('Production worker forwards the canonical selection for 28499 to the official validator without any external I/O', async () => {
+    cleanupTestLock();
+    let captured = null;
+    const providerRequests = [];
+    const sportsDataProvider = new TheSportsDbProvider({
+        apiKey: 'offline-test',
+        silent: true,
+        fetchFn: async (url, options) => {
+            providerRequests.push({ url, options });
+            return {
+                ok: true,
+                status: 200,
+                json: async () => ({ event: [{
+                    idEvent: 'offline-fixture-28499',
+                    strEvent: 'Granada CF vs FC Andorra',
+                    strHomeTeam: 'Granada CF',
+                    strAwayTeam: 'FC Andorra',
+                    strLeague: 'Spanish Segunda Division',
+                    dateEvent: '2026-09-26',
+                    strTime: '14:15:00'
+                }] })
+            };
+        }
+    });
+    const worker = new FutbolBrainTelegramWorker({
+        mode: 'PRODUCTION',
+        isMock: true,
+        lockPath: TEST_LOCK_PATH,
+        silent: true,
+        chatId: 'futbolbrain_chat',
+        sportsDataProvider,
+        processingClock: () => new Date('2026-09-26T14:12:07.000Z'),
+        ingestPick: async input => {
+            captured = input;
+            return { officialPickId: 'test-no-publication', action: 'validated_locally' };
+        }
+    });
+    try {
+        await worker.start();
+        const messageText = 'AI Model **MT-LAB-BTTS-ESP-v0.1**\nYield: 8.99% Hit Rate: 61.80%\n\nESP-SEG: Granada CF VS FC Andorra\n    -Predicted Probability: 54%\n    -Kickoff: 16:15\n\nMarket BTTS Yes (Bet365): 1.95\n\nActive Pick';
+        worker.client.simulateIncomingMessage({
+            id: 28499,
+            chatId: 'futbolbrain_chat',
+            date: new Date('2026-09-26T14:12:06.065Z'),
+            text: messageText
+        });
+        await new Promise(resolve => setTimeout(resolve, 50));
+        assert.ok(captured, 'The production branch must invoke the isolated intake seam');
+        assert.equal(providerRequests.length, 1, 'The daemon-configured provider must participate in routing');
+        assert.match(providerRequests[0].url, /searchevents\.php\?e=Granada_CF_vs_FC_Andorra/);
+        assert.equal(captured.sourceEventId, 'offline-fixture-28499');
+        assert.equal(captured.kickoffAt, '2026-09-26T14:15:00.000Z');
+        assert.equal(captured.parsed.rawSelection, 'Sí');
+        assert.equal(captured.parsed.systemId, 'MT-LAB-BTTS-ESP-v0.1');
+        const official = normalizeOfficialPickInput({
+            event: {
+                sourceEventId: captured.sourceEventId,
+                competition: captured.parsed.competition,
+                homeTeam: captured.parsed.homeTeam,
+                awayTeam: captured.parsed.awayTeam,
+                kickoffAt: captured.kickoffAt
+            },
+            bet: {
+                market: captured.parsed.market,
+                selection: captured.parsed.rawSelection,
+                oddsAtPublication: captured.parsed.odds
+            },
+            system: { id: captured.parsed.systemId, version: 'telegram-active-pick-v1' },
+            source: { provider: 'futbolbrain-telegram', observedAt: captured.now }
+        });
+        assert.equal(official.bet.selection, 'Sí');
+        const routerCandidate = normalizeFutbolBrainTelegramPick(messageText, {
+            telegramMessageId: 28499,
+            observedAt: '2026-09-26T14:12:06.065Z'
+        });
+        assert.equal(publicPickIdFor(official), `op_${routerCandidate.fingerprint.slice(0, 40)}`);
+        assert.deepEqual(worker.getRouterSafetyReport(), {
+            externalFirestoreWrites: 0,
+            outboundTelegramMessages: 0,
+            productionMutations: 0,
+            dryRunActive: true
+        });
+    } finally {
+        await worker.stop();
+        cleanupTestLock();
+    }
+});
+
+test('Production worker rejects a late 28499 before the ingest boundary', async () => {
+    cleanupTestLock();
+    let ingests = 0;
+    const rejected = [];
+    const worker = new FutbolBrainTelegramWorker({
+        mode: 'PRODUCTION', isMock: true, lockPath: TEST_LOCK_PATH,
+        silent: true, chatId: 'futbolbrain_chat',
+        processingClock: () => new Date('2026-09-26T14:16:00.000Z'),
+        ingestPick: async () => { ingests++; throw new Error('ingest must not be called'); }
+    });
+    try {
+        await worker.start();
+        worker.on('ignored_stale_candidate', result => rejected.push(result));
+        worker.client.simulateIncomingMessage({
+            id: 28499, chatId: 'futbolbrain_chat',
+            date: new Date('2026-09-26T14:12:06.065Z'),
+            text: 'AI Model **MT-LAB-BTTS-ESP-v0.1**\nESP-SEG: Granada CF VS FC Andorra\n-Kickoff: 16:15\nMarket BTTS Yes (Bet365): 1.95\nActive Pick'
+        });
+        await new Promise(resolve => setTimeout(resolve, 50));
+        assert.equal(ingests, 0);
+        assert.equal(rejected.length, 1);
+        assert.equal(rejected[0].action, 'IGNORED_STALE_CANDIDATE');
+        assert.equal(worker.getRouterSafetyReport().externalFirestoreWrites, 0);
+    } finally {
+        await worker.stop();
+        cleanupTestLock();
+    }
+});
+
+test('Worker rejects a wrapped known system with an unapproved league before publication routing', async () => {
+    cleanupTestLock();
+    const worker = new FutbolBrainTelegramWorker({
+        mode: 'DRY_RUN', isMock: true, lockPath: TEST_LOCK_PATH,
+        silent: true, chatId: 'futbolbrain_chat'
+    });
+    let activePicks = 0;
+    const invalid = [];
+    try {
+        await worker.start();
+        worker.on('active_pick', () => { activePicks++; });
+        worker.on('ignored_invalid_candidate', result => invalid.push(result));
+        worker.client.simulateIncomingMessage({
+            id: 28500, chatId: 'futbolbrain_chat',
+            date: new Date('2026-09-26T14:12:06.065Z'),
+            text: 'AI Model **MT-LAB-BTTS-ESP-v0.1**\nFRA-LG1: Granada CF VS FC Andorra\n-Kickoff: 16:15\nMarket BTTS Yes (Bet365): 1.95\nActive Pick'
+        });
+        await new Promise(resolve => setTimeout(resolve, 50));
+        assert.equal(activePicks, 0);
+        assert.equal(invalid.length, 1);
+        assert.equal(invalid[0].reason, 'LEAGUE_MISMATCH');
+        assert.equal(worker.getRouterSafetyReport().externalFirestoreWrites, 0);
+    } finally {
+        await worker.stop();
+        cleanupTestLock();
+    }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

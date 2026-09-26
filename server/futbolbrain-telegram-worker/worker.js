@@ -29,7 +29,9 @@ export class FutbolBrainTelegramWorker extends EventEmitter {
         quarantine = new ParserQuarantine(),
         logger = new WorkerLogger({ silent }),
         replayLimit = 20,
-        sportsDataProvider = null
+        sportsDataProvider = null,
+        ingestPick = ingestFutbolBrainTelegramPick,
+        processingClock = () => new Date()
     } = {}) {
         super();
 
@@ -47,6 +49,8 @@ export class FutbolBrainTelegramWorker extends EventEmitter {
         this.autoAttachSignals = Boolean(autoAttachSignals);
         this.replayLimit = replayLimit;
         this.sportsDataProvider = sportsDataProvider;
+        this.ingestPick = ingestPick;
+        this.processingClock = processingClock;
 
         this.lock = new SingleInstanceLock({ lockPath });
         this.reconnectManager = reconnectManager;
@@ -277,15 +281,16 @@ export class FutbolBrainTelegramWorker extends EventEmitter {
                 } else if (routed.action === 'WOULD_PUBLISH') {
                     this.healthMonitor.recordMessageSeen({ type: 'ACTIVE_PICK', timestamp: msgDate });
                     if (this.mode === 'PRODUCTION') {
+                        if (this._rejectExpiredCandidate(routed, msgId)) return;
                         try {
-                            const intakeResult = await ingestFutbolBrainTelegramPick({
+                            const intakeResult = await this.ingestPick({
                                 parsed: {
                                     systemId: routed.candidate.systemId,
                                     homeTeam: routed.candidate.homeTeam,
                                     awayTeam: routed.candidate.awayTeam,
                                     competition: routed.candidate.competition,
                                     market: routed.candidate.market,
-                                    rawSelection: routed.candidate.rawSelection,
+                                    rawSelection: routed.candidate.selection,
                                     odds: routed.candidate.odds,
                                     rawText: text
                                 },
@@ -316,15 +321,16 @@ export class FutbolBrainTelegramWorker extends EventEmitter {
                 } else if (routed.action === 'WOULD_RECORD_PAPER') {
                     this.healthMonitor.recordMessageSeen({ type: 'ACTIVE_PICK', timestamp: msgDate });
                     if (this.mode === 'PRODUCTION') {
+                        if (this._rejectExpiredCandidate(routed, msgId)) return;
                         try {
-                            const intakeResult = await ingestFutbolBrainTelegramPick({
+                            const intakeResult = await this.ingestPick({
                                 parsed: {
                                     systemId: routed.candidate.systemId,
                                     homeTeam: routed.candidate.homeTeam,
                                     awayTeam: routed.candidate.awayTeam,
                                     competition: routed.candidate.competition,
                                     market: routed.candidate.market,
-                                    rawSelection: routed.candidate.rawSelection,
+                                    rawSelection: routed.candidate.selection,
                                     odds: routed.candidate.odds,
                                     rawText: text
                                 },
@@ -365,6 +371,14 @@ export class FutbolBrainTelegramWorker extends EventEmitter {
                         systemId: routed.systemId
                     });
                     this.emit('ignored_unknown_system', routed);
+                } else if (routed.action === 'IGNORED_INVALID_CANDIDATE') {
+                    this.healthMonitor.recordParseError();
+                    this.logger.log(LOG_TAGS.PARSE_FAILED, `Candidato T-5 incompleto o fuera del sistema aprobado (${routed.reason})`, {
+                        messageId: msgId,
+                        systemId: routed.systemId,
+                        reason: routed.reason
+                    });
+                    this.emit('ignored_invalid_candidate', routed);
                 }
             } catch (err) {
                 this.healthMonitor.recordParseError();
@@ -382,6 +396,25 @@ export class FutbolBrainTelegramWorker extends EventEmitter {
                 this.emit('parse_failed', quarantined);
             }
         }
+    }
+
+    _rejectExpiredCandidate(routed, messageId) {
+        const processingAt = this.processingClock();
+        const kickoffAt = new Date(routed.candidate.kickoffAt);
+        if (!Number.isNaN(kickoffAt.getTime()) && kickoffAt.getTime() > processingAt.getTime()) return false;
+        this.healthMonitor.recordParseError();
+        this.logger.log(LOG_TAGS.PARSE_FAILED, 'Mensaje T-5 recibido después del inicio; ingesta omitida', {
+            messageId,
+            systemId: routed.candidate.systemId,
+            kickoffAt: routed.candidate.kickoffAt
+        });
+        this.emit('ignored_stale_candidate', {
+            action: 'IGNORED_STALE_CANDIDATE',
+            systemId: routed.candidate.systemId,
+            telegramMessageId: messageId,
+            kickoffAt: routed.candidate.kickoffAt
+        });
+        return true;
     }
 
     /**

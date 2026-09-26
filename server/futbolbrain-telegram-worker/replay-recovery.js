@@ -1,4 +1,4 @@
-import { classifyTelegramMessage, MESSAGE_TYPES } from '../futbolbrain-telegram-poc/message-classifier.js';
+import { MESSAGE_TYPES } from '../futbolbrain-telegram-poc/message-classifier.js';
 import { LOG_TAGS } from './worker-logger.js';
 
 /**
@@ -100,6 +100,16 @@ export class ReplayRecovery {
                     } else if (result.action === 'EXCLUDED_NON_T5_LISTENER') {
                         stats.ignoredNonT5++;
                         if (this.healthMonitor) this.healthMonitor.recordMessageSeen({ type: 'EXCLUDED_NON_T5_LISTENER', timestamp: msgDate });
+                    } else if (result.action === 'IGNORED_INVALID_CANDIDATE') {
+                        stats.errors++;
+                        if (this.healthMonitor) this.healthMonitor.recordParseError();
+                        if (this.quarantine) this.quarantine.quarantineMessage({
+                            messageId: msg.id,
+                            text,
+                            classification: MESSAGE_TYPES.ACTIVE_PICK,
+                            reason: result.reason,
+                            timestamp: msgDate
+                        });
                     }
                 } catch (err) {
                     stats.errors++;

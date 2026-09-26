@@ -13,6 +13,7 @@ import {
     mapSystemSelection,
     calculateRegistryStake
 } from '../server/system-registry.js';
+import { normalizeSystemId } from '../server/system-registry.js';
 
 test('System Registry defines exactly the 9 approved systems from the master Excel', () => {
     const keys = Object.keys(SYSTEM_REGISTRY);
@@ -43,6 +44,23 @@ test('System Registry defines exactly the 9 approved systems from the master Exc
         'MT - POR1 - v1.0',
         'MT - TUR1 - V1.0'
     ].sort());
+});
+
+test('all nine exact IDs survive Telegram wrappers; registry itself never repairs malformed IDs', () => {
+    for (const id of Object.keys(SYSTEM_REGISTRY)) {
+        assert.equal(normalizeSystemId(id), id);
+        assert.equal(normalizeSystemId(`**${id}**`), id);
+        assert.equal(getSystemDefinition(id), SYSTEM_REGISTRY[id]);
+        assert.equal(getSystemDefinition(`**${id}**`), null);
+        assert.equal(getSystemDefinition(normalizeSystemId(`**${id}**`)), SYSTEM_REGISTRY[id]);
+        assert.equal(getSystemDefinition(`${id}**`), null);
+        assert.equal(getSystemDefinition(`${id}\u200B`), null);
+        assert.equal(getSystemDefinition(` ${id} `), null);
+    }
+    for (const inherited of ['constructor', 'toString', '__proto__']) {
+        assert.equal(getSystemDefinition(inherited), null);
+        assert.equal(isApprovedSystem(inherited), false);
+    }
 });
 
 test('EARLY systems have correct configuration', () => {

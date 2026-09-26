@@ -5,6 +5,14 @@ import { parseMyPicksSummary } from './my-picks-parser.js';
 import { defaultDedupLedger } from './deduplication-ledger.js';
 import { reconcileCandidateWithSportsData, RECONCILIATION_STATUSES } from '../sports-data/sports-data-reconciler.js';
 
+// FutbolBrain's observed codes in the existing worker fixtures differ from
+// registry names for these leagues. Match only these documented equivalents.
+const FUTBOLBRAIN_LEAGUE_ALIASES = Object.freeze({
+    'FRA-L1': 'FRA-LG1',
+    'FRA-L2': 'FRA-LG2',
+    'GER-BL': 'GER-BUN'
+});
+
 /**
  * Router determinista de eventos para la PoC de Ingesta Telegram MTProto.
  * 
@@ -126,6 +134,29 @@ export class TelegramPocRouter {
             }
 
             // ── CASO B: SISTEMAS T-5 (CONFIRMACIÓN T-5) ──
+            // A known ID alone does not make a message publishable. Keep the
+            // candidate inside the same league, selection and data boundaries
+            // as the approved registry before claiming WOULD_PUBLISH.
+            const competitionCode = Object.hasOwn(FUTBOLBRAIN_LEAGUE_ALIASES, normalized.competition)
+                ? FUTBOLBRAIN_LEAGUE_ALIASES[normalized.competition]
+                : normalized.competition;
+            const invalidReason = !normalized.homeTeam || !normalized.awayTeam ? 'MISSING_TEAMS'
+                : !systemDef.allowedLeagues.includes(competitionCode) ? 'LEAGUE_MISMATCH'
+                : normalized.market !== systemDef.market ? 'MARKET_MISMATCH'
+                : !Object.values(systemDef.selections).includes(normalized.selection) ? 'SELECTION_MISMATCH'
+                : !Number.isFinite(normalized.odds) || normalized.odds < 1.01 || normalized.odds > 1000 ? 'INVALID_ODDS'
+                : !normalized.kickoffAt ? 'MISSING_KICKOFF'
+                : null;
+            if (invalidReason) {
+                return {
+                    action: 'IGNORED_INVALID_CANDIDATE',
+                    reason: invalidReason,
+                    systemId: normalized.systemId,
+                    dryRun: this.dryRun,
+                    safety: this._getSafetyReport()
+                };
+            }
+
             // Comprobación de idempotencia y deduplicación
             const dedupCheck = this.dedupLedger.checkDuplicate({
                 fingerprint: normalized.fingerprint,

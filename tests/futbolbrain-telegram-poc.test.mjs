@@ -220,6 +220,7 @@ test('Idempotency & Deduplication: Second reception returns DUPLICATE', async ()
     const alertText = `⚽ ACTIVE PICK ⚽
 Sistema: MT - FRA1 FRA2 - V1.0
 Partido: Lyon vs Rennes
+Liga: FRA-LG1
 Selección: Over 2.5
 Cuota: 1.85
 Hora: 2026-09-20 20:45`;
@@ -256,14 +257,18 @@ test('Idempotency: Multiple distinct picks in the same minute are both processed
     const pickLyon = `⚽ ACTIVE PICK ⚽
 Sistema: MT - FRA1 FRA2 - V1.0
 Partido: Lyon vs Rennes
+Liga: FRA-LG1
 Selección: Over 2.5
-Hora: 2026-09-20 20:45`;
+Hora: 2026-09-20 20:45
+Cuota: 1.85`;
 
     const pickToulouse = `⚽ ACTIVE PICK ⚽
 Sistema: MT - FRA1 FRA2 - V1.0
 Partido: Toulouse vs Le Havre
+Liga: FRA-LG1
 Selección: Over 2.5
-Hora: 2026-09-20 20:45`;
+Hora: 2026-09-20 20:45
+Cuota: 1.85`;
 
     const res1 = await router.processMessage({ text: pickLyon, telegramMessageId: 3001 });
     const res2 = await router.processMessage({ text: pickToulouse, telegramMessageId: 3002 });
@@ -282,8 +287,10 @@ test('Routing: FRA Production T-5 -> WOULD_PUBLISH (dry-run, 0 Firestore writes,
     const text = `⚽ ACTIVE PICK ⚽
 Sistema: MT - FRA1 FRA2 - V1.0
 Partido: Lyon vs Rennes
+Liga: FRA-LG1
 Selección: Over 2.5
-Cuota: 1.85`;
+Cuota: 1.85
+Hora: 2026-09-20 20:45`;
 
     const res = await router.processMessage({ text, telegramMessageId: 4001 });
     assert.equal(res.action, 'WOULD_PUBLISH');
@@ -300,8 +307,10 @@ test('Routing: ESP Production T-5 -> WOULD_PUBLISH (dry-run, 0 Firestore writes,
     const text = `⚽ ACTIVE PICK ⚽
 Sistema: MT-LAB-BTTS-ESP-v0.1
 Partido: Sevilla vs Barcelona
+Liga: ESP-PRE
 Selección: Sí
-Cuota: 1.75`;
+Cuota: 1.75
+Hora: 2026-09-20 21:00`;
 
     const res = await router.processMessage({ text, telegramMessageId: 4002 });
     assert.equal(res.action, 'WOULD_PUBLISH');
@@ -317,8 +326,10 @@ test('Routing: GER Paper T-5 -> WOULD_RECORD_PAPER (dry-run, stake 0%, 0 Firesto
     const text = `⚽ ACTIVE PICK ⚽
 Sistema: MT - GER1 - v1.1
 Partido: Bayern Munich vs Dortmund
+Liga: GER-BUN
 Selección: Over 3.5
-Cuota: 2.10`;
+Cuota: 2.10
+Hora: 2026-09-20 18:30`;
 
     const res = await router.processMessage({ text, telegramMessageId: 5001 });
     assert.equal(res.action, 'WOULD_RECORD_PAPER');
@@ -335,8 +346,10 @@ test('Routing: TUR Paper T-5 -> WOULD_RECORD_PAPER (dry-run, stake 0%, 0 Firesto
     const text = `⚽ ACTIVE PICK ⚽
 Sistema: MT - TUR1 - V1.0
 Partido: Galatasaray vs Besiktas
+Liga: TUR-SUP
 Selección: Team 2 (FT)
-Cuota: 2.40`;
+Cuota: 2.40
+Hora: 2026-09-20 20:45`;
 
     const res = await router.processMessage({ text, telegramMessageId: 5002 });
     assert.equal(res.action, 'WOULD_RECORD_PAPER');
@@ -408,6 +421,18 @@ MT - TUR1 - V1.0: 3`;
 
     assert.equal(routerRes.action, 'MY_PICKS_PROCESSED');
     assert.equal(routerRes.eligibilityModified, false, 'My Picks NUNCA modifica la elegibilidad');
+});
+
+test('My Picks observes all nine systems without changing their exact IDs or publication eligibility', async () => {
+    const ids = Object.keys(SYSTEM_REGISTRY);
+    const text = `My Picks\n${ids.map(id => `${id}: 1`).join('\n')}\nMT - UNKNOWN - v9: 1`;
+    const summary = parseMyPicksSummary(text, { observedAt: '2026-09-26T14:12:06.065Z' });
+    assert.deepEqual(summary.systems.slice(0, ids.length).map(item => item.systemId), ids);
+    assert.equal(summary.systems.at(-1).systemId, 'MT - UNKNOWN - v9');
+    assert.equal(summary.totalPicks, 10);
+    const result = await new TelegramPocRouter().processMessage({ text });
+    assert.equal(result.action, 'MY_PICKS_PROCESSED');
+    assert.equal(result.eligibilityModified, false);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -646,12 +671,9 @@ test('System ID Normalization: Correctly sanitizes Markdown, Telegram formatting
         '`MT-LAB-BTTS-ESP-v0.1`',
         ' MT-LAB-BTTS-ESP-v0.1 ',
         'MT-LAB-BTTS-ESP-v0.1',
-        'MT-LAB-BTTS-ESP-v0.1**',
-        '**MT-LAB-BTTS-ESP-v0.1',
         '_MT-LAB-BTTS-ESP-v0.1_',
         '__MT-LAB-BTTS-ESP-v0.1__',
         '**_MT-LAB-BTTS-ESP-v0.1_**',
-        '~MT-LAB-BTTS-ESP-v0.1~',
         '~~MT-LAB-BTTS-ESP-v0.1~~',
         '\u200B**MT-LAB-BTTS-ESP-v0.1**\u200B',
         '\uFEFF`MT-LAB-BTTS-ESP-v0.1`',
@@ -697,10 +719,51 @@ test('System ID Normalization: Genuinely unknown systems remain strictly rejecte
     assert.equal(getSystemDefinition(parsed.systemId), null);
 });
 
-test('Real Message 28499 Replay: Granada CF vs FC Andorra with **MT-LAB-BTTS-ESP-v0.1** routes to WOULD_PUBLISH and derives op_id', async () => {
+test('Malformed wrappers and invisible characters inside IDs never become approved systems', async () => {
+    const canonical = 'MT-LAB-BTTS-ESP-v0.1';
+    const malformed = [
+        `**${canonical}`, `${canonical}**`, `*${canonical}**`,
+        `**${canonical}**extra`, `**${canonical}** **`,
+        'MT-LAB-\u200BBTTS-ESP-v0.1',
+        'MT-LAB-BTTS-ESP-v0.1\u202E',
+        `**${canonical.toLowerCase()}**`,
+        '**constructor**', '__proto__'
+    ];
+    for (const rawId of malformed) {
+        const parsed = parseFutbolBrainTelegramText(`AI Model ${rawId}\nESP-SEG: Granada CF VS FC Andorra\n-Kickoff: 16:15\nMarket BTTS Yes (Bet365): 1.95\nActive Pick`);
+        assert.equal(getSystemDefinition(parsed.systemId), null, `${JSON.stringify(rawId)} was accepted`);
+        const routed = await new TelegramPocRouter({ expectedChatId: 'test_chat' }).processMessage({
+            text: parsed.rawText, chatId: 'test_chat', telegramMessageId: 90001,
+            observedAt: new Date('2026-09-26T14:12:06.065Z')
+        });
+        assert.equal(routed.action, 'IGNORED_UNKNOWN_SYSTEM', `${JSON.stringify(rawId)} routed to ${routed.action}`);
+    }
+});
+
+test('A wrapped approved system still rejects wrong league, selection, missing odds and missing kickoff', async () => {
+    const valid = 'AI Model **MT-LAB-BTTS-ESP-v0.1**\nESP-SEG: Granada CF VS FC Andorra\n-Kickoff: 16:15\nMarket BTTS Yes (Bet365): 1.95\nActive Pick';
+    const cases = [
+        [valid.replace('ESP-SEG:', 'FRA-LG1:'), 'LEAGUE_MISMATCH'],
+        [valid.replace('ESP-SEG:', 'Partido:'), 'LEAGUE_MISMATCH'],
+        [valid.replace('BTTS Yes', 'BTTS No'), 'SELECTION_MISMATCH'],
+        [valid.replace('Market BTTS Yes (Bet365): 1.95', 'Selección: BTTS Yes'), 'INVALID_ODDS'],
+        [valid.replace('-Kickoff: 16:15\n', ''), 'MISSING_KICKOFF']
+    ];
+    for (const [text, reason] of cases) {
+        const result = await new TelegramPocRouter({ expectedChatId: 'futbolbrain_chat' }).processMessage({
+            text, chatId: 'futbolbrain_chat', observedAt: new Date('2026-09-26T14:12:06.065Z')
+        });
+        assert.equal(result.action, 'IGNORED_INVALID_CANDIDATE');
+        assert.equal(result.reason, reason);
+        assert.equal(result.safety.externalFirestoreWrites, 0);
+        assert.equal(result.safety.outboundTelegramMessages, 0);
+    }
+});
+
+test('Reconstructed 28499 replay: Granada CF vs FC Andorra with bold system ID routes to WOULD_PUBLISH', async () => {
     const router = new TelegramPocRouter({ dryRun: true, expectedChatId: 'futbolbrain_chat' });
 
-    // Fixture fiel del mensaje real 28499 recibido el 26/09/2026 a las 16:12 CEST
+    // Fixture reconstruido para 28499; falta cotejar el texto íntegro capturado de MTProto.
     const realMessage28499Text = 'AI Model **MT-LAB-BTTS-ESP-v0.1**\nYield: 8.99% Hit Rate: 61.80%\n\nESP-SEG: Granada CF VS FC Andorra\n    -Predicted Probability: 54% \n    -Kickoff: 16:15\n\nMarket BTTS Yes (Bet365): 1.95\n\nActive Pick';
 
     // 1. Parsing directo
