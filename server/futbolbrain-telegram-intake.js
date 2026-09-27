@@ -69,12 +69,20 @@ export const parseFutbolBrainTelegramText = (text = '') => {
     const raw = String(text || '').trim();
     if (!raw) return null;
 
-    // Buscar sistema: "System: MT - FRA1 FRA2 - V1.0", "Sistema: ...", "AI Model MT - FRA1 FRA2 - V1.0"
-    const systemMatch = raw.match(/(?:System|Sistema|AI\s*Model)[:\s]\s*([^\r\n]+)/i)
-        || raw.match(/(?:AI Model\s+)?(MT\s*-[^\r\n\s]+[^\r\n]*)/i)
-        || raw.match(/(MT\s*-[^\r\n]+)/i);
-    if (!systemMatch) return null;
-    const systemId = normalizeSystemId(systemMatch[1]);
+    // FutbolBrain may bold the whole header or only the ID. Unwrap the
+    // complete header first so a trailing ** cannot be mistaken for part of
+    // an otherwise valid ID. Never search inside a malformed header for an
+    // MT substring: the registry must receive the entire extracted ID.
+    let systemId = null;
+    for (const rawLine of raw.split(/\r?\n/)) {
+        const header = normalizeSystemId(rawLine);
+        const match = header.match(/^(?:AI\s+Model|System|Sistema)(?:\s*:\s*|\s+)(.+)$/i);
+        if (match) {
+            systemId = normalizeSystemId(match[1]);
+            break;
+        }
+    }
+    if (!systemId) return null;
 
     // Buscar partido y competición:
     // 1. Si existe línea explícita de Partido / Match / Evento (formato clásico / tests):

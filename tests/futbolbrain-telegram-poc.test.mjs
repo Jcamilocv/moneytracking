@@ -719,10 +719,34 @@ test('System ID Normalization: Genuinely unknown systems remain strictly rejecte
     assert.equal(getSystemDefinition(parsed.systemId), null);
 });
 
+test('FutbolBrain header extraction accepts only complete Markdown wrappers around the header or ID', () => {
+    const id = 'MT-LAB-BTTS-ESP-v0.1';
+    const headers = [
+        `**AI Model ${id}**`,
+        `AI Model **${id}**`,
+        `**AI Model: ${id}**`,
+        `AI Model: **${id}**`,
+        `AI Model ${id}`,
+        `System: **${id}**`,
+        `Sistema: ${id}`
+    ];
+    for (const header of headers) {
+        const parsed = parseFutbolBrainTelegramText(`${header}\nESP-SEG: Equipo A VS Equipo B\n-Kickoff: 14:00\nMarket BTTS Yes (Bet365): 1.95\nActive Pick`);
+        assert.equal(parsed?.systemId, id, header);
+    }
+    for (const approvedId of Object.keys(SYSTEM_REGISTRY)) {
+        assert.equal(parseFutbolBrainTelegramText(`**AI Model ${approvedId}**`)?.systemId, approvedId);
+        assert.equal(parseFutbolBrainTelegramText(`AI Model **${approvedId}**`)?.systemId, approvedId);
+    }
+    assert.equal(parseFutbolBrainTelegramText(`**AI Model ${id}\nActive Pick`), null,
+        'An unclosed header must not be rescued by an MT substring search');
+});
+
 test('Malformed wrappers and invisible characters inside IDs never become approved systems', async () => {
     const canonical = 'MT-LAB-BTTS-ESP-v0.1';
     const malformed = [
         `**${canonical}`, `${canonical}**`, `*${canonical}**`,
+        `${canonical}-extra`, 'UNKNOWN-SYSTEM', 'constructor',
         `**${canonical}**extra`, `**${canonical}** **`,
         'MT-LAB-\u200BBTTS-ESP-v0.1',
         'MT-LAB-BTTS-ESP-v0.1\u202E',
@@ -730,6 +754,8 @@ test('Malformed wrappers and invisible characters inside IDs never become approv
         '**constructor**', '__proto__'
     ];
     for (const rawId of malformed) {
+        assert.equal(getSystemDefinition(normalizeSystemId(rawId)), null,
+            `${JSON.stringify(rawId)} must not become a valid isolated system ID`);
         const parsed = parseFutbolBrainTelegramText(`AI Model ${rawId}\nESP-SEG: Granada CF VS FC Andorra\n-Kickoff: 16:15\nMarket BTTS Yes (Bet365): 1.95\nActive Pick`);
         assert.equal(getSystemDefinition(parsed.systemId), null, `${JSON.stringify(rawId)} was accepted`);
         const routed = await new TelegramPocRouter({ expectedChatId: 'test_chat' }).processMessage({
@@ -810,4 +836,28 @@ test('Reconstructed 28499 replay: Granada CF vs FC Andorra with bold system ID r
     assert.equal(routed.safety.externalFirestoreWrites, 0, '0 escrituras en Firestore');
     assert.equal(routed.safety.outboundTelegramMessages, 0, '0 mensajes enviados a Telegram');
     assert.equal(routed.safety.productionMutations, 0, '0 mutaciones de producción');
+});
+
+test('28504 observed bold-header regression reaches WOULD_PUBLISH with a reconstructed valid body', async () => {
+    // Only messageId, time, header and rejected systemId are observed facts.
+    // The remaining fields form an illustrative valid ESP-SEG pick, not a copy of MTProto 28504.
+    const text = '**AI Model MT-LAB-BTTS-ESP-v0.1**\nESP-SEG: Equipo A VS Equipo B\n-Kickoff: 14:00\nMarket BTTS Yes (Bet365): 1.95\nActive Pick';
+    const observedAt = new Date('2026-09-27T11:56:55.000Z'); // 13:56:55 Madrid
+    const parsed = parseFutbolBrainTelegramText(text);
+    assert.equal(parsed.systemId, 'MT-LAB-BTTS-ESP-v0.1');
+    assert.equal(getSystemDefinition('MT-LAB-BTTS-ESP-v0.1**'), null);
+
+    const normalized = normalizeFutbolBrainTelegramPick(text, { telegramMessageId: 28504, observedAt });
+    assert.equal(normalized.systemId, 'MT-LAB-BTTS-ESP-v0.1');
+    assert.equal(normalized.kickoffAt, '2026-09-27T12:00:00.000Z');
+
+    const routed = await new TelegramPocRouter({ dryRun: true, expectedChatId: 'futbolbrain_chat' }).processMessage({
+        text, chatId: 'futbolbrain_chat', telegramMessageId: 28504, observedAt
+    });
+    assert.equal(routed.action, 'WOULD_PUBLISH');
+    assert.equal(routed.candidate.systemId, 'MT-LAB-BTTS-ESP-v0.1');
+    assert.equal(routed.eligibility, 'ELIGIBLE');
+    assert.equal(routed.safety.externalFirestoreWrites, 0);
+    assert.equal(routed.safety.outboundTelegramMessages, 0);
+    assert.equal(routed.safety.productionMutations, 0);
 });

@@ -628,6 +628,37 @@ test('Worker routing of reconstructed 28499 fixture emits active_pick WOULD_PUBL
     cleanupTestLock();
 });
 
+test('Worker dry-run routes the observed 28504 bold header to WOULD_PUBLISH with a reconstructed valid body', async () => {
+    cleanupTestLock();
+    const worker = new FutbolBrainTelegramWorker({
+        mode: 'DRY_RUN', isMock: true, lockPath: TEST_LOCK_PATH,
+        silent: true, chatId: 'futbolbrain_chat'
+    });
+    await worker.start();
+    const activePickEvents = [];
+    worker.on('active_pick', event => activePickEvents.push(event));
+
+    // Only the header, messageId and timestamp are from observed 28504 evidence.
+    worker.client.simulateIncomingMessage({
+        id: 28504,
+        chatId: 'futbolbrain_chat',
+        date: new Date('2026-09-27T11:56:55.000Z'),
+        text: '**AI Model MT-LAB-BTTS-ESP-v0.1**\nESP-SEG: Equipo A VS Equipo B\n-Kickoff: 14:00\nMarket BTTS Yes (Bet365): 1.95\nActive Pick'
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    assert.equal(activePickEvents.length, 1);
+    assert.equal(activePickEvents[0].action, 'WOULD_PUBLISH');
+    assert.equal(activePickEvents[0].candidate.systemId, 'MT-LAB-BTTS-ESP-v0.1');
+    assert.equal(activePickEvents[0].candidate.telegramMessageId, '28504');
+    const safety = worker.getRouterSafetyReport();
+    assert.equal(safety.externalFirestoreWrites, 0);
+    assert.equal(safety.outboundTelegramMessages, 0);
+    assert.equal(safety.productionMutations, 0);
+    await worker.stop();
+    cleanupTestLock();
+});
+
 test('Production worker forwards the canonical selection for 28499 to the official validator without any external I/O', async () => {
     cleanupTestLock();
     let captured = null;
