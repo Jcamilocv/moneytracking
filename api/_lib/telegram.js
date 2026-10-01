@@ -1,6 +1,9 @@
+import { assertNoMorningShadowMutation } from '../../server/morning/shadow-firewall.js';
+
 const appUrl = () => (process.env.PUBLIC_APP_URL || 'https://app.pronosticosmoneytips.com').replace(/\/$/, '');
 
 const telegramRequest = async ({ method, payload }) => {
+    assertNoMorningShadowMutation();
     const token = process.env.TELEGRAM_BOT_TOKEN;
     if (!token) return { configured: false };
 
@@ -70,6 +73,7 @@ export const formatOfficialTelegramMessage = (pick) => {
 };
 
 export const publishOfficialPickToTelegram = async (pick) => {
+    assertNoMorningShadowMutation();
     const chatId = process.env.TELEGRAM_PUBLIC_CHANNEL_ID;
     if (!chatId) return { configured: false };
 

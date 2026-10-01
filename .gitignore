@@ -12,3 +12,6 @@ firestore-debug.log
 .soak-test-report.json
 .telegram-audit-messages.json
 data/
+
+# Morning session and state belong outside the checkout.
+/.morning-private/

@@ -4,14 +4,7 @@ import { normalizeFutbolBrainTelegramPick } from './canonical-normalizer.js';
 import { parseMyPicksSummary } from './my-picks-parser.js';
 import { defaultDedupLedger } from './deduplication-ledger.js';
 import { reconcileCandidateWithSportsData, RECONCILIATION_STATUSES } from '../sports-data/sports-data-reconciler.js';
-
-// FutbolBrain's observed codes in the existing worker fixtures differ from
-// registry names for these leagues. Match only these documented equivalents.
-const FUTBOLBRAIN_LEAGUE_ALIASES = Object.freeze({
-    'FRA-L1': 'FRA-LG1',
-    'FRA-L2': 'FRA-LG2',
-    'GER-BL': 'GER-BUN'
-});
+import { validateCanonicalCandidate } from '../canonical-candidate-validation.js';
 
 /**
  * Router determinista de eventos para la PoC de Ingesta Telegram MTProto.
@@ -137,16 +130,14 @@ export class TelegramPocRouter {
             // A known ID alone does not make a message publishable. Keep the
             // candidate inside the same league, selection and data boundaries
             // as the approved registry before claiming WOULD_PUBLISH.
-            const competitionCode = Object.hasOwn(FUTBOLBRAIN_LEAGUE_ALIASES, normalized.competition)
-                ? FUTBOLBRAIN_LEAGUE_ALIASES[normalized.competition]
-                : normalized.competition;
-            const invalidReason = !normalized.homeTeam || !normalized.awayTeam ? 'MISSING_TEAMS'
-                : !systemDef.allowedLeagues.includes(competitionCode) ? 'LEAGUE_MISMATCH'
-                : normalized.market !== systemDef.market ? 'MARKET_MISMATCH'
-                : !Object.values(systemDef.selections).includes(normalized.selection) ? 'SELECTION_MISMATCH'
-                : !Number.isFinite(normalized.odds) || normalized.odds < 1.01 || normalized.odds > 1000 ? 'INVALID_ODDS'
-                : !normalized.kickoffAt ? 'MISSING_KICKOFF'
-                : null;
+            const checked = validateCanonicalCandidate({
+                systemId: normalized.systemId, competition: normalized.competition,
+                market: normalized.market, selection: normalized.selection,
+                selectionIsCanonical: true, odds: normalized.odds,
+                kickoffAt: normalized.kickoffAt, homeTeam: normalized.homeTeam,
+                awayTeam: normalized.awayTeam
+            }, { now: new Date(observedAt), requireToday: false, enforceKickoffGuard: false });
+            const invalidReason = checked.ok ? null : (checked.reason === 'MISSING_ODDS' ? 'INVALID_ODDS' : checked.reason);
             if (invalidReason) {
                 return {
                     action: 'IGNORED_INVALID_CANDIDATE',

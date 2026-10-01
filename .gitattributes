@@ -1,0 +1,3 @@
+# Keep the removed compromised fixture out of textual diffs until the
+# credential is rotated and repository history can be handled separately.
+tests/t5-baseline-recovery.test.mjs -diff

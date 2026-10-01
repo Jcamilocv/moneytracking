@@ -11,7 +11,7 @@ const makeContentRuntime = () => {
     let storedState = null;
     let storedBridge = {
         endpoint: 'https://app.pronosticosmoneytips.com/api/internal/futbolbrain-local-picks',
-        token: '5fef313299877a21ce5e84acce9d13794a4c3cdb7c662eb74d5ae68119044e13',
+        token: 'x'.repeat(32),
         autoStartVersion: 6
     };
 

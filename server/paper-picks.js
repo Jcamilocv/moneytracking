@@ -2,6 +2,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { getAdminDb } from '../api/_lib/firebase-admin.js';
 import { semanticOfficialPickKey, publicPickIdFor } from '../api/_lib/official-pick-data.js';
 import { logSystemEvent, DEPARTMENTS, EVENT_STATUSES } from '../api/_lib/system-events.js';
+import { assertNoMorningShadowMutation } from './morning/shadow-firewall.js';
 
 export const PAPER_PICKS_COLLECTION = 'paperPicks';
 
@@ -20,6 +21,7 @@ export const recordPaperPick = async ({
     db = null,
     now = new Date()
 } = {}) => {
+    assertNoMorningShadowMutation();
     if (!candidate?.system?.id) throw new Error('Faltan datos del pick paper');
 
     const database = db || getAdminDb();

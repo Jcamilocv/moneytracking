@@ -1,0 +1,45 @@
+[Unit]
+Description=Money Tips Morning SHADOW (%i)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=nobody
+Group=nogroup
+Environment=MORNING_MODE=SHADOW
+Environment=MORNING_STATE_DIRECTORY=/var/lib/moneytips-morning
+Environment=MORNING_SESSION_FILE=/var/lib/moneytips-morning/session.json
+WorkingDirectory=/opt/moneytips-morning
+ExecStart=/usr/bin/flock --nonblock --conflict-exit-code 75 /var/lib/moneytips-morning/run.lock /usr/bin/node /opt/moneytips-morning/server/morning/run-shadow.mjs --%i
+SuccessExitStatus=75
+StateDirectory=moneytips-morning
+StateDirectoryMode=0700
+UMask=0077
+TimeoutStartSec=120
+TimeoutStopSec=10
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectProc=invisible
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/moneytips-morning
+InaccessiblePaths=-/opt/moneytips-t5 -/etc/moneytips
+IPAddressDeny=any
+# Deployment adds only the DNS stub and current FutbolBrain addresses.
+LogRateLimitIntervalSec=60s
+LogRateLimitBurst=20
+StandardOutput=journal
+StandardError=journal

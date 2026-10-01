@@ -3,6 +3,7 @@ import { getAdminDb } from '../api/_lib/firebase-admin.js';
 import { logSystemEvent, DEPARTMENTS, EVENT_STATUSES } from '../api/_lib/system-events.js';
 import { updateAgentState, HQ_UNIT_STATUSES, HQ_UNIT_TYPES } from '../api/_lib/agent-state.js';
 import { resolveCurrentOfficialSeasonBank, getOfficialOwnerUid } from './official-season-bank.js';
+import { assertNoMorningShadowMutation } from './morning/shadow-firewall.js';
 import {
     registerOperationsIncident,
     OPERATIONS_INCIDENT_TYPES,
@@ -505,6 +506,7 @@ export const dispatchOfficialPickAutoCopy = async (pick, {
     ownerUid = null,
     now = new Date()
 } = {}) => {
+    assertNoMorningShadowMutation();
     if (!pick?.id) return { copied: false, error: 'Falta identificador del pick', retryRequired: true };
 
     try {

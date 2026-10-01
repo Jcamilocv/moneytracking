@@ -3,6 +3,7 @@ import { getAdminDb } from '../api/_lib/firebase-admin.js';
 import { normalizeOfficialPickInput, publicPickIdFor, semanticOfficialPickKey } from '../api/_lib/official-pick-data.js';
 import { PUBLICATION_POLICIES } from './official-pick-scheduling.js';
 import { publishOfficialPick, toPublicOfficialPick } from '../api/_lib/official-picks.js';
+import { assertNoMorningShadowMutation } from './morning/shadow-firewall.js';
 
 const MAX_DISPATCH_BATCH = 20;
 const LEASE_MS = 2 * 60 * 1000;
@@ -66,6 +67,7 @@ const findLegacyPublishedDuplicate = async ({ db, semanticDuplicateKey }) => {
 };
 
 export const queueOfficialPick = async (input, { now = new Date() } = {}) => {
+    assertNoMorningShadowMutation();
     const normalized = normalizeOfficialPickInput(input);
     const db = getAdminDb();
     const pickId = publicPickIdFor(normalized);
@@ -110,6 +112,7 @@ export const queueOfficialPick = async (input, { now = new Date() } = {}) => {
 };
 
 export const dispatchQueuedOfficialPick = async ({ pickId, now = new Date() }) => {
+    assertNoMorningShadowMutation();
     const db = getAdminDb();
     const queueRef = db.collection('officialPickQueue').doc(pickId);
     let candidate = null;
@@ -166,6 +169,7 @@ export const dispatchQueuedOfficialPick = async ({ pickId, now = new Date() }) =
         await queueRef.update({
             status: 'published',
             officialPickId: result.pick.id,
+            telegramDeliveryStatus: result.telegramDelivery?.status || 'unknown',
             publishedAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
             leaseUntil: FieldValue.delete()
