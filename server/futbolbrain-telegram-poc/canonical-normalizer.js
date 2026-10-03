@@ -1,4 +1,4 @@
-import { getSystemDefinition } from '../system-registry.js';
+import { getSystemDefinition, normalizeSystemId } from '../system-registry.js';
 import { parseFutbolBrainTelegramText } from '../futbolbrain-telegram-intake.js';
 import { semanticOfficialPickKey } from '../../api/_lib/official-pick-data.js';
 
@@ -6,7 +6,7 @@ import { semanticOfficialPickKey } from '../../api/_lib/official-pick-data.js';
  * Normaliza las variantes conocidas de selección a su representación canónica única.
  */
 export const normalizeSelection = (rawSelection = '', { market = '', systemId = '' } = {}) => {
-    const text = String(rawSelection || '').trim();
+    const text = normalizeSystemId(String(rawSelection || '').trim());
     if (!text) return '';
 
     const lower = text.toLowerCase();

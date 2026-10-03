@@ -861,3 +861,136 @@ test('28504 observed bold-header regression reaches WOULD_PUBLISH with a reconst
     assert.equal(routed.safety.outboundTelegramMessages, 0);
     assert.equal(routed.safety.productionMutations, 0);
 });
+
+test('Real incident 28546 fixture: Eldense VS Real Oviedo with Markdown wrappers routes to WOULD_PUBLISH', async () => {
+    // Exact text from incident message 28546
+    const text = '**AI Model MT-LAB-BTTS-ESP-v0.1**\n**Yield:** __9.62%__ **Hit Rate:** __62.15%__\n\n**ESP-SEG:** __Eldense VS Real Oviedo__\n    -__Predicted Probability: 63% __\n    -__Kickoff: 20:30__\n\n**__Market BTTS Yes (Bet365): 2**__\n\n**Active Pick**';
+    const observedAt = new Date('2026-10-02T18:26:34.000Z');
+
+    // 1. Direct parsing: PASS
+    const parsed = parseFutbolBrainTelegramText(text);
+    assert.ok(parsed, 'PARSER: PASS');
+    assert.equal(parsed.systemId, 'MT-LAB-BTTS-ESP-v0.1', 'SYSTEM: MT-LAB-BTTS-ESP-v0.1');
+    assert.equal(parsed.competition, 'ESP-SEG', 'COMPETITION: ESP-SEG');
+    assert.equal(parsed.homeTeam, 'Eldense');
+    assert.equal(parsed.awayTeam, 'Real Oviedo');
+    assert.equal(parsed.rawSelection, 'BTTS Yes');
+    assert.equal(parsed.odds, 2.0);
+
+    // 2. Registry: PASS
+    const sysDef = getSystemDefinition(parsed.systemId);
+    assert.ok(sysDef, 'REGISTRY: PASS');
+    assert.ok(sysDef.allowedLeagues.includes(parsed.competition));
+
+    // 3. Canonical normalization
+    const normalized = normalizeFutbolBrainTelegramPick(text, { telegramMessageId: 28546, observedAt });
+    assert.equal(normalized.systemId, 'MT-LAB-BTTS-ESP-v0.1');
+    assert.equal(normalized.competition, 'ESP-SEG');
+    assert.equal(normalized.selection, 'Sí');
+    assert.equal(normalized.odds, 2.0);
+    assert.equal(normalized.kickoffAt, '2026-10-02T18:30:00.000Z');
+    assert.equal(normalized.probability, 63);
+
+    // 4. Router: WOULD_PUBLISH (dry-run)
+    const router = new TelegramPocRouter({ dryRun: true, expectedChatId: 'futbolbrain_chat', dedupLedger: new TelegramDeduplicationLedger() });
+    const routed = await router.processMessage({
+        text,
+        chatId: 'futbolbrain_chat',
+        telegramMessageId: 28546,
+        observedAt
+    });
+
+    assert.equal(routed.action, 'WOULD_PUBLISH', 'ROUTER: WOULD_PUBLISH');
+    assert.equal(routed.candidate.systemId, 'MT-LAB-BTTS-ESP-v0.1');
+    assert.equal(routed.candidate.competition, 'ESP-SEG');
+    assert.equal(routed.eligibility, 'ELIGIBLE');
+    assert.equal(routed.safety.externalFirestoreWrites, 0);
+    assert.equal(routed.safety.outboundTelegramMessages, 0);
+    assert.equal(routed.safety.productionMutations, 0);
+});
+
+test('Markdown parser regression matrix: plain text, wrappers, malformed codes and safety boundaries', async () => {
+    const observedAt = new Date('2026-10-02T18:26:34.000Z');
+    const cases = [
+        {
+            name: '1. plain text',
+            text: 'AI Model MT-LAB-BTTS-ESP-v0.1\nESP-SEG: Eldense VS Real Oviedo\n-Kickoff: 20:30\nMarket BTTS Yes (Bet365): 2.00\nActive Pick',
+            expectedAction: 'WOULD_PUBLISH'
+        },
+        {
+            name: '2. system ID with **',
+            text: 'AI Model **MT-LAB-BTTS-ESP-v0.1**\nESP-SEG: Eldense VS Real Oviedo\n-Kickoff: 20:30\nMarket BTTS Yes (Bet365): 2.00\nActive Pick',
+            expectedAction: 'WOULD_PUBLISH'
+        },
+        {
+            name: '3. competition with **',
+            text: 'AI Model MT-LAB-BTTS-ESP-v0.1\n**ESP-SEG:** Eldense VS Real Oviedo\n-Kickoff: 20:30\nMarket BTTS Yes (Bet365): 2.00\nActive Pick',
+            expectedAction: 'WOULD_PUBLISH'
+        },
+        {
+            name: '4. teams with __',
+            text: 'AI Model MT-LAB-BTTS-ESP-v0.1\nESP-SEG: __Eldense__ VS __Real Oviedo__\n-Kickoff: 20:30\nMarket BTTS Yes (Bet365): 2.00\nActive Pick',
+            expectedAction: 'WOULD_PUBLISH'
+        },
+        {
+            name: '5. system + competition + teams with Markdown',
+            text: '**AI Model MT-LAB-BTTS-ESP-v0.1**\n**ESP-SEG:** __Eldense VS Real Oviedo__\n-Kickoff: 20:30\nMarket BTTS Yes (Bet365): 2.00\nActive Pick',
+            expectedAction: 'WOULD_PUBLISH'
+        },
+        {
+            name: '6. market with Markdown',
+            text: 'AI Model MT-LAB-BTTS-ESP-v0.1\nESP-SEG: Eldense VS Real Oviedo\n-Kickoff: 20:30\n**__Market BTTS Yes (Bet365): 2.00**__\nActive Pick',
+            expectedAction: 'WOULD_PUBLISH'
+        },
+        {
+            name: '7. valid historical payload (28499 format)',
+            text: 'AI Model MT-LAB-BTTS-ESP-v0.1\nYield: 8.99% Hit Rate: 61.80%\n\nESP-SEG: Granada CF VS FC Andorra\n    -Predicted Probability: 54% \n    -Kickoff: 16:15\n\nMarket BTTS Yes (Bet365): 1.95\n\nActive Pick',
+            expectedAction: 'WOULD_PUBLISH'
+        },
+        {
+            name: '8. malformed competition fails closed',
+            text: 'AI Model MT-LAB-BTTS-ESP-v0.1\n**INV@LID**: Eldense VS Real Oviedo\n-Kickoff: 20:30\nMarket BTTS Yes (Bet365): 2.00\nActive Pick',
+            expectedAction: 'IGNORED_INVALID_CANDIDATE',
+            expectedReason: 'LEAGUE_MISMATCH'
+        },
+        {
+            name: '9. unauthorized league rejected',
+            text: 'AI Model MT-LAB-BTTS-ESP-v0.1\n**FRA-LG1:** Eldense VS Real Oviedo\n-Kickoff: 20:30\nMarket BTTS Yes (Bet365): 2.00\nActive Pick',
+            expectedAction: 'IGNORED_INVALID_CANDIDATE',
+            expectedReason: 'LEAGUE_MISMATCH'
+        },
+        {
+            name: '10. system PAPER never officially published',
+            text: '**AI Model MT - GER1 - v1.1**\n**GER-BUN:** __Bayern VS Dortmund__\n-Kickoff: 20:30\nMarket Over 3.5 (Bet365): 1.85\nActive Pick',
+            expectedAction: 'WOULD_RECORD_PAPER',
+            executionMode: 'PAPER'
+        },
+        {
+            name: '11. unknown system rejected',
+            text: '**AI Model UNKNOWN-SYSTEM-v9.9**\n**ESP-SEG:** __Eldense VS Real Oviedo__\n-Kickoff: 20:30\nMarket BTTS Yes (Bet365): 2.00\nActive Pick',
+            expectedAction: 'IGNORED_UNKNOWN_SYSTEM'
+        }
+    ];
+
+    for (const c of cases) {
+        const router = new TelegramPocRouter({
+            dryRun: true,
+            expectedChatId: 'futbolbrain_chat',
+            dedupLedger: new TelegramDeduplicationLedger()
+        });
+        const res = await router.processMessage({
+            text: c.text,
+            chatId: 'futbolbrain_chat',
+            observedAt
+        });
+        assert.equal(res.action, c.expectedAction, `${c.name}: action mismatch`);
+        if (c.expectedReason) {
+            assert.equal(res.reason, c.expectedReason, `${c.name}: reason mismatch`);
+        }
+        if (c.executionMode) {
+            assert.equal(res.executionMode, c.executionMode, `${c.name}: executionMode mismatch`);
+        }
+        assert.equal(res.safety.externalFirestoreWrites, 0, `${c.name}: Firestore writes must be 0`);
+        assert.equal(res.safety.outboundTelegramMessages, 0, `${c.name}: Telegram messages must be 0`);
+    }
+});
