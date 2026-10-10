@@ -86,7 +86,7 @@ test('un pick sintético nunca puede desencadenar una notificación de Telegram'
     assert.equal(shouldNotifyTelegramForOfficialPick({ status: 'published', source: { provider: 'money-tips-owned' } }), true);
 });
 
-test('el mensaje de Telegram muestra el comprobante como enlace corto y no revela mercado ni cuota', () => {
+test('el aviso público genérico no identifica una oportunidad Premium', () => {
     const text = formatOfficialTelegramMessage({
         id: 'op_123',
         event: { homeTeam: 'Equipo <Local>', awayTeam: 'Visitante', competition: 'Liga & Copa', kickoffAt: '2026-09-08T19:00:00.000Z' },
@@ -94,14 +94,14 @@ test('el mensaje de Telegram muestra el comprobante como enlace corto y no revel
         source: { evidenceHash: 'abcde12345ffedcba987654321' }
     });
 
-    assert.match(text, /PICK OFICIAL/);
-    assert.match(text, /<a href="https:\/\/app\.pronosticosmoneytips\.com\/\?pick=op_123">Ver pick y comprobante verificable<\/a>/);
-    assert.match(text, /#ABCDE12345/);
-    assert.doesNotMatch(text, /Más de 2,5|Over 2\.5|1\.85/);
-    assert.match(text, /Equipo &lt;Local&gt;/);
+    assert.match(text, /ACTUALIZACIÓN PREMIUM/);
+    assert.match(text, /<a href="https:\/\/app\.pronosticosmoneytips\.com">Abrir Money TracKING<\/a>/);
+    for (const forbidden of ['op_123', 'abcde', 'ABCDE', 'Local', 'Visitante', 'Liga', 'Copa', 'Over', '1.85', '?pick=']) {
+        assert.equal(text.includes(forbidden), false, forbidden);
+    }
 });
 
-test('un aviso retirado explica la duplicidad sin revelar el pick', () => {
+test('un aviso retirado tampoco revela identidad ni enlaces específicos', () => {
     const text = formatOfficialTelegramMessage({
         id: 'op_123',
         status: 'withdrawn',
@@ -109,8 +109,6 @@ test('un aviso retirado explica la duplicidad sin revelar el pick', () => {
         source: { evidenceHash: 'abcde12345ffedcba987654321' }
     });
 
-    assert.match(text, /REGISTRO RETIRADO/);
-    assert.match(text, /duplicidad/);
-    assert.match(text, /Ver pick y comprobante verificable/);
-    assert.doesNotMatch(text, /Más de 2,5|Over 2\.5|1\.85/);
+    assert.equal(text, formatOfficialTelegramMessage({ id: 'op_other', status: 'published' }));
+    assert.doesNotMatch(text, /Norwich|Birmingham|op_123|abcde|duplicidad|\?pick=/);
 });

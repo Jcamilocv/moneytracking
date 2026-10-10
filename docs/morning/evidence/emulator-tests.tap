@@ -1,0 +1,136 @@
+TAP version 13
+# Subtest: concurrent Morning/UI/T5-equivalent inputs share one immutable record and one send
+ok 1 - concurrent Morning/UI/T5-equivalent inputs share one immutable record and one send
+  ---
+  duration_ms: 7021.280209
+  type: 'test'
+  ...
+# Subtest: full Morning batch publishes fifteen via durable queue and repeating request sends nothing
+ok 2 - full Morning batch publishes fifteen via durable queue and repeating request sends nothing
+  ---
+  duration_ms: 631.001125
+  type: 'test'
+  ...
+# Subtest: legacy identity and corrected hour do not rewrite old publication or duplicate it
+ok 3 - legacy identity and corrected hour do not rewrite old publication or duplicate it
+  ---
+  duration_ms: 27.385708
+  type: 'test'
+  ...
+# Subtest: legacy pending queue is reused rather than generating another identity
+ok 4 - legacy pending queue is reused rather than generating another identity
+  ---
+  duration_ms: 31.197291
+  type: 'test'
+  ...
+# Subtest: bounded legacy scan refuses ambiguous duplicates without changes
+ok 5 - bounded legacy scan refuses ambiguous duplicates without changes
+  ---
+  duration_ms: 28.772958
+  type: 'test'
+  ...
+# Subtest: definitive Telegram rejection schedules one-minute retry and later anchors once
+ok 6 - definitive Telegram rejection schedules one-minute retry and later anchors once
+  ---
+  duration_ms: 72.740291
+  type: 'test'
+  ...
+# Subtest: ambiguous timeout stops automatic resend even when manually dispatched again
+ok 7 - ambiguous timeout stops automatic resend even when manually dispatched again
+  ---
+  duration_ms: 54.261542
+  type: 'test'
+  ...
+# Subtest: existing T5 outbox claimed/uncertain prevents a new send; anchor prevents all replays
+ok 8 - existing T5 outbox claimed/uncertain prevents a new send; anchor prevents all replays
+  ---
+  duration_ms: 28.522
+  type: 'test'
+  ...
+# Subtest: legacy record without delivery/anchor requires review rather than a blind send
+ok 9 - legacy record without delivery/anchor requires review rather than a blind send
+  ---
+  duration_ms: 11.614333
+  type: 'test'
+  ...
+# Subtest: crash after send and before anchor remains uncertain and cannot resend
+ok 10 - crash after send and before anchor remains uncertain and cannot resend
+  ---
+  duration_ms: 22.833417
+  type: 'test'
+  ...
+# Subtest: crashed dispatcher lease is recovered into review without repeating uncertain send
+ok 11 - crashed dispatcher lease is recovered into review without repeating uncertain send
+  ---
+  duration_ms: 61.867667
+  type: 'test'
+  ...
+# Subtest: expired queue and retries cannot publish; future timestamps retain due guard
+ok 12 - expired queue and retries cannot publish; future timestamps retain due guard
+  ---
+  duration_ms: 37.2265
+  type: 'test'
+  ...
+# Subtest: public endpoint hides future known ID exactly like missing ID; owner and active Premium keep full data
+ok 13 - public endpoint hides future known ID exactly like missing ID; owner and active Premium keep full data
+  ---
+  duration_ms: 85.989792
+  type: 'test'
+  ...
+# Subtest: public historical response whitelist excludes source, odds, stakes, private metadata and event IDs
+ok 14 - public historical response whitelist excludes source, odds, stakes, private metadata and event IDs
+  ---
+  duration_ms: 32.217667
+  type: 'test'
+  ...
+# Subtest: free reporting cannot reveal future existence or create a report
+ok 15 - free reporting cannot reveal future existence or create a report
+  ---
+  duration_ms: 33.458584
+  type: 'test'
+  ...
+# Subtest: day lookup is bounded and excludes adjacent Madrid days across winter DST boundary
+ok 16 - day lookup is bounded and excludes adjacent Madrid days across winter DST boundary
+  ---
+  duration_ms: 132.967708
+  type: 'test'
+  ...
+# Subtest: Morning secret cannot access owner/admin actions
+ok 17 - Morning secret cannot access owner/admin actions
+  ---
+  duration_ms: 4.375375
+  type: 'test'
+  ...
+# Subtest: Telegram transport classifies definitive rejection vs uncertain failure without raw URL leakage
+ok 18 - Telegram transport classifies definitive rejection vs uncertain failure without raw URL leakage
+  ---
+  duration_ms: 4.419708
+  type: 'test'
+  ...
+# Subtest: disabling Morning pauses only its unstarted queue entries; UI/T5-equivalent queue still works
+ok 19 - disabling Morning pauses only its unstarted queue entries; UI/T5-equivalent queue still works
+  ---
+  duration_ms: 63.6215
+  type: 'test'
+  ...
+# Subtest: kickoff crossing between ledger commit and Telegram claim prevents a late send
+ok 20 - kickoff crossing between ledger commit and Telegram claim prevents a late send
+  ---
+  duration_ms: 18.163542
+  type: 'test'
+  ...
+# Subtest: public historical feed remains visible even with more than fifty active Premium records
+ok 21 - public historical feed remains visible even with more than fifty active Premium records
+  ---
+  duration_ms: 22.85475
+  type: 'test'
+  ...
+1..21
+# tests 21
+# suites 0
+# pass 21
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 8599.602334

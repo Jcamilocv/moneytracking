@@ -1,0 +1,36 @@
+{
+  "status": "BLOCKED",
+  "localVerification": "PASS",
+  "tests": 92,
+  "suites": [
+    {
+      "suite": "local-tests.tap",
+      "passed": 61,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "emulator-tests.tap",
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "firestore-rules.tap",
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    }
+  ],
+  "build": "PASS_WITH_EXISTING_BUNDLE_SIZE_WARNING",
+  "syntaxFiles": 24,
+  "independentQA": "PENDING",
+  "globalPremiumProtection": "BLOCKED_BY_UNCHANGED_T5_FORMATTER",
+  "t5RuntimeChanges": 0,
+  "productionChanges": 0,
+  "productionReads": 0,
+  "realTelegramMessages": 0,
+  "secretsHandled": 0,
+  "morningActivated": false,
+  "base": "f8e54ff2447bc94962dc245d8aa6dea37d133935"
+}

@@ -1,0 +1,376 @@
+TAP version 13
+# Subtest: normalizes an approved visible pick with its server-owned policy
+ok 1 - normalizes an approved visible pick with its server-owned policy
+  ---
+  duration_ms: 18.979041
+  type: 'test'
+  ...
+# Subtest: uses T-minus-five only for the approved systems
+ok 2 - uses T-minus-five only for the approved systems
+  ---
+  duration_ms: 0.470667
+  type: 'test'
+  ...
+# Subtest: rejects unapproved systems, mismatched markets, and incomplete timing
+ok 3 - rejects unapproved systems, mismatched markets, and incomplete timing
+  ---
+  duration_ms: 0.349917
+  type: 'test'
+  ...
+# Subtest: rejects future-day picks even if a browser exposes a time
+ok 4 - rejects future-day picks even if a browser exposes a time
+  ---
+  duration_ms: 0.218125
+  type: 'test'
+  ...
+# Subtest: source reads 0 complete entries in exactly one GET
+ok 5 - source reads 0 complete entries in exactly one GET
+  ---
+  duration_ms: 24.632416
+  type: 'test'
+  ...
+# Subtest: source reads 15 complete entries in exactly one GET
+ok 6 - source reads 15 complete entries in exactly one GET
+  ---
+  duration_ms: 1.411042
+  type: 'test'
+  ...
+# Subtest: source reads 108 complete entries in exactly one GET
+ok 7 - source reads 108 complete entries in exactly one GET
+  ---
+  duration_ms: 1.030583
+  type: 'test'
+  ...
+# Subtest: source reads 200 complete entries in exactly one GET
+ok 8 - source reads 200 complete entries in exactly one GET
+  ---
+  duration_ms: 2.491167
+  type: 'test'
+  ...
+# Subtest: source fails closed: 201
+ok 9 - source fails closed: 201
+  ---
+  duration_ms: 1.145625
+  type: 'test'
+  ...
+# Subtest: source fails closed: malformed last entry
+ok 10 - source fails closed: malformed last entry
+  ---
+  duration_ms: 0.808375
+  type: 'test'
+  ...
+# Subtest: source fails closed: has more
+ok 11 - source fails closed: has more
+  ---
+  duration_ms: 0.568584
+  type: 'test'
+  ...
+# Subtest: source fails closed: truncated
+ok 12 - source fails closed: truncated
+  ---
+  duration_ms: 0.396834
+  type: 'test'
+  ...
+# Subtest: source fails closed: pagination
+ok 13 - source fails closed: pagination
+  ---
+  duration_ms: 1.42325
+  type: 'test'
+  ...
+# Subtest: source bounds streaming body and applies timeout while reading body
+ok 14 - source bounds streaming body and applies timeout while reading body
+  ---
+  duration_ms: 20.997125
+  type: 'test'
+  ...
+# Subtest: source does not follow authorization failure 302
+ok 15 - source does not follow authorization failure 302
+  ---
+  duration_ms: 0.250916
+  type: 'test'
+  ...
+# Subtest: source does not follow authorization failure 401
+ok 16 - source does not follow authorization failure 401
+  ---
+  duration_ms: 0.230125
+  type: 'test'
+  ...
+# Subtest: source does not follow authorization failure 403
+ok 17 - source does not follow authorization failure 403
+  ---
+  duration_ms: 0.289708
+  type: 'test'
+  ...
+# Subtest: source pins origin and returns sanitized errors
+ok 18 - source pins origin and returns sanitized errors
+  ---
+  duration_ms: 0.371416
+  type: 'test'
+  ...
+# Subtest: naive source time is UTC, explicit offsets agree, malformed dates reject
+ok 19 - naive source time is UTC, explicit offsets agree, malformed dates reject
+  ---
+  duration_ms: 0.470542
+  type: 'test'
+  ...
+# Subtest: 10:00 Madrid window handles summer, winter and DST; no catchup at 13/16
+ok 20 - 10:00 Madrid window handles summer, winter and DST; no catchup at 13/16
+  ---
+  duration_ms: 0.299792
+  type: 'test'
+  ...
+# Subtest: batch rejects started, next-day, wrong leagues, markets, odds and unconfirmed entry
+ok 21 - batch rejects started, next-day, wrong leagues, markets, odds and unconfirmed entry
+  ---
+  duration_ms: 4.158
+  type: 'test'
+  ...
+# Subtest: all three observed EARLY market tuples preserve quotes and server-owned stake
+ok 22 - all three observed EARLY market tuples preserve quotes and server-owned stake
+  ---
+  duration_ms: 1.619708
+  type: 'test'
+  ...
+# Subtest: validation of duplicate or oversized batch occurs before any writes
+ok 23 - validation of duplicate or oversized batch occurs before any writes
+  ---
+  duration_ms: 14.277334
+  type: 'test'
+  ...
+# Subtest: semantic duplicates differing in source IDs collapse within batch
+ok 24 - semantic duplicates differing in source IDs collapse within batch
+  ---
+  duration_ms: 0.420084
+  type: 'test'
+  ...
+# Subtest: bounded handler handles zero and several; fail-closed auth, method, disabled and invalid
+ok 25 - bounded handler handles zero and several; fail-closed auth, method, disabled and invalid
+  ---
+  duration_ms: 1.306125
+  type: 'test'
+  ...
+# Subtest: handler queues all first and leaves undispatched entries to existing durable dispatcher
+ok 26 - handler queues all first and leaves undispatched entries to existing durable dispatcher
+  ---
+  duration_ms: 0.55975
+  type: 'test'
+  ...
+# Subtest: submission drops unknown source data; response logs only sanitized aggregates
+ok 27 - submission drops unknown source data; response logs only sanitized aggregates
+  ---
+  duration_ms: 0.877959
+  type: 'test'
+  ...
+# Subtest: publisher claims before I/O and never retries an ambiguous submission or runs outside window
+ok 28 - publisher claims before I/O and never retries an ambiguous submission or runs outside window
+  ---
+  duration_ms: 0.668917
+  type: 'test'
+  ...
+# Subtest: protected key reader rejects permission widening and symlinks; durable slot refuses replay
+ok 29 - protected key reader rejects permission widening and symlinks; durable slot refuses replay
+  ---
+  duration_ms: 8.932416
+  type: 'test'
+  ...
+# Subtest: submission response is bounded and timed out even after headers arrive
+ok 30 - submission response is bounded and timed out even after headers arrive
+  ---
+  duration_ms: 22.657833
+  type: 'test'
+  ...
+# Subtest: VPS package is Node-only and contains no T5, Telegram or DB runtime
+ok 31 - VPS package is Node-only and contains no T5, Telegram or DB runtime
+  ---
+  duration_ms: 12.099291
+  type: 'test'
+  ...
+# Subtest: schedule reuses existing unit, flock and shadow smoke; disabled until explicit enable
+ok 32 - schedule reuses existing unit, flock and shadow smoke; disabled until explicit enable
+  ---
+  duration_ms: 3.872833
+  type: 'test'
+  ...
+# Subtest: network drop-in keeps deny-all and uses only bounded approved DNS IPs
+ok 33 - network drop-in keeps deny-all and uses only bounded approved DNS IPs
+  ---
+  duration_ms: 3.598
+  type: 'test'
+  ...
+# Subtest: canonical identity exactly matches committed T5 reference, including Madrid DST boundaries
+ok 34 - canonical identity exactly matches committed T5 reference, including Madrid DST boundaries
+  ---
+  duration_ms: 26.4205
+  type: 'test'
+  ...
+# Subtest: un pick oficial normalizado tiene una identidad y evidencia deterministas
+ok 35 - un pick oficial normalizado tiene una identidad y evidencia deterministas
+  ---
+  duration_ms: 18.639041
+  type: 'test'
+  ...
+# Subtest: un cambio de hora de origen no crea otra identidad para el mismo pick del día
+ok 36 - un cambio de hora de origen no crea otra identidad para el mismo pick del día
+  ---
+  duration_ms: 0.431458
+  type: 'test'
+  ...
+# Subtest: la política de stake aplica el factor inicial de producción controlada
+ok 37 - la política de stake aplica el factor inicial de producción controlada
+  ---
+  duration_ms: 0.458416
+  type: 'test'
+  ...
+# Subtest: un sistema inmediato queda listo en el momento observado, no en T-5
+ok 38 - un sistema inmediato queda listo en el momento observado, no en T-5
+  ---
+  duration_ms: 0.344417
+  type: 'test'
+  ...
+# Subtest: un pick oficial rechaza una política de publicación desconocida
+ok 39 - un pick oficial rechaza una política de publicación desconocida
+  ---
+  duration_ms: 0.235625
+  type: 'test'
+  ...
+# Subtest: un pick oficial rechaza una cuota o fecha inválida
+ok 40 - un pick oficial rechaza una cuota o fecha inválida
+  ---
+  duration_ms: 0.104334
+  type: 'test'
+  ...
+# Subtest: los registros técnicos no aparecen en el feed público de picks
+ok 41 - los registros técnicos no aparecen en el feed público de picks
+  ---
+  duration_ms: 0.072709
+  type: 'test'
+  ...
+# Subtest: un pick sintético nunca puede desencadenar una notificación de Telegram
+ok 42 - un pick sintético nunca puede desencadenar una notificación de Telegram
+  ---
+  duration_ms: 0.051125
+  type: 'test'
+  ...
+# Subtest: el aviso público genérico no identifica una oportunidad Premium
+ok 43 - el aviso público genérico no identifica una oportunidad Premium
+  ---
+  duration_ms: 0.296292
+  type: 'test'
+  ...
+# Subtest: un aviso retirado tampoco revela identidad ni enlaces específicos
+ok 44 - un aviso retirado tampoco revela identidad ni enlaces específicos
+  ---
+  duration_ms: 0.330708
+  type: 'test'
+  ...
+# Subtest: las incidencias públicas agregan categorías sin exponer el usuario que reporta
+ok 45 - las incidencias públicas agregan categorías sin exponer el usuario que reporta
+  ---
+  duration_ms: 0.723209
+  type: 'test'
+  ...
+# Subtest: una revisión cerrada conserva su resolución pública
+ok 46 - una revisión cerrada conserva su resolución pública
+  ---
+  duration_ms: 0.073459
+  type: 'test'
+  ...
+# Subtest: la publicación pública omite apuestas pendientes y produce una huella estable
+ok 47 - la publicación pública omite apuestas pendientes y produce una huella estable
+  ---
+  duration_ms: 1.597583
+  type: 'test'
+  ...
+# Subtest: identifica solo el canal privado operativo por tipo y título
+ok 48 - identifica solo el canal privado operativo por tipo y título
+  ---
+  duration_ms: 0.706833
+  type: 'test'
+  ...
+# Subtest: no acepta actualizaciones de canales con título diferente
+ok 49 - no acepta actualizaciones de canales con título diferente
+  ---
+  duration_ms: 0.077042
+  type: 'test'
+  ...
+# Subtest: reconoce los metadatos de un canal reenviado al bot sin usar el contenido
+ok 50 - reconoce los metadatos de un canal reenviado al bot sin usar el contenido
+  ---
+  duration_ms: 0.063666
+  type: 'test'
+  ...
+# Subtest: normaliza una alta manual de Premium sin aceptar campos inesperados
+ok 51 - normaliza una alta manual de Premium sin aceptar campos inesperados
+  ---
+  duration_ms: 0.811958
+  type: 'test'
+  ...
+# Subtest: rechaza un correo, acción o plan que no sean válidos
+ok 52 - rechaza un correo, acción o plan que no sean válidos
+  ---
+  duration_ms: 0.597667
+  type: 'test'
+  ...
+# Subtest: una alta manual crea acceso mensual activo durante 31 días
+ok 53 - una alta manual crea acceso mensual activo durante 31 días
+  ---
+  duration_ms: 0.9095
+  type: 'test'
+  ...
+# Subtest: una renovación puede empezar cuando acaba el acceso ya vigente
+ok 54 - una renovación puede empezar cuando acaba el acceso ya vigente
+  ---
+  duration_ms: 0.71125
+  type: 'test'
+  ...
+# Subtest: la revocación corta el acceso sin borrar el historial de la suscripción
+ok 55 - la revocación corta el acceso sin borrar el historial de la suscripción
+  ---
+  duration_ms: 0.173209
+  type: 'test'
+  ...
+# Subtest: la duración anual contempla un año completo
+ok 56 - la duración anual contempla un año completo
+  ---
+  duration_ms: 0.0555
+  type: 'test'
+  ...
+# Subtest: PremiumPay limits checkout creation to the two published plans
+ok 57 - PremiumPay limits checkout creation to the two published plans
+  ---
+  duration_ms: 0.585334
+  type: 'test'
+  ...
+# Subtest: PremiumPay callback authorization requires the exact API key
+ok 58 - PremiumPay callback authorization requires the exact API key
+  ---
+  duration_ms: 0.298542
+  type: 'test'
+  ...
+# Subtest: PremiumPay only activates completed payment statuses
+ok 59 - PremiumPay only activates completed payment statuses
+  ---
+  duration_ms: 0.248167
+  type: 'test'
+  ...
+# Subtest: una suscripción activa y no vencida concede acceso Premium
+ok 60 - una suscripción activa y no vencida concede acceso Premium
+  ---
+  duration_ms: 0.400417
+  type: 'test'
+  ...
+# Subtest: un acceso vencido, cancelado o sin fecha no concede Premium
+ok 61 - un acceso vencido, cancelado o sin fecha no concede Premium
+  ---
+  duration_ms: 0.066042
+  type: 'test'
+  ...
+1..61
+# tests 61
+# suites 0
+# pass 61
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 362.569875

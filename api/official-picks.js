@@ -216,6 +216,12 @@ const handleReport = async (req, res) => {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
     const reporterUid = await getTokenUid(req);
     if (!reporterUid) return res.status(401).json({ error: 'Inicia sesión para reportar una incidencia.' });
+    if (!isValidPickId(req.body?.pickId)) return res.status(400).json({ error: 'Identificador de pick no válido' });
+    // Reporting must not act as an existence oracle for an active Premium ID.
+    const audience = await getAudience(req);
+    if (!await getOfficialPick(req.body.pickId, audience)) {
+        return res.status(404).json({ error: 'El comprobante no existe o no es público' });
+    }
     const result = await submitOfficialPickReport({
         pickId: req.body?.pickId,
         reporterUid,
@@ -237,6 +243,8 @@ const handleAdminReports = async (req, res) => {
 };
 
 export default async function handler(req, res) {
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Vary', 'Authorization');
     try {
         if (req.query.mode === 'premiumpay-create') return await handlePremiumPayCheckout(req, res);
         if (req.query.mode === 'premiumpay-callback') return await handlePremiumPayCallback(req, res);
@@ -249,11 +257,9 @@ export default async function handler(req, res) {
             if (!isValidPickId(pickId)) return res.status(400).json({ error: 'Identificador de pick no válido' });
             const result = await getOfficialPick(pickId, audience);
             if (!result) return res.status(404).json({ error: 'El comprobante no existe o no es público' });
-            res.setHeader('Cache-Control', audience.canViewActiveDetails ? 'private, no-store' : 'public, s-maxage=60, stale-while-revalidate=300');
             return res.status(200).json({ schemaVersion: 1, ...result });
         }
 
-        res.setHeader('Cache-Control', audience.canViewActiveDetails ? 'private, no-store' : 'public, s-maxage=30, stale-while-revalidate=120');
         return res.status(200).json({ schemaVersion: 1, picks: await listOfficialPicks(req.query.limit, audience) });
     } catch (error) {
         if (req.query.mode === 'premiumpay-create') return res.status(400).json({ error: error.message || 'No se pudo preparar el pago.' });

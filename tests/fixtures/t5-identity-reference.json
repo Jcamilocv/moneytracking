@@ -1,0 +1,60 @@
+{
+  "referenceCommit": "e17cdad6d7172c22ecfba3aac3368f358c94fed6",
+  "referenceFile": "api/_lib/official-pick-data.js",
+  "cases": [
+    {
+      "input": {
+        "event": {
+          "kickoffAt": "2026-10-11T13:00:00Z",
+          "competition": "ITA-SRA",
+          "homeTeam": "Ficción FC",
+          "awayTeam": "Visitor"
+        },
+        "bet": {
+          "market": "Ambos equipos marcan",
+          "selection": "No"
+        },
+        "system": {
+          "id": "MT - ITA1 - V1.0"
+        }
+      },
+      "expected": "0806dc8023ec7970973c2607ae22b7b1b8c3d81d9ee57f973c800cbc06bfdcb4"
+    },
+    {
+      "input": {
+        "event": {
+          "kickoffAt": "2026-10-25T23:30:00Z",
+          "competition": "FRA-LG1",
+          "homeTeam": "Home",
+          "awayTeam": "Away"
+        },
+        "bet": {
+          "market": "Total de goles",
+          "selection": "Más de 2,5 goles"
+        },
+        "system": {
+          "id": "MT - FRA1 FRA2 - V1.0"
+        }
+      },
+      "expected": "3a5ad305136c6b5c1de59dc446d8590c8167538c3da734f4399bb76b1555fa73"
+    },
+    {
+      "input": {
+        "event": {
+          "kickoffAt": "2027-03-28T08:00:00Z",
+          "competition": "ENG-PRE",
+          "homeTeam": "Home",
+          "awayTeam": "Away"
+        },
+        "bet": {
+          "market": "Total de goles",
+          "selection": "Menos de 3,5 goles"
+        },
+        "system": {
+          "id": "MT - Premier League 02.5"
+        }
+      },
+      "expected": "0ebc2d011aa971372c8c53c6713e698456ed405422053634842e682a4816f9a9"
+    }
+  ]
+}

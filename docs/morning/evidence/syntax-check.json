@@ -1,0 +1,98 @@
+[
+  {
+    "file": "api/admin/official-picks.js",
+    "pass": true
+  },
+  {
+    "file": "api/lib/official-pick-data.js",
+    "pass": true
+  },
+  {
+    "file": "api/lib/official-picks.js",
+    "pass": true
+  },
+  {
+    "file": "api/lib/telegram-delivery.js",
+    "pass": true
+  },
+  {
+    "file": "api/lib/telegram.js",
+    "pass": true
+  },
+  {
+    "file": "api/lib/timezone.js",
+    "pass": true
+  },
+  {
+    "file": "api/official-picks.js",
+    "pass": true
+  },
+  {
+    "file": "scripts/morning-egress-config.mjs",
+    "pass": true
+  },
+  {
+    "file": "scripts/morning-publish-runtime.mjs",
+    "pass": true
+  },
+  {
+    "file": "server/canonical-candidate-validation.js",
+    "pass": true
+  },
+  {
+    "file": "server/morning/candidate.js",
+    "pass": true
+  },
+  {
+    "file": "server/morning/ingestion.js",
+    "pass": true
+  },
+  {
+    "file": "server/morning/one-shot.js",
+    "pass": true
+  },
+  {
+    "file": "server/morning/publish-client.js",
+    "pass": true
+  },
+  {
+    "file": "server/morning/run-publisher.mjs",
+    "pass": true
+  },
+  {
+    "file": "server/morning/session-provider.js",
+    "pass": true
+  },
+  {
+    "file": "server/morning/source-client.js",
+    "pass": true
+  },
+  {
+    "file": "server/official-pick-queue.js",
+    "pass": true
+  },
+  {
+    "file": "server/system-registry.js",
+    "pass": true
+  },
+  {
+    "file": "tests/fixtures/morning.js",
+    "pass": true
+  },
+  {
+    "file": "tests/morning-definitivo.test.mjs",
+    "pass": true
+  },
+  {
+    "file": "tests/morning-emulator.test.mjs",
+    "pass": true
+  },
+  {
+    "file": "tests/morning-runtime.test.mjs",
+    "pass": true
+  },
+  {
+    "file": "tests/official-pick-data.test.mjs",
+    "pass": true
+  }
+]

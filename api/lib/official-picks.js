@@ -2,7 +2,8 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { getAdminDb } from './firebase-admin.js';
 import { normalizeOfficialPickInput, publicPickIdFor } from './official-pick-data.js';
 import { attachOfficialPickReviewSummaries } from './official-pick-reports.js';
-import { publishOfficialPickToTelegram } from './telegram.js';
+import { publishOfficialPickToTelegram, TelegramRequestError } from './telegram.js';
+import { deliverOfficialPickTelegramOnce } from './telegram-delivery.js';
 import { stakeRecommendationForOfficialPick } from '../../server/money-tips-stake-policy.js';
 
 const toPlainValue = (value) => {
@@ -40,34 +41,30 @@ const isPickStillActive = (pick, now = new Date()) => {
     return !Number.isNaN(kickoffAt.getTime()) && kickoffAt.getTime() > now.getTime();
 };
 
-// El público puede auditar la existencia, el evento, la hora y, tras el inicio,
-// la cuota registrada. Mercado, selección y sistema permanecen reservados para
-// Premium para que el histórico no revele mecánicamente picks futuros.
+// Future events are absent from public responses, including direct-ID reads.
+// Historical event summaries are whitelisted; strategy/odds/stake stay private.
 export const pickForAudience = (pick, { canViewActiveDetails = false, now = new Date() } = {}) => {
-    if (pick.status === 'withdrawn') {
-        return {
-            ...pick,
-            isLocked: true,
-            isPublicSummary: true,
-            isWithdrawn: true,
-            bet: { market: null, selection: null, oddsAtPublication: null },
-            system: { id: null, version: null }
-        };
-    }
-    if (canViewActiveDetails) return { ...pick, isLocked: false, isPublicSummary: false };
-
-    const isActive = isPickStillActive(pick, now);
-
+    if (canViewActiveDetails) return { ...pick, isLocked: false, isPublicSummary: false,
+        ...(pick.status === 'withdrawn' ? { isWithdrawn: true } : {}) };
+    const kickoffAt = new Date(pick?.event?.kickoffAt);
+    if (!Number.isFinite(kickoffAt.getTime()) || isPickStillActive(pick, now)) return null;
+    // Public response is a whitelist, not a spread of the private document.
+    // Future/unknown events are absent even when their per-pick ID is known.
     return {
-        ...pick,
-        isLocked: isActive,
+        id: pick.id, status: pick.status,
+        event: { homeTeam: pick.event.homeTeam, awayTeam: pick.event.awayTeam,
+            competition: pick.event.competition, kickoffAt: kickoffAt.toISOString() },
+        publishedAt: pick.publishedAt,
+        isLocked: true,
         isPublicSummary: true,
         bet: {
             market: null,
             selection: null,
-            oddsAtPublication: isActive ? null : pick.bet?.oddsAtPublication ?? null
+            oddsAtPublication: null, recommendedStakePct: null, baseStakePct: null, confidenceFactor: null
         },
-        system: { id: null, version: null }
+        system: { id: null, version: null },
+        settlement: pick.settlement ? { status: pick.settlement.status,
+            regularTimeScore: pick.settlement.regularTimeScore || null, settledAt: pick.settlement.settledAt || null } : null
     };
 };
 
@@ -81,17 +78,20 @@ export const isPublicOfficialPickData = (data = {}) => (
 // dejar el entorno de pruebas ni aparecer como una recomendación real.
 export const shouldNotifyTelegramForOfficialPick = (pick) => isPublicOfficialPickData(pick);
 
-export const publishOfficialPick = async (input) => {
+export const publishOfficialPick = async (input, { now = new Date(), db = getAdminDb(),
+    send = publishOfficialPickToTelegram, clock = () => new Date() } = {}) => {
     const normalized = normalizeOfficialPickInput(input);
-    const db = getAdminDb();
+    if (normalized.event.kickoffAt.getTime() <= now.getTime() + 60_000) throw new Error('PICK_KICKOFF_EXPIRED');
     const pickId = publicPickIdFor(normalized);
     const pickRef = db.collection('officialPicks').doc(pickId);
     const eventRef = pickRef.collection('events').doc('published');
     let created = false;
 
     await db.runTransaction(async (transaction) => {
+        created = false;
         const existing = await transaction.get(pickRef);
         if (existing.exists) return;
+        if (normalized.event.kickoffAt.getTime() <= clock().getTime() + 60_000) throw new Error('PICK_KICKOFF_EXPIRED');
         created = true;
         transaction.set(pickRef, {
             ...normalized,
@@ -111,44 +111,48 @@ export const publishOfficialPick = async (input) => {
     const snapshot = await pickRef.get();
     const pick = withStakeRecommendation(toPublicOfficialPick(snapshot));
 
-    const telegramAnchorRef = pickRef.collection('events').doc('telegram_anchor');
-    const telegramAnchor = await telegramAnchorRef.get();
-    if (shouldNotifyTelegramForOfficialPick(pick) && !telegramAnchor.exists) {
-        const telegram = await publishOfficialPickToTelegram(pick);
-        if (telegram.configured) {
-            await telegramAnchorRef.set({
-                type: 'telegram_anchor',
-                chatId: telegram.chatId,
-                messageId: telegram.messageId,
-                permalink: telegram.permalink,
-                createdAt: FieldValue.serverTimestamp()
-            });
-        }
-    }
-
-    return { created, pick };
+    const telegramDelivery = shouldNotifyTelegramForOfficialPick(pick)
+        ? await deliverOfficialPickTelegramOnce({ db, pickRef, pick, allowFreshClaim: created,
+            send: async value => {
+                // A slow transaction must not turn a valid initial check into
+                // a publication after kickoff. This failure is definitely unsent.
+                if (new Date(value.event.kickoffAt).getTime() <= clock().getTime() + 60_000) {
+                    throw new TelegramRequestError(true);
+                }
+                return send(value);
+            } })
+        : { status: 'not_applicable' };
+    return { created, pick, telegramDelivery };
 };
 
 export const listOfficialPicks = async (limit = 20, audience = {}) => {
     const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
     const scanLimit = Math.min(safeLimit + 10, 50);
-    const snapshot = await getAdminDb().collection('officialPicks').orderBy('publishedAt', 'desc').limit(scanLimit).get();
+    const collection = getAdminDb().collection('officialPicks');
+    const query = audience.canViewActiveDetails ? collection.orderBy('publishedAt', 'desc')
+        : collection.where('event.kickoffAt', '<=', Timestamp.fromDate(audience.now || new Date()))
+            .orderBy('event.kickoffAt', 'desc');
+    const snapshot = await query.limit(scanLimit).get();
     const picks = snapshot.docs
         .filter((document) => isPublicOfficialPickData(document.data()))
         .slice(0, safeLimit)
         .map((document) => withStakeRecommendation(toPublicOfficialPick(document)));
     const reviewed = await attachOfficialPickReviewSummaries(picks);
-    return reviewed.map((pick) => pickForAudience(pick, audience));
+    return reviewed.map((pick) => pickForAudience(pick, audience)).filter(Boolean);
 };
 
 export const getOfficialPick = async (pickId, audience = {}) => {
     const db = getAdminDb();
     const pickSnapshot = await db.collection('officialPicks').doc(pickId).get();
     if (!pickSnapshot.exists || !['published', 'withdrawn'].includes(pickSnapshot.data().status)) return null;
+    if (!pickForAudience(toPublicOfficialPick(pickSnapshot), audience)) return null;
     const eventsSnapshot = await pickSnapshot.ref.collection('events').orderBy('createdAt', 'asc').get();
     const [pick] = await attachOfficialPickReviewSummaries([withStakeRecommendation(toPublicOfficialPick(pickSnapshot))]);
     return {
         pick: pickForAudience(pick, audience),
-        events: eventsSnapshot.docs.map(toPublicOfficialPick)
+        events: eventsSnapshot.docs.map(doc => {
+            const event = toPublicOfficialPick(doc);
+            return audience.canViewActiveDetails ? event : { type: event.type, createdAt: event.createdAt };
+        })
     };
 };

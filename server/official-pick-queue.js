@@ -3,6 +3,7 @@ import { getAdminDb } from '../api/lib/firebase-admin.js';
 import { normalizeOfficialPickInput, publicPickIdFor, semanticOfficialPickKey } from '../api/lib/official-pick-data.js';
 import { PUBLICATION_POLICIES } from './official-pick-scheduling.js';
 import { publishOfficialPick, toPublicOfficialPick } from '../api/lib/official-picks.js';
+import { parseMadridDateTimeToUTC } from '../api/lib/timezone.js';
 
 const MAX_DISPATCH_BATCH = 20;
 const LEASE_MS = 2 * 60 * 1000;
@@ -48,30 +49,53 @@ const queueDocumentFor = (normalized) => ({
 // ledger before queuing so a later change to a source kickoff hour cannot
 // reproduce one of those historical records either. New records are protected
 // atomically by their semantic public id below.
-const findLegacyPublishedDuplicate = async ({ db, semanticDuplicateKey }) => {
-    const snapshot = await db.collection('officialPicks')
-        .where('status', '==', 'published')
-        .limit(100)
-        .get();
-    return snapshot.docs.find((document) => {
+export const loadOfficialDayLegacyLookup = async (now, { db = getAdminDb() } = {}) => {
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid',
+        year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+    const tomorrow = new Date(`${day}T12:00:00Z`);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const start = new Date(parseMadridDateTimeToUTC(`${day} 00:00:00`));
+    const end = new Date(parseMadridDateTimeToUTC(`${tomorrow.toISOString().slice(0, 10)} 00:00:00`));
+    const readDay = (collection) => db.collection(collection)
+        .where('event.kickoffAt', '>=', asTimestamp(start))
+        .where('event.kickoffAt', '<', asTimestamp(end)).limit(201).get();
+    const [snapshot, queued] = await Promise.all([readDay('officialPicks'), readDay('officialPickQueue')]);
+    if (snapshot.size > 200 || queued.size > 200) throw new Error('LEGACY_DAY_READ_LIMIT');
+    const byKey = new Map();
+    for (const document of snapshot.docs) {
         const data = document.data();
-        const existingKey = data.semanticDuplicateKey || semanticOfficialPickKey({
-            event: { ...data.event, kickoffAt: asDate(data.event?.kickoffAt) },
-            bet: data.bet,
-            system: data.system,
-            source: data.source
-        });
-        return existingKey === semanticDuplicateKey;
-    }) || null;
+        if (!['published', 'withdrawn'].includes(data.status)) continue;
+        const key = semanticOfficialPickKey({ ...data,
+            event: { ...data.event, kickoffAt: asDate(data.event.kickoffAt) } });
+        if (byKey.has(key)) throw new Error('LEGACY_DUPLICATE_REQUIRES_REVIEW');
+        byKey.set(key, document);
+    }
+    const byQueueKey = new Map();
+    for (const document of queued.docs) {
+        const data = document.data();
+        const key = semanticOfficialPickKey({ ...data,
+            event: { ...data.event, kickoffAt: asDate(data.event.kickoffAt) } });
+        if (byQueueKey.has(key)) throw new Error('LEGACY_DUPLICATE_REQUIRES_REVIEW');
+        byQueueKey.set(key, document);
+    }
+    return { day, find: key => byKey.get(key) || null, findQueue: key => byQueueKey.get(key) || null };
 };
 
-export const queueOfficialPick = async (input) => {
+export const queueOfficialPick = async (input, { now = new Date(), deferDispatch = false,
+    legacyLookup, morningSlot, db = getAdminDb(), publisher = publishOfficialPick } = {}) => {
+    if (morningSlot !== undefined && !/^\d{4}-\d{2}-\d{2}T10:00 Europe\/Madrid$/.test(morningSlot)) {
+        throw new Error('MORNING_SLOT_INVALID');
+    }
     const normalized = normalizeOfficialPickInput(input);
-    const db = getAdminDb();
+    if (normalized.event.kickoffAt.getTime() <= now.getTime() + 60_000) throw new Error('PICK_KICKOFF_EXPIRED');
     const pickId = publicPickIdFor(normalized);
     const pickRef = db.collection('officialPicks').doc(pickId);
     const queueRef = db.collection('officialPickQueue').doc(pickId);
-    const legacyDuplicate = await findLegacyPublishedDuplicate({ db, semanticDuplicateKey: normalized.semanticDuplicateKey });
+    const lookup = legacyLookup || await loadOfficialDayLegacyLookup(normalized.event.kickoffAt, { db });
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid',
+        year: 'numeric', month: '2-digit', day: '2-digit' }).format(normalized.event.kickoffAt);
+    if (lookup.day !== day) throw new Error('LEGACY_LOOKUP_DAY_MISMATCH');
+    const legacyDuplicate = lookup.find(normalized.semanticDuplicateKey);
     if (legacyDuplicate) {
         return {
             created: false,
@@ -80,10 +104,14 @@ export const queueOfficialPick = async (input) => {
             pick: toPublicOfficialPick(legacyDuplicate)
         };
     }
+    const legacyQueued = lookup.findQueue?.(normalized.semanticDuplicateKey);
+    if (legacyQueued) return { created: false, state: legacyQueued.data().status || 'queued', queueId: legacyQueued.id };
     let state = 'queued';
     let created = false;
 
     await db.runTransaction(async (transaction) => {
+        state = 'queued';
+        created = false;
         const [officialSnapshot, queueSnapshot] = await Promise.all([transaction.get(pickRef), transaction.get(queueRef)]);
         if (officialSnapshot.exists) {
             state = 'already_published';
@@ -95,27 +123,30 @@ export const queueOfficialPick = async (input) => {
         }
 
         created = true;
-        transaction.create(queueRef, queueDocumentFor(normalized));
+        transaction.create(queueRef, { ...queueDocumentFor(normalized),
+            ...(morningSlot ? { origin: { kind: 'morning', slot: morningSlot } } : {}) });
     });
 
     if (state === 'already_published') return { created: false, state, queueId: pickId, pick: toPublicOfficialPick(await pickRef.get()) };
     if (!created) return { created: false, state, queueId: pickId };
 
-    if (normalized.publicationPolicy === PUBLICATION_POLICIES.IMMEDIATE) {
-        const dispatch = await dispatchQueuedOfficialPick({ pickId });
+    if (!deferDispatch && normalized.publicationPolicy === PUBLICATION_POLICIES.IMMEDIATE) {
+        const dispatch = await dispatchQueuedOfficialPick({ pickId, now, db, publisher });
         return { created: true, state: dispatch.state, queueId: pickId, pick: dispatch.pick || null };
     }
 
     return { created: true, state: 'queued', queueId: pickId };
 };
 
-export const dispatchQueuedOfficialPick = async ({ pickId, now = new Date() }) => {
-    const db = getAdminDb();
+export const dispatchQueuedOfficialPick = async ({ pickId, now = new Date(),
+    db = getAdminDb(), publisher = publishOfficialPick }) => {
     const queueRef = db.collection('officialPickQueue').doc(pickId);
     let candidate = null;
     let state = 'not_found';
 
     await db.runTransaction(async (transaction) => {
+        candidate = null;
+        state = 'not_found';
         const snapshot = await transaction.get(queueRef);
         if (!snapshot.exists) return;
         const value = snapshot.data();
@@ -131,15 +162,26 @@ export const dispatchQueuedOfficialPick = async ({ pickId, now = new Date() }) =
             state = 'skipped';
             return;
         }
+        if (value.status === 'review_required') {
+            state = 'review_required';
+            return;
+        }
+        if (value.status === 'paused') { state = 'paused'; return; }
         if (value.status === 'dispatching' && leaseUntil && leaseUntil > now) {
             state = 'dispatching';
+            return;
+        }
+        if (value.origin?.kind === 'morning' && process.env.MORNING_PUBLISH_ENABLED !== 'true') {
+            state = 'paused';
+            transaction.update(queueRef, { status: 'paused', pauseReason: 'morning_disabled',
+                updatedAt: FieldValue.serverTimestamp(), leaseUntil: FieldValue.delete() });
             return;
         }
         if (nextAttemptAt > now) {
             state = 'not_due';
             return;
         }
-        if (kickoffAt <= now) {
+        if (kickoffAt.getTime() <= now.getTime() + 60_000) {
             state = 'skipped';
             transaction.update(queueRef, {
                 status: 'skipped',
@@ -162,15 +204,24 @@ export const dispatchQueuedOfficialPick = async ({ pickId, now = new Date() }) =
     if (!candidate) return { state };
 
     try {
-        const result = await publishOfficialPick(candidate);
+        const result = await publisher(candidate, { now, db });
+        const delivery = result.telegramDelivery?.status || 'not_applicable';
+        if (['retryable', 'not_configured'].includes(delivery)) throw new Error('TELEGRAM_DELIVERY_NOT_CONFIRMED');
+        if (delivery === 'review_required') {
+            await queueRef.update({ status: 'review_required', officialPickId: result.pick.id,
+                telegramDeliveryStatus: delivery, updatedAt: FieldValue.serverTimestamp(),
+                leaseUntil: FieldValue.delete() });
+            return { state: 'review_required', telegramStatus: delivery, pick: result.pick };
+        }
         await queueRef.update({
             status: 'published',
             officialPickId: result.pick.id,
+            telegramDeliveryStatus: delivery,
             publishedAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
             leaseUntil: FieldValue.delete()
         });
-        return { state: 'published', pick: result.pick, created: result.created };
+        return { state: 'published', telegramStatus: delivery, pick: result.pick, created: result.created };
     } catch (error) {
         const latest = await queueRef.get();
         const attempts = Number(latest.data()?.dispatchAttempts || 0) + 1;
@@ -180,28 +231,39 @@ export const dispatchQueuedOfficialPick = async ({ pickId, now = new Date() }) =
             status: canRetry ? 'queued' : 'skipped',
             dispatchAttempts: attempts,
             nextAttemptAt: asTimestamp(retryAtFor({ attempts, now })),
-            lastDispatchError: String(error.message || 'No se pudo publicar el pick').slice(0, 240),
+            lastDispatchError: 'OFFICIAL_DELIVERY_FAILED',
             skipReason: canRetry ? FieldValue.delete() : 'publication_failed_before_kickoff',
             updatedAt: FieldValue.serverTimestamp(),
             leaseUntil: FieldValue.delete()
         });
-        return { state: canRetry ? 'retry_scheduled' : 'skipped', error: error.message || 'No se pudo publicar el pick' };
+        return { state: canRetry ? 'retry_scheduled' : 'skipped', error: 'OFFICIAL_DELIVERY_FAILED' };
     }
 };
 
 const dueOfficialPickQueue = async ({ now, limit }) => {
     const db = getAdminDb();
-    return db.collection('officialPickQueue')
+    const count = safeLimit(limit);
+    const [queued, expiredLeases] = await Promise.all([db.collection('officialPickQueue')
         .where('status', '==', 'queued')
         .where('nextAttemptAt', '<=', asTimestamp(now))
         .orderBy('nextAttemptAt', 'asc')
-        .limit(safeLimit(limit))
-        .get();
+        .limit(count).get(), db.collection('officialPickQueue')
+        .where('status', '==', 'dispatching')
+        .where('leaseUntil', '<=', asTimestamp(now))
+        .orderBy('leaseUntil', 'asc').limit(count).get()]);
+    // Recover a crashed dispatcher, while the shared Telegram outbox prevents
+    // an uncertain send from being repeated. Keep the total dispatch bounded.
+    const docs = [...expiredLeases.docs, ...queued.docs].slice(0, count);
+    return { docs, size: docs.length };
 };
 
 const dispatchQueueSnapshots = async ({ snapshots, now }) => {
     const results = [];
-    for (const snapshot of snapshots) results.push(await dispatchQueuedOfficialPick({ pickId: snapshot.id, now }));
+    const started = Date.now();
+    for (const snapshot of snapshots) {
+        if (Date.now() - started > 40_000) break;
+        results.push(await dispatchQueuedOfficialPick({ pickId: snapshot.id, now: new Date() }));
+    }
     return { checkedAt: now.toISOString(), results };
 };
 

@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
-import { queueOfficialPick } from '../../server/official-pick-queue.js';
+import { queueOfficialPick, loadOfficialDayLegacyLookup, dispatchQueuedOfficialPick } from '../../server/official-pick-queue.js';
+import { createMorningSubmissionHandler } from '../../server/morning/ingestion.js';
 import { getAdminAuth, getAdminDb } from '../lib/firebase-admin.js';
 import { normalizeOfficialPickInput, publicPickIdFor } from '../lib/official-pick-data.js';
 import { toPublicOfficialPick } from '../lib/official-picks.js';
@@ -280,7 +281,11 @@ const validationPreview = (input) => {
     };
 };
 
+const handleMorning = createMorningSubmissionHandler({ queue: queueOfficialPick,
+    loadLegacyLookup: loadOfficialDayLegacyLookup, dispatch: dispatchQueuedOfficialPick });
+
 export default async function handler(req, res) {
+    if (req.query?.mode === 'morning') return handleMorning(req, res);
     if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: 'Método no permitido' });
 
     if (req.query?.mode === 'premium-access') {

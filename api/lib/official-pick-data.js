@@ -52,16 +52,14 @@ const madridDateKey = (date) => {
     return `${part('year')}-${part('month')}-${part('day')}`;
 };
 
-export const semanticOfficialPickKey = ({ event = {}, bet = {}, system = {}, source = {} } = {}) => hashOfficialPickPayload({
-    sourceProvider: canonicalText(source.provider),
+export const semanticOfficialPickKey = ({ event = {}, bet = {}, system = {} } = {}) => hashOfficialPickPayload({
     madridDay: madridDateKey(new Date(event.kickoffAt)),
     competition: canonicalText(event.competition),
     homeTeam: canonicalText(event.homeTeam),
     awayTeam: canonicalText(event.awayTeam),
     market: canonicalText(bet.market),
     selection: canonicalText(bet.selection),
-    systemId: canonicalText(system.id),
-    systemVersion: canonicalText(system.version)
+    systemId: canonicalText(system.id)
 });
 
 export const normalizeOfficialPickInput = (input = {}) => {

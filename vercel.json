@@ -6,6 +6,9 @@
     }
   ],
   "functions": {
+    "api/admin/official-picks.js": {
+      "maxDuration": 60
+    },
     "api/cron/refresh-official-snapshots.js": {
       "maxDuration": 300
     }

@@ -1,4 +1,11 @@
-const appUrl = () => (process.env.PUBLIC_APP_URL || 'https://app.pronosticosmoneytips.com').replace(/\/$/, '');
+const appUrl = () => 'https://app.pronosticosmoneytips.com';
+
+export class TelegramRequestError extends Error {
+    constructor(definitelyNotSent = false) {
+        super(definitelyNotSent ? 'TELEGRAM_REJECTED' : 'TELEGRAM_RESULT_UNKNOWN');
+        this.name = 'TelegramRequestError'; this.definitelyNotSent = definitelyNotSent;
+    }
+}
 
 const telegramRequest = async ({ method, payload }) => {
     const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -9,13 +16,19 @@ const telegramRequest = async ({ method, payload }) => {
     try {
         const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
             method: payload ? 'POST' : 'GET',
+            redirect: 'error',
             headers: payload ? { 'Content-Type': 'application/json' } : undefined,
             body: payload ? JSON.stringify(payload) : undefined,
             signal: controller.signal
         });
         const data = await response.json();
-        if (!response.ok || !data.ok) throw new Error(`Telegram no aceptó ${method}.`);
+        if (!response.ok || data?.ok !== true) {
+            throw new TelegramRequestError(response.status >= 400 && response.status < 500 && data?.ok === false);
+        }
         return { configured: true, result: data.result };
+    } catch (error) {
+        if (error instanceof TelegramRequestError) throw error;
+        throw new TelegramRequestError(false);
     } finally {
         clearTimeout(timeout);
     }
@@ -26,42 +39,15 @@ const channelLink = (messageId) => {
     return username ? `https://t.me/${username}/${messageId}` : null;
 };
 
-const escapeTelegramHtml = (value) => String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-
-export const formatOfficialTelegramMessage = (pick) => {
-    const kickoff = new Date(pick.event.kickoffAt).toLocaleString('es-ES', {
-        dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Madrid'
-    });
-    const proof = `${appUrl()}/?pick=${encodeURIComponent(pick.id)}`;
-    const reference = String(pick.source?.evidenceHash || '').slice(0, 10).toUpperCase();
-
-    if (pick.status === 'withdrawn') {
-        return [
-            '⚠️ <b>REGISTRO RETIRADO · MONEY TIPS</b>',
-            '',
-            `<b>${escapeTelegramHtml(pick.event.homeTeam)} vs ${escapeTelegramHtml(pick.event.awayTeam)}</b>`,
-            'Este aviso se retiró antes de su uso por duplicidad.',
-            'El pick oficial válido conserva su propio comprobante verificable.',
-            '',
-            `<a href="${proof}">Ver pick y comprobante verificable</a>`,
-            `Referencia: <code>#${reference}</code>`
-        ].join('\n');
-    }
-
+export const formatOfficialTelegramMessage = () => {
+    // Identical generic notice regardless of event, system or publication
+    // source. No per-pick URL/reference or data can identify a Premium fixture.
     return [
-        '🎯 <b>PICK OFICIAL · MONEY TIPS</b>',
+        '🔒 <b>ACTUALIZACIÓN PREMIUM · MONEY TIPS</b>',
         '',
-        `<b>${escapeTelegramHtml(pick.event.homeTeam)} vs ${escapeTelegramHtml(pick.event.awayTeam)}</b>`,
-        `🏆 ${escapeTelegramHtml(pick.event.competition)}`,
-        `⏰ Inicio: ${kickoff}`,
+        'Consulta las actualizaciones en tu cuenta autorizada de Money TracKING.',
         '',
-        '🔒 Selección y cuota disponibles para miembros Premium hasta el inicio.',
-        '',
-        `<a href="${proof}">Ver pick y comprobante verificable</a>`,
-        `Referencia: <code>#${reference}</code>`
+        `<a href="${appUrl()}">Abrir Money TracKING</a>`
     ].join('\n');
 };
 
@@ -80,6 +66,8 @@ export const publishOfficialPickToTelegram = async (pick) => {
     });
     if (!telegram.configured) return telegram;
 
+    if (!Number.isSafeInteger(telegram.result?.message_id) || telegram.result.message_id < 1
+        || String(telegram.result?.chat?.id) !== String(chatId)) throw new TelegramRequestError(false);
     return {
         configured: true,
         chatId: String(telegram.result.chat.id),
