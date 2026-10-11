@@ -1,0 +1,22 @@
+{
+  "timezone.js": {
+    "byteIdentical": true,
+    "sha256": "febe7f5bce1f3b1a39894c1997837e8a2dcf6cbc1472b157d6a65b2d3a1c5cce"
+  },
+  "telegram-delivery.js": {
+    "byteIdentical": true,
+    "sha256": "0fd83ebba2535c0a2b492e6898751fe2e35d40436b4521580895cc81f664fa45"
+  },
+  "server/official-pick-queue.js": {
+    "onlyImportPathChanged": true
+  },
+  "server/canonical-candidate-validation.js": {
+    "onlyImportPathChanged": true
+  },
+  "api/lib/official-picks.js": {
+    "onlyImportPathChanged": true
+  },
+  "tests/morning-emulator.test.mjs": {
+    "onlyImportPathChanged": true
+  }
+}

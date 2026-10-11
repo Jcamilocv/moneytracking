@@ -1,5 +1,5 @@
 import { getSystemDefinition, mapSystemSelection } from './system-registry.js';
-import { cleanDateWithMadridFallback } from '../api/lib/timezone.js';
+import { cleanDateWithMadridFallback } from '../api/lib/_timezone.js';
 
 const LEAGUE_ALIASES = Object.freeze({
     'FRA-L1': 'FRA-LG1', 'FRA-L2': 'FRA-LG2', 'GER-BL': 'GER-BUN',

@@ -1,0 +1,86 @@
+TAP version 13
+# Subtest: el propietario puede crear y leer su estado AppBonos
+ok 1 - el propietario puede crear y leer su estado AppBonos
+  ---
+  duration_ms: 713.829042
+  type: 'test'
+  ...
+# Subtest: un usuario no puede leer el AppBonos de otro usuario
+ok 2 - un usuario no puede leer el AppBonos de otro usuario
+  ---
+  duration_ms: 73.478875
+  type: 'test'
+  ...
+# Subtest: un visitante anónimo no puede leer AppBonos
+ok 3 - un visitante anónimo no puede leer AppBonos
+  ---
+  duration_ms: 69.622625
+  type: 'test'
+  ...
+# [2026-10-11T00:42:58.668Z]  @firebase/firestore: Firestore (11.10.0): GrpcConnection RPC 'Write' stream 0x8345c76a error. Code: 7 Message: 7 PERMISSION_DENIED: 
+# evaluation error at L180:34 for 'create' @ L180, evaluation error at L180:34 for 'update' @ L180, false for 'create' @ L180
+# Subtest: AppBonos rechaza documentos con campos no permitidos
+ok 4 - AppBonos rechaza documentos con campos no permitidos
+  ---
+  duration_ms: 46.239416
+  type: 'test'
+  ...
+# [2026-10-11T00:42:58.769Z]  @firebase/firestore: Firestore (11.10.0): GrpcConnection RPC 'Write' stream 0x8345c76e error. Code: 7 Message: 7 PERMISSION_DENIED: 
+# false for 'create' @ L188, false for 'update' @ L188
+# Subtest: solo el UID propietario puede leer y escribir el CRM
+ok 5 - solo el UID propietario puede leer y escribir el CRM
+  ---
+  duration_ms: 99.572792
+  type: 'test'
+  ...
+# [2026-10-11T00:42:58.804Z]  @firebase/firestore: Firestore (11.10.0): GrpcConnection RPC 'Write' stream 0x8345c76f error. Code: 7 Message: 7 PERMISSION_DENIED: 
+# false for 'create' @ L196, false for 'update' @ L196
+# [2026-10-11T00:42:58.835Z]  @firebase/firestore: Firestore (11.10.0): GrpcConnection RPC 'Write' stream 0x8345c771 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+# false for 'create' @ L199, false for 'update' @ L199
+# Subtest: ningún navegador puede leer o escribir el ledger de picks oficiales
+ok 6 - ningún navegador puede leer o escribir el ledger de picks oficiales
+  ---
+  duration_ms: 65.292958
+  type: 'test'
+  ...
+# [2026-10-11T00:42:58.894Z]  @firebase/firestore: Firestore (11.10.0): GrpcConnection RPC 'Write' stream 0x8345c772 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+# false for 'create' @ L175, false for 'update' @ L175
+# Subtest: las reglas existentes de MoneyTracking conservan el aislamiento por propietario
+ok 7 - las reglas existentes de MoneyTracking conservan el aislamiento por propietario
+  ---
+  duration_ms: 59.370208
+  type: 'test'
+  ...
+# Subtest: el propietario puede crear un snapshot saneado y un visitante anónimo puede leerlo
+ok 8 - el propietario puede crear un snapshot saneado y un visitante anónimo puede leerlo
+  ---
+  duration_ms: 90.167917
+  type: 'test'
+  ...
+# [2026-10-11T00:42:59.040Z]  @firebase/firestore: Firestore (11.10.0): GrpcConnection RPC 'Write' stream 0x8345c777 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+# evaluation error at L214:24 for 'create' @ L214, false for 'update' @ L215, false for 'create' @ L214
+# Subtest: un usuario no puede publicar usando el registro de propiedad de otro
+ok 9 - un usuario no puede publicar usando el registro de propiedad de otro
+  ---
+  duration_ms: 55.890042
+  type: 'test'
+  ...
+# [2026-10-11T00:42:59.089Z]  @firebase/firestore: Firestore (11.10.0): GrpcConnection RPC 'Write' stream 0x8345c778 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+# false for 'create' @ L219, false for 'update' @ L220
+# [2026-10-11T00:42:59.098Z]  @firebase/firestore: Firestore (11.10.0): GrpcConnection RPC 'Write' stream 0x8345c779 error. Code: 7 Message: 7 PERMISSION_DENIED: 
+# false for 'create' @ L219, false for 'update' @ L220
+# Subtest: los snapshots rechazan apuestas pendientes y campos privados
+ok 10 - los snapshots rechazan apuestas pendientes y campos privados
+  ---
+  duration_ms: 57.487333
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1562.571083

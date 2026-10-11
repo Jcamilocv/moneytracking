@@ -6,7 +6,7 @@ import { getAdminAuth } from '../api/lib/firebase-admin.js';
 import { queueOfficialPick, dispatchQueuedOfficialPick, loadOfficialDayLegacyLookup, inspectDueOfficialPicks } from '../server/official-pick-queue.js';
 import { publishOfficialPick, pickForAudience } from '../api/lib/official-picks.js';
 import { normalizeOfficialPickInput, publicPickIdFor } from '../api/lib/official-pick-data.js';
-import { deliverOfficialPickTelegramOnce } from '../api/lib/telegram-delivery.js';
+import { deliverOfficialPickTelegramOnce } from '../api/lib/_telegram-delivery.js';
 import { TelegramRequestError, publishOfficialPickToTelegram, formatOfficialTelegramMessage } from '../api/lib/telegram.js';
 import officialApi from '../api/official-picks.js';
 import adminApi from '../api/admin/official-picks.js';

@@ -3,7 +3,7 @@ import { getAdminDb } from '../api/lib/firebase-admin.js';
 import { normalizeOfficialPickInput, publicPickIdFor, semanticOfficialPickKey } from '../api/lib/official-pick-data.js';
 import { PUBLICATION_POLICIES } from './official-pick-scheduling.js';
 import { publishOfficialPick, toPublicOfficialPick } from '../api/lib/official-picks.js';
-import { parseMadridDateTimeToUTC } from '../api/lib/timezone.js';
+import { parseMadridDateTimeToUTC } from '../api/lib/_timezone.js';
 
 const MAX_DISPATCH_BATCH = 20;
 const LEASE_MS = 2 * 60 * 1000;

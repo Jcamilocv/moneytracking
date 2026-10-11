@@ -1,0 +1,41 @@
+{
+  "pass": true,
+  "exitCode": 0,
+  "productionEnvPullRequested": false,
+  "deployed": false,
+  "buildOutputPresent": true,
+  "functions": [
+    "api/official-picks.func",
+    "api/official-snapshots.func",
+    "api/scan.func",
+    "api/admin/official-picks.func",
+    "api/lib/official-snapshot-data.func",
+    "api/lib/official-picks.func",
+    "api/lib/firebase-admin.func",
+    "api/lib/official-snapshots.func",
+    "api/lib/official-pick-data.func",
+    "api/lib/official-pick-reports.func",
+    "api/lib/telegram.func",
+    "api/cron/refresh-official-snapshots.func"
+  ],
+  "functionCount": 12,
+  "dependencyTracing": [
+    {
+      "function": "api/admin/official-picks.func",
+      "timezoneIncluded": true,
+      "telegramDeliveryIncluded": true
+    },
+    {
+      "function": "api/official-picks.func",
+      "timezoneIncluded": false,
+      "telegramDeliveryIncluded": true
+    },
+    {
+      "function": "api/cron/refresh-official-snapshots.func",
+      "timezoneIncluded": true,
+      "telegramDeliveryIncluded": true
+    }
+  ],
+  "helpersExcludedFromRoutes": true,
+  "requiredDependencyTracingPass": true
+}
