@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { adaptMorningCandidate, toMorningQueueInput } from './candidate.js';
 import { morningSlotKey } from './one-shot.js';
+import { morningActivationOpen } from './activation.js';
 import { MAX_MORNING_SOURCE_ITEMS } from './source-client.js';
 import { SYSTEM_EXECUTION_MODES } from '../system-registry.js';
 import { normalizeOfficialPickInput, publicPickIdFor } from '../../api/lib/official-pick-data.js';
@@ -56,7 +57,7 @@ export const createMorningSubmissionHandler = ({ queue, loadLegacyLookup, dispat
     return async (req, res) => {
         res.setHeader('Cache-Control', 'private, no-store');
         if (req.method !== 'POST') return res.status(405).json({ error: 'METHOD_NOT_ALLOWED' });
-        if (process.env.MORNING_PUBLISH_ENABLED !== 'true') return res.status(503).json({ error: 'MORNING_DISABLED' });
+        if (!morningActivationOpen(clock())) return res.status(503).json({ error: 'MORNING_DISABLED' });
         if (!hasMorningAuthorization(req.headers?.authorization, process.env.MORNING_PUBLISH_SECRET)) {
             return res.status(401).json({ error: 'UNAUTHORIZED' });
         }

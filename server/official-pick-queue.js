@@ -4,6 +4,8 @@ import { normalizeOfficialPickInput, publicPickIdFor, semanticOfficialPickKey } 
 import { PUBLICATION_POLICIES } from './official-pick-scheduling.js';
 import { publishOfficialPick, toPublicOfficialPick } from '../api/lib/official-picks.js';
 import { parseMadridDateTimeToUTC } from '../api/lib/_timezone.js';
+import { morningDeliveryOpen } from './morning/activation.js';
+import { publishOfficialPickToTelegram, TelegramRequestError } from '../api/lib/telegram.js';
 
 const MAX_DISPATCH_BATCH = 20;
 const LEASE_MS = 2 * 60 * 1000;
@@ -139,13 +141,15 @@ export const queueOfficialPick = async (input, { now = new Date(), deferDispatch
 };
 
 export const dispatchQueuedOfficialPick = async ({ pickId, now = new Date(),
-    db = getAdminDb(), publisher = publishOfficialPick }) => {
+    db = getAdminDb(), publisher = publishOfficialPick, clock = () => new Date() }) => {
     const queueRef = db.collection('officialPickQueue').doc(pickId);
     let candidate = null;
+    let morningSlot = null;
     let state = 'not_found';
 
     await db.runTransaction(async (transaction) => {
         candidate = null;
+        morningSlot = null;
         state = 'not_found';
         const snapshot = await transaction.get(queueRef);
         if (!snapshot.exists) return;
@@ -171,7 +175,7 @@ export const dispatchQueuedOfficialPick = async ({ pickId, now = new Date(),
             state = 'dispatching';
             return;
         }
-        if (value.origin?.kind === 'morning' && process.env.MORNING_PUBLISH_ENABLED !== 'true') {
+        if (value.origin?.kind === 'morning' && !morningDeliveryOpen(clock(), value.origin.slot)) {
             state = 'paused';
             transaction.update(queueRef, { status: 'paused', pauseReason: 'morning_disabled',
                 updatedAt: FieldValue.serverTimestamp(), leaseUntil: FieldValue.delete() });
@@ -193,6 +197,7 @@ export const dispatchQueuedOfficialPick = async ({ pickId, now = new Date(),
         }
 
         candidate = payloadFromCandidate(value);
+        morningSlot = value.origin?.kind === 'morning' ? value.origin.slot : null;
         state = 'dispatching';
         transaction.update(queueRef, {
             status: 'dispatching',
@@ -203,8 +208,22 @@ export const dispatchQueuedOfficialPick = async ({ pickId, now = new Date(),
 
     if (!candidate) return { state };
 
+    // Recheck after transaction retries and immediately before publication.
+    if (morningSlot && !morningDeliveryOpen(clock(), morningSlot)) {
+        await queueRef.update({ status: 'paused', pauseReason: 'morning_disabled',
+            updatedAt: FieldValue.serverTimestamp(), leaseUntil: FieldValue.delete() });
+        return { state: 'paused' };
+    }
+
     try {
-        const result = await publisher(candidate, { now, db });
+        const morningOptions = morningSlot ? { clock, send: value => {
+            // This callback runs after both ledger and outbox transactions,
+            // immediately before Telegram. A slow database cannot outlive the
+            // Morning window. The existing outbox records this as unsent.
+            if (!morningDeliveryOpen(clock(), morningSlot)) throw new TelegramRequestError(true);
+            return publishOfficialPickToTelegram(value);
+        } } : {};
+        const result = await publisher(candidate, { now, db, ...morningOptions });
         const delivery = result.telegramDelivery?.status || 'not_applicable';
         if (['retryable', 'not_configured'].includes(delivery)) throw new Error('TELEGRAM_DELIVERY_NOT_CONFIRMED');
         if (delivery === 'review_required') {

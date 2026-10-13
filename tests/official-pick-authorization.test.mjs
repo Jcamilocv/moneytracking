@@ -10,22 +10,20 @@ const activePick = {
     source: { evidenceHash: 'proof-hash' }
 };
 
-test('un visitante conserva la prueba pública pero no los detalles de un pick activo', () => {
+test('un visitante no recibe un pick futuro ni sus detalles', () => {
     const visible = pickForAudience(activePick, { now: new Date('2026-09-03T17:00:00.000Z') });
-    assert.equal(visible.isLocked, true);
-    assert.equal(visible.bet.selection, null);
-    assert.equal(visible.bet.oddsAtPublication, null);
-    assert.equal(visible.source.evidenceHash, 'proof-hash');
+    assert.equal(visible, null);
 });
 
-test('Premium ve el detalle activo y el público conserva únicamente la cuota histórica', () => {
+test('Premium ve el detalle activo; el público no recibe datos de apuesta históricos', () => {
     const now = new Date('2026-09-03T17:00:00.000Z');
     assert.equal(pickForAudience(activePick, { canViewActiveDetails: true, now }).bet.selection, 'Sí');
     const historical = pickForAudience(activePick, { now: new Date('2026-09-03T19:00:00.000Z') });
-    assert.equal(historical.isLocked, false);
+    assert.equal(historical.isLocked, true);
     assert.equal(historical.isPublicSummary, true);
     assert.equal(historical.bet.market, null);
     assert.equal(historical.bet.selection, null);
-    assert.equal(historical.bet.oddsAtPublication, 1.7);
+    assert.equal(historical.bet.oddsAtPublication, null);
+    assert.equal(historical.source, undefined);
     assert.equal(historical.system.id, null);
 });

@@ -13,6 +13,7 @@ import { NOW, item, sourceResponse, sourceClientOptions, responseCapture } from 
 const batch = items => ({ slot: morningSlotKey(NOW), observedAt: NOW.toISOString(), items });
 const secret = 'SYNTHETIC_MORNING_TEST_ONLY_0000000000';
 const noIO = () => { throw new Error('UNEXPECTED_IO'); };
+process.env.MORNING_PUBLISH_DAY = NOW.toISOString().slice(0, 10);
 
 for (const n of [0, 15, 108, 200]) test(`source reads ${n} complete entries in exactly one GET`, async () => {
     let calls = 0;
