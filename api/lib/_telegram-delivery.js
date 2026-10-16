@@ -22,7 +22,9 @@ export const deliverTelegramAtMostOnce = async ({ claim, send, anchor, markUncer
         await anchor(result);
         return { status: 'anchored', messageId: result.messageId };
     } catch {
-        await markUncertain('send_succeeded_anchor_unknown');
+        // Keep the validated receipt if the anchor commit cannot be confirmed.
+        // It supports later read-only reconciliation, never another send.
+        await markUncertain('send_succeeded_anchor_unknown', result);
         return { status: 'review_required' };
     }
 };
@@ -60,8 +62,18 @@ export const deliverOfficialPickTelegramOnce = ({ db, pickRef, pick, send, allow
                 status: 'anchored', updatedAt: FieldValue.serverTimestamp()
             });
         }),
-        markUncertain: (reason) => deliveryRef.update({
-            status: 'uncertain', reason, updatedAt: FieldValue.serverTimestamp()
+        markUncertain: (reason, receipt) => db.runTransaction(async (transaction) => {
+            const existing = await transaction.get(telegramAnchorRef);
+            // An acknowledged-by-storage but lost-to-client commit must not
+            // downgrade a durable anchor to an uncertain delivery.
+            if (existing.exists) return;
+            transaction.update(deliveryRef, {
+                status: 'uncertain', reason, updatedAt: FieldValue.serverTimestamp(),
+                ...(receipt ? { receipt: {
+                    chatId: receipt.chatId, messageId: receipt.messageId,
+                    permalink: receipt.permalink ?? null
+                } } : {})
+            });
         }),
         markNotConfigured: () => deliveryRef.update({
             status: 'not_configured', updatedAt: FieldValue.serverTimestamp()

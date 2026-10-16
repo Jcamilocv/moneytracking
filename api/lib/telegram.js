@@ -39,6 +39,15 @@ const channelLink = (messageId) => {
     return username ? `https://t.me/${username}/${messageId}` : null;
 };
 
+const matchesConfiguredChat = (configured, chat) => {
+    if (!Number.isSafeInteger(chat?.id) || chat.id === 0) return false;
+    const target = String(configured).trim();
+    if (/^-?\d+$/.test(target)) return String(chat.id) === target;
+    if (!/^@[a-z0-9_]+$/i.test(target) || chat.type !== 'channel') return false;
+    return typeof chat.username === 'string'
+        && chat.username.toLowerCase() === target.slice(1).toLowerCase();
+};
+
 export const formatOfficialTelegramMessage = () => {
     // Identical generic notice regardless of event, system or publication
     // source. No per-pick URL/reference or data can identify a Premium fixture.
@@ -67,7 +76,7 @@ export const publishOfficialPickToTelegram = async (pick) => {
     if (!telegram.configured) return telegram;
 
     if (!Number.isSafeInteger(telegram.result?.message_id) || telegram.result.message_id < 1
-        || String(telegram.result?.chat?.id) !== String(chatId)) throw new TelegramRequestError(false);
+        || !matchesConfiguredChat(chatId, telegram.result?.chat)) throw new TelegramRequestError(false);
     return {
         configured: true,
         chatId: String(telegram.result.chat.id),
