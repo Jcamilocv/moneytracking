@@ -166,15 +166,17 @@ export const dispatchQueuedOfficialPick = async ({ pickId, now = new Date() }) =
 
     try {
         const result = await publishOfficialPick(candidate);
+        const isReviewRequired = result.telegramDelivery?.status === 'review_required';
+        const queueStatus = isReviewRequired ? 'review_required' : 'published';
         await queueRef.update({
-            status: 'published',
+            status: queueStatus,
             officialPickId: result.pick.id,
             telegramDeliveryStatus: result.telegramDelivery?.status || 'unknown',
             publishedAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
             leaseUntil: FieldValue.delete()
         });
-        return { state: 'published', pick: result.pick, created: result.created };
+        return { state: queueStatus, pick: result.pick, created: result.created };
     } catch (error) {
         const latest = await queueRef.get();
         const attempts = Number(latest.data()?.dispatchAttempts || 0) + 1;
