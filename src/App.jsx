@@ -1038,6 +1038,7 @@ const OfficialPicksAdminPanel = ({ currentUser }) => {
                 })
             });
             const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'No se pudo preparar el pick.');
             if (data.pick?.id) setPublishedPick({ ...data.pick, created: Boolean(data.created) });
             else setQueueMessage('Pick sellado en cola. Se publicará automáticamente cinco minutos antes del inicio.');
             setForm(emptyOfficialPickForm());
