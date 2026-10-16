@@ -3,6 +3,7 @@ import { getAdminDb } from './firebase-admin.js';
 import { normalizeOfficialPickInput, publicPickIdFor } from './official-pick-data.js';
 import { attachOfficialPickReviewSummaries } from './official-pick-reports.js';
 import { publishOfficialPickToTelegram } from './telegram.js';
+import { deliverOfficialPickTelegramOnce } from './telegram-delivery.js';
 import { stakeRecommendationForOfficialPick } from '../../server/money-tips-stake-policy.js';
 
 const toPlainValue = (value) => {
@@ -111,22 +112,18 @@ export const publishOfficialPick = async (input) => {
     const snapshot = await pickRef.get();
     const pick = withStakeRecommendation(toPublicOfficialPick(snapshot));
 
-    const telegramAnchorRef = pickRef.collection('events').doc('telegram_anchor');
-    const telegramAnchor = await telegramAnchorRef.get();
-    if (shouldNotifyTelegramForOfficialPick(pick) && !telegramAnchor.exists) {
-        const telegram = await publishOfficialPickToTelegram(pick);
-        if (telegram.configured) {
-            await telegramAnchorRef.set({
-                type: 'telegram_anchor',
-                chatId: telegram.chatId,
-                messageId: telegram.messageId,
-                permalink: telegram.permalink,
-                createdAt: FieldValue.serverTimestamp()
-            });
+    let telegramDelivery = { status: 'not_applicable' };
+    if (shouldNotifyTelegramForOfficialPick(pick)) {
+        telegramDelivery = await deliverOfficialPickTelegramOnce({
+            db, pickRef, pick, send: publishOfficialPickToTelegram,
+            allowFreshClaim: created
+        });
+        if (telegramDelivery.status === 'review_required') {
+            console.error('Telegram delivery requires manual anchor reconciliation for official pick:', pickId);
         }
     }
 
-    return { created, pick };
+    return { created, pick, telegramDelivery };
 };
 
 export const listOfficialPicks = async (limit = 20, audience = {}) => {

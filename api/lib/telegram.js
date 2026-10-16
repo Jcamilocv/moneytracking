@@ -1,5 +1,23 @@
 const appUrl = () => (process.env.PUBLIC_APP_URL || 'https://app.pronosticosmoneytips.com').replace(/\/$/, '');
 
+export class TelegramRequestError extends Error {
+    constructor(definitelyNotSent = false, message = null) {
+        super(message || (definitelyNotSent ? 'TELEGRAM_REJECTED' : 'TELEGRAM_RESULT_UNKNOWN'));
+        this.name = 'TelegramRequestError';
+        this.definitelyNotSent = definitelyNotSent;
+    }
+}
+
+export const matchesConfiguredChat = (configured, chat) => {
+    if (!chat || !Number.isSafeInteger(chat.id) || chat.id === 0) return false;
+    const target = String(configured || '').trim();
+    if (!target) return false;
+    if (/^-?\d+$/.test(target)) return String(chat.id) === target;
+    if (!/^@[a-z0-9_]+$/i.test(target) || chat.type !== 'channel') return false;
+    return typeof chat.username === 'string'
+        && chat.username.toLowerCase() === target.slice(1).toLowerCase();
+};
+
 const telegramRequest = async ({ method, payload }) => {
     const token = process.env.TELEGRAM_BOT_TOKEN;
     if (!token) return { configured: false };
@@ -9,13 +27,20 @@ const telegramRequest = async ({ method, payload }) => {
     try {
         const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
             method: payload ? 'POST' : 'GET',
+            redirect: 'error',
             headers: payload ? { 'Content-Type': 'application/json' } : undefined,
             body: payload ? JSON.stringify(payload) : undefined,
             signal: controller.signal
         });
-        const data = await response.json();
-        if (!response.ok || !data.ok) throw new Error(`Telegram no aceptó ${method}.`);
+        const data = await response.json().catch(() => null);
+        if (!response.ok || data?.ok !== true) {
+            const definitelyNotSent = response.status >= 400 && response.status < 500 && data?.ok === false;
+            throw new TelegramRequestError(definitelyNotSent, `Telegram no aceptó ${method}.`);
+        }
         return { configured: true, result: data.result };
+    } catch (error) {
+        if (error instanceof TelegramRequestError) throw error;
+        throw new TelegramRequestError(false, error.message || `Error de transporte en ${method}.`);
     } finally {
         clearTimeout(timeout);
     }
@@ -79,6 +104,11 @@ export const publishOfficialPickToTelegram = async (pick) => {
         }
     });
     if (!telegram.configured) return telegram;
+
+    if (!Number.isSafeInteger(telegram.result?.message_id) || telegram.result.message_id < 1
+        || !matchesConfiguredChat(chatId, telegram.result?.chat)) {
+        throw new TelegramRequestError(false, 'Respuesta incompleta o destino no coincidente de Telegram.');
+    }
 
     return {
         configured: true,
