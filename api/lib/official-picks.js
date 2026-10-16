@@ -3,7 +3,7 @@ import { getAdminDb } from './firebase-admin.js';
 import { normalizeOfficialPickInput, publicPickIdFor } from './official-pick-data.js';
 import { attachOfficialPickReviewSummaries } from './official-pick-reports.js';
 import { publishOfficialPickToTelegram } from './telegram.js';
-import { deliverOfficialPickTelegramOnce } from './telegram-delivery.js';
+import { deliverOfficialPickTelegramOnce } from './_telegram-delivery.js';
 import { stakeRecommendationForOfficialPick } from '../../server/money-tips-stake-policy.js';
 
 const toPlainValue = (value) => {

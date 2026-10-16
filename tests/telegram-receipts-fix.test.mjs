@@ -8,7 +8,7 @@ import {
 import {
     deliverTelegramAtMostOnce,
     deliverOfficialPickTelegramOnce
-} from '../api/lib/telegram-delivery.js';
+} from '../api/lib/_telegram-delivery.js';
 import {
     normalizeFutbolBrainOwnerCandidate,
     FUTBOLBRAIN_OWNER_BROWSER_PROVIDER
