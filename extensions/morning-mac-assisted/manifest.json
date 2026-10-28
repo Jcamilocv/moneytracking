@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Money Tips Morning — Modo Asistido Mac",
+  "version": "2.0.0",
+  "description": "Publicación asistida de sistemas Morning autorizados desde el MacBook del CEO hacia MoneyTracKING.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://application.futbolbrain.com/*",
+    "https://app.pronosticosmoneytips.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_page": "options.html",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; connect-src https://app.pronosticosmoneytips.com http://127.0.0.1:* http://localhost:*; form-action 'none'"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://application.futbolbrain.com/*"
+      ],
+      "js": [
+        "safety.js",
+        "rules.js",
+        "scan-policy.js",
+        "reader-core.js",
+        "controller.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
