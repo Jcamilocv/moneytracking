@@ -53,7 +53,7 @@ const sequential = fn => {
   return next;
 };
 
-const handleSubmit = async (candidate, sender) => {
+const handleSubmit = async (candidate) => {
   return sequential(async () => {
     const config = await getConfig();
     if (!config.armed) {

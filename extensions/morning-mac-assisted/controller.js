@@ -68,7 +68,7 @@
     return panel;
   };
 
-  const updateUI = (stateText, badgeColor, scan, candidateCount, armed, autoSubmit) => {
+  const updateUI = (stateText, badgeColor, scan, candidateCount, armed) => {
     getOrCreatePanel();
     const badge = document.getElementById('mt-mac-badge');
     const info = document.getElementById('mt-mac-info');
